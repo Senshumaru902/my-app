@@ -1,0 +1,131 @@
+/* Reset básico e estilo global */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Comic Sans MS", cursive, sans-serif; /* fonte acolhedora */
+}
+
+body {
+  background: linear-gradient(135deg, #c9d6ff, #e2e2e2);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: 100vh;
+  padding-top: 20px;
+}
+
+/* Animação suave nas mensagens */
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Container principal do chat */
+.chat-container {
+  width: 420px;
+  margin: 20px auto;
+}
+
+/* Área de mensagens */
+.chat-messages {
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 10px;
+  height: 400px;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  scroll-behavior: smooth;
+}
+
+/* Cada mensagem */
+.message {
+  display: flex;
+  margin: 5px 0;
+  opacity: 0;
+  animation: fadeSlide 0.4s forwards;
+}
+
+.message.user {
+  justify-content: flex-end;
+}
+
+.message.bot {
+  justify-content: flex-start;
+}
+
+/* Bolha de mensagem */
+.message-bubble {
+  position: relative;
+  padding: 10px 14px;
+  border-radius: 18px;
+  max-width: 75%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  font-size: 15px;
+  transition: all 0.5s ease;
+}
+
+.message-bubble.user {
+  background: linear-gradient(135deg, #0078ff, #00bfff);
+  color: white;
+}
+
+.message-bubble.bot {
+  background: rgba(255,255,255,0.9);
+  color: #333;
+}
+
+/* Campo de input (ajustado) */
+.chat-input {
+  width: 100%;
+  height: 45px;
+  border-radius: 20px;
+  border: 1px solid rgba(0,0,0,0.2);
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(10px);
+  padding: 0 15px 0 70px; /* espaço p/ ícones */
+  font-size: 15px;
+  color: #222;
+  outline: none;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.chat-input::placeholder {
+  color: rgba(0,0,0,0.4);
+}
+
+.chat-input:focus {
+  border: 1px solid #0078ff;
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 0 8px rgba(0,120,255,0.3);
+}
+
+/* Ícones (upload e câmera) */
+.chat-container label svg,
+.chat-container button svg {
+  transition: transform 0.2s ease;
+}
+
+.chat-container label:hover svg,
+.chat-container button:hover svg {
+  transform: scale(1.2);
+}
+
+/* Barra de rolagem estilizada */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background-color: rgba(0,0,0,0.2);
+  border-radius: 3px;
+}

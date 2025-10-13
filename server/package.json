@@ -1,0 +1,78 @@
+const express = require("express");
+const multer = require("multer");
+const fs = require("fs");
+const cors = require("cors");
+const path = require("path");
+
+const app = express();
+
+// Porta dinâmica para deploy online
+const PORT = process.env.PORT || 5000;
+
+// Permitir requisições do frontend
+app.use(cors());
+
+// Criar pasta temporária se não existir
+const tmpDir = path.join(__dirname, "tmp");
+if (!fs.existsSync(tmpDir)) {
+  fs.mkdirSync(tmpDir);
+}
+
+// Limite de tamanho: 50MB
+const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Configuração Multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, tmpDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("video/") || file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Apenas vídeos ou imagens são permitidos"));
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: MAX_SIZE },
+});
+
+// Endpoint de upload
+app.post("/upload", (req, res) => {
+  upload.single("file")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).send("Arquivo muito grande! Máximo permitido: 50MB");
+      }
+      return res.status(400).send(err.message);
+    } else if (err) {
+      return res.status(400).send(err.message);
+    }
+
+    if (!req.file) {
+      return res.status(400).send("Nenhum arquivo enviado");
+    }
+
+    console.log("Arquivo recebido:", req.file.originalname);
+    console.log("Caminho temporário:", req.file.path);
+
+    res.json({ message: "Arquivo recebido com sucesso!", filename: req.file.filename });
+
+    // Deletar arquivo após 1 minuto
+    setTimeout(() => {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error("Erro ao deletar arquivo:", err);
+        else console.log("Arquivo temporário deletado:", req.file.filename);
+      });
+    }, 60000);
+  });
+});
+
+// Iniciar servidor
+app.listen(PORT, () => {
+  console.log(`Servidor de upload rodando em http://localhost:${PORT}`);
+});
