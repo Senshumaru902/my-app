@@ -1,0 +1,2110 @@
+//@version=6
+indicator(
+     "AI LIQ REVERSAL CANDLE v3",
+     overlay = true,
+     max_labels_count = 500
+)
+
+
+
+
+//====================================================
+// CONFIGURAÇÕES
+//====================================================
+
+
+atrLen = input.int(
+     14,
+     "ATR"
+)
+
+
+
+
+liqLookback = input.int(
+     20,
+     "Lookback Liquidez"
+)
+
+
+
+
+volumeLen = input.int(
+     20,
+     "Média Volume"
+)
+
+
+
+
+explosionFactor = input.float(
+     0.45,
+     "Força Candle Explosão Antecipada",
+     step = 0.05
+)
+
+
+
+
+
+
+//====================================================
+// ATR
+//====================================================
+
+
+atr = ta.atr(atrLen)
+
+
+
+
+
+
+//====================================================
+// CORPO DO CANDLE
+//====================================================
+
+
+body = math.abs(close - open)
+
+
+candleRange = high - low
+
+
+
+
+safeRange = candleRange == 0 ? 1 : candleRange
+
+
+
+
+bodyPercent =
+     body / safeRange
+
+
+
+
+closePosition =
+     (close - low) / safeRange
+
+
+
+
+
+
+strongBody =
+     body >= atr * explosionFactor and
+     bodyPercent >= 0.55 and
+     math.abs(close - ((high + low) / 2)) >= candleRange * 0.20
+
+
+
+
+
+
+//====================================================
+// CANDLE EXPLOSIVO
+//====================================================
+
+
+bullExplosion =
+     body >= atr * explosionFactor and
+     close > open and
+     bodyPercent >= 0.55 and
+     closePosition >= 0.70
+
+
+
+
+
+
+bearExplosion =
+     body >= atr * explosionFactor and
+     close < open and
+     (high - close) / safeRange >= 0.70
+
+
+
+
+
+
+//====================================================
+// VISUAL CANDLE EXPLOSIVO
+//====================================================
+
+
+showExplosion = input.bool(
+     true,
+     "Colorir Candle Explosivo"
+)
+
+
+
+
+explosionColor =
+     bullExplosion ? color.white :
+     bearExplosion ? color.black :
+     na
+
+
+
+
+barcolor(
+     showExplosion ? explosionColor : na
+)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// VOLUME
+//====================================================
+
+
+
+
+volumeMA =
+     ta.sma(
+          volume,
+          volumeLen
+     )
+
+
+
+
+strongVolume =
+     volume > volumeMA
+
+
+
+
+volumeRatio =
+     volumeMA == 0 ? 0 : volume / volumeMA
+
+
+
+
+
+
+
+
+//====================================================
+// NÍVEIS DE LIQUIDEZ
+//====================================================
+
+
+
+
+previousLow =
+     ta.lowest(
+          low,
+          liqLookback
+     )[1]
+
+
+
+
+previousHigh =
+     ta.highest(
+          high,
+          liqLookback
+     )[1]
+
+
+
+
+
+
+
+
+//====================================================
+// LIQUIDITY SWEEP FUNDO
+//====================================================
+
+
+
+
+liquiditySweepBuy =
+     low < previousLow and
+     close > previousLow
+
+
+
+
+
+
+
+
+//====================================================
+// LIQUIDITY SWEEP TOPO
+//====================================================
+
+
+
+
+liquiditySweepSell =
+     high > previousHigh and
+     close < previousHigh
+
+
+
+
+
+
+
+
+//====================================================
+// LIQUIDEZ COM VOLUME
+//====================================================
+
+
+
+
+strongLiquidityBuy =
+     liquiditySweepBuy and
+     strongVolume
+
+
+
+
+
+
+strongLiquiditySell =
+     liquiditySweepSell and
+     strongVolume
+     //====================================================
+// ESTRUTURA DO CANDLE
+//====================================================
+
+
+
+
+candleSize =
+     high - low
+
+
+
+
+safeCandleSize =
+     candleSize == 0 ? 1 : candleSize
+
+
+
+
+
+
+upperShadow =
+     high - math.max(open, close)
+
+
+
+
+
+
+lowerShadow =
+     math.min(open, close) - low
+
+
+
+
+
+
+bodyRatio =
+     body / safeCandleSize
+
+
+
+
+
+
+upperRatio =
+     upperShadow / safeCandleSize
+
+
+
+
+
+
+lowerRatio =
+     lowerShadow / safeCandleSize
+
+
+
+
+
+
+
+
+//====================================================
+// HAMMER
+//====================================================
+
+
+
+
+hammer =
+     lowerShadow >= body * 2 and
+     upperShadow <= body * 0.5 and
+     bodyRatio <= 0.40
+
+
+
+
+
+
+
+
+//====================================================
+// INVERTED HAMMER
+//====================================================
+
+
+
+
+invertedHammer =
+     upperShadow >= body * 2 and
+     lowerShadow <= body * 0.5 and
+     bodyRatio <= 0.40
+
+
+
+
+
+
+
+
+//====================================================
+// DRAGONFLY DOJI
+//====================================================
+
+
+
+
+dragonflyDoji =
+     bodyRatio <= 0.10 and
+     lowerRatio >= 0.60 and
+     upperRatio <= 0.10
+
+
+
+
+
+
+
+
+//====================================================
+// SHOOTING STAR
+//====================================================
+
+
+
+
+shootingStar =
+     upperShadow >= body * 2 and
+     lowerShadow <= body * 0.50 and
+     bodyRatio <= 0.40
+
+
+
+
+
+
+
+
+//====================================================
+// GRAVESTONE DOJI
+//====================================================
+
+
+
+
+gravestoneDoji =
+     bodyRatio <= 0.10 and
+     upperRatio >= 0.60 and
+     lowerRatio <= 0.10
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// GRUPO REVERSÃO COMPRA
+//====================================================
+
+
+
+
+bullReversalPattern =
+     hammer or
+     invertedHammer or
+     dragonflyDoji
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// GRUPO REVERSÃO VENDA
+//====================================================
+
+
+
+
+bearReversalPattern =
+     shootingStar or
+     gravestoneDoji
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// CONFIRMAÇÃO REVERSÃO
+//====================================================
+
+
+
+
+liqBuy =
+     strongLiquidityBuy and
+     bullReversalPattern and
+     bullExplosion
+
+
+
+
+
+
+
+
+liqSell =
+     strongLiquiditySell and
+     bearReversalPattern and
+     bearExplosion
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// CONTROLE VISUAL REVERSÃO
+//====================================================
+
+
+
+
+showREV = input.bool(
+     true,
+     "Mostrar REV"
+)
+
+
+
+
+
+
+bullREV =
+     bullReversalPattern
+
+
+
+
+
+
+bearREV =
+     bearReversalPattern
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PLOT REVERSÃO COMPRA
+//====================================================
+
+
+
+
+plotshape(
+     showREV and bullREV,
+     title = "REV++",
+     style = shape.labelup,
+     location = location.belowbar,
+     color = color.green,
+     text = "REV++",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PLOT REVERSÃO VENDA
+//====================================================
+plotshape(
+     showREV and bearREV,
+     title = "REV--",
+     style = shape.labeldown,
+     location = location.abovebar,
+     color = color.red,
+     text = "REV--",
+     textcolor = color.white,
+     size = size.small
+)
+//====================================================
+// PARTE 3
+// CONTROLE DE REPETIÇÃO
+// FORÇA DO MOVIMENTO
+// BREAKOUT
+// TENDÊNCIA
+//====================================================
+
+
+
+
+//====================================================
+// CONTROLE DE REPETIÇÃO DE SINAIS
+//====================================================
+
+
+barsFilter = input.int(
+     3,
+     "Mínimo de velas entre sinais",
+     minval = 1
+)
+
+
+
+
+var int lastSignalBar = na
+
+
+
+
+canSignal =
+     na(lastSignalBar) or
+     (bar_index - lastSignalBar >= barsFilter)
+
+
+
+
+
+
+
+
+//====================================================
+// FORÇA DO MOVIMENTO
+//====================================================
+
+
+candleRangeForce = high - low
+
+
+
+
+safeRangeForce =
+     candleRangeForce == 0 ? 1 : candleRangeForce
+
+
+
+
+
+
+bodyForce =
+     math.abs(close - open)
+
+
+
+
+
+
+bodyPercentForce =
+     bodyForce / safeRangeForce
+
+
+
+
+
+
+
+
+//====================================================
+// FORÇA COMPRADORA
+//====================================================
+
+
+
+
+strongBull =
+     close > open and
+     bodyPercentForce >= 0.70
+
+
+
+
+
+
+
+
+//====================================================
+// FORÇA VENDEDORA
+//====================================================
+
+
+
+
+strongBear =
+     close < open and
+     bodyPercentForce >= 0.70
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ROMPIMENTO
+//====================================================
+
+
+
+
+breakLookback = input.int(
+     20,
+     "Período Rompimento",
+     minval = 2
+)
+
+
+
+
+
+
+highestBreak =
+     ta.highest(
+          high,
+          breakLookback
+     )
+
+
+
+
+
+
+lowestBreak =
+     ta.lowest(
+          low,
+          breakLookback
+     )
+
+
+
+
+
+
+breakHigh =
+     close > highestBreak[1]
+
+
+
+
+
+
+breakLow =
+     close < lowestBreak[1]
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// FILTRO DE TENDÊNCIA
+//====================================================
+
+
+
+
+emaLen = input.int(
+     50,
+     "EMA Tendência"
+)
+
+
+
+
+
+
+emaTrend =
+     ta.ema(
+          close,
+          emaLen
+     )
+
+
+
+
+
+
+trendBuy =
+     close > emaTrend
+
+
+
+
+
+
+trendSell =
+     close < emaTrend
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SINAIS PRINCIPAIS
+//====================================================
+
+
+
+
+buySignal =
+     canSignal and
+     strongBull and
+     breakHigh and
+     trendBuy
+
+
+
+
+
+
+sellSignal =
+     canSignal and
+     strongBear and
+     breakLow and
+     trendSell
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ATUALIZA MEMÓRIA DO SINAL
+//====================================================
+
+
+if buySignal or sellSignal
+    lastSignalBar := bar_index
+
+
+//====================================================
+// VISUALIZAÇÃO
+//====================================================
+
+
+
+
+showSignals = input.bool(
+     true,
+     "Mostrar Sinais"
+)
+
+
+
+
+
+
+plotshape(
+     showSignals and buySignal,
+     title = "BUY",
+     style = shape.labelup,
+     location = location.belowbar,
+     color = color.lime,
+     text = "BUY",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+plotshape(
+     showSignals and sellSignal,
+     title = "SELL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     color = color.red,
+     text = "SELL",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+//====================================================
+// EMA NO GRÁFICO
+//====================================================
+
+
+
+
+plot(
+     emaTrend,
+     title = "EMA Tendência",
+     color = color.orange,
+     linewidth = 2
+)//====================================================
+// PARTE 4
+// BUYER / SELLER FORCE
+//====================================================
+
+
+
+
+//====================================================
+// CONFIGURAÇÕES DE FORÇA
+//====================================================
+
+
+forceBodyFactor = input.float(
+     0.55,
+     "Força mínima do corpo",
+     step = 0.05
+)
+
+
+
+
+closeFactor = input.float(
+     0.75,
+     "Fechamento forte",
+     step = 0.05
+)
+
+
+
+
+
+
+
+
+//====================================================
+// MEDIDAS DO CANDLE
+//====================================================
+
+
+forceRange = high - low
+
+
+
+
+safeForceRange =
+     forceRange == 0 ? 1 : forceRange
+
+
+
+
+
+
+forceBody =
+     math.abs(close - open)
+
+
+
+
+
+
+forceBodyPercent =
+     forceBody / safeForceRange
+
+
+
+
+
+
+upperWickForce =
+     high - math.max(open, close)
+
+
+
+
+
+
+lowerWickForce =
+     math.min(open, close) - low
+
+
+
+
+
+
+upperWickPercent =
+     upperWickForce / safeForceRange
+
+
+
+
+
+
+lowerWickPercent =
+     lowerWickForce / safeForceRange
+
+
+
+
+
+
+closePositionForce =
+     (close - low) / safeForceRange
+
+
+
+
+
+
+
+
+//====================================================
+// MÉDIA DO CORPO
+//====================================================
+
+
+averageBody =
+     ta.sma(
+          math.abs(close - open),
+          20
+     )
+
+
+
+
+
+
+largeBody =
+     forceBody >= averageBody
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// FORÇA COMPRADORA
+//====================================================
+
+
+buyerForce =
+     close > open and
+     forceBodyPercent >= forceBodyFactor and
+     closePositionForce >= closeFactor and
+     lowerWickPercent <= 0.20
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// FORÇA VENDEDORA
+//====================================================
+
+
+sellerForce =
+     close < open and
+     forceBodyPercent >= forceBodyFactor and
+     closePositionForce <= (1 - closeFactor) and
+     upperWickPercent <= 0.20
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PRESSÃO COMPRADORA
+//====================================================
+
+
+buyerPressure =
+     buyerForce and
+     largeBody and
+     strongVolume
+
+
+
+
+
+
+
+
+//====================================================
+// PRESSÃO VENDEDORA
+//====================================================
+
+
+sellerPressure =
+     sellerForce and
+     largeBody and
+     strongVolume
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SCORE BUYER
+//====================================================
+
+
+buyerScore = 0.0
+
+
+
+
+buyerScore += buyerForce ? 40 : 0
+
+
+buyerScore += largeBody ? 20 : 0
+
+
+buyerScore += strongVolume ? 20 : 0
+
+
+buyerScore += trendBuy ? 20 : 0
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SCORE SELLER
+//====================================================
+
+
+sellerScore = 0.0
+
+
+
+
+sellerScore += sellerForce ? 40 : 0
+
+
+sellerScore += largeBody ? 20 : 0
+
+
+sellerScore += strongVolume ? 20 : 0
+
+
+sellerScore += trendSell ? 20 : 0
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// CLASSIFICAÇÃO
+//====================================================
+
+
+buyerStrength =
+     buyerScore >= 90 ? "Institucional" :
+     buyerScore >= 75 ? "Muito Forte" :
+     buyerScore >= 60 ? "Forte" :
+     buyerScore >= 40 ? "Moderada" :
+     "Fraca"
+
+
+
+
+
+
+sellerStrength =
+     sellerScore >= 90 ? "Institucional" :
+     sellerScore >= 75 ? "Muito Forte" :
+     sellerScore >= 60 ? "Forte" :
+     sellerScore >= 40 ? "Moderada" :
+     "Fraca"
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// VISUAL
+//====================================================
+
+
+showForce = input.bool(
+     true,
+     "Mostrar Buyer/Seller Force"
+)
+
+
+
+
+
+
+
+
+plotshape(
+     showForce and buyerPressure,
+     title = "BUY FORCE",
+     style = shape.labelup,
+     location = location.belowbar,
+     color = color.aqua,
+     text = "BUY FORCE",
+     textcolor = color.black,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+plotshape(
+     showForce and sellerPressure,
+     title = "SELL FORCE",
+     style = shape.labeldown,
+     location = location.abovebar,
+     color = color.orange,
+     text = "SELL FORCE",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ALERTAS
+//====================================================
+
+
+alertcondition(
+     buyerPressure,
+     title = "Buyer Force",
+     message = "Força compradora detectada"
+)
+
+
+
+
+
+
+alertcondition(
+     sellerPressure,
+     title = "Seller Force",
+     message = "Força vendedora detectada"
+)
+//====================================================
+// PARTE 5
+// MOTOR DE ABSORÇÃO INSTITUCIONAL
+//====================================================
+
+
+
+
+//====================================================
+// CONFIGURAÇÕES
+//====================================================
+
+
+showAbsorption = input.bool(
+     true,
+     "Mostrar Absorção"
+)
+
+
+
+
+absorptionFactor = input.float(
+     0.45,
+     "Pavio mínimo absorção",
+     step = 0.05
+)
+
+
+
+
+
+
+
+
+//====================================================
+// MEDIDAS DO CANDLE
+//====================================================
+
+
+absRange =
+     high - low
+
+
+
+
+
+
+safeAbsRange =
+     absRange == 0 ? 1 : absRange
+
+
+
+
+
+
+absBody =
+     math.abs(close - open)
+
+
+
+
+
+
+upperAbsWick =
+     high - math.max(open, close)
+
+
+
+
+
+
+lowerAbsWick =
+     math.min(open, close) - low
+
+
+
+
+
+
+upperAbsPercent =
+     upperAbsWick / safeAbsRange
+
+
+
+
+
+
+lowerAbsPercent =
+     lowerAbsWick / safeAbsRange
+
+
+
+
+
+
+bodyAbsPercent =
+     absBody / safeAbsRange
+
+
+
+
+
+
+closeAbsPosition =
+     (close - low) / safeAbsRange
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ABSORÇÃO COMPRADORA
+//====================================================
+
+
+
+
+buyAbsorption =
+     lowerAbsPercent >= absorptionFactor and
+     close > open and
+     closeAbsPosition >= 0.65 and
+     bodyAbsPercent >= 0.25
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ABSORÇÃO VENDEDORA
+//====================================================
+
+
+
+
+sellAbsorption =
+     upperAbsPercent >= absorptionFactor and
+     close < open and
+     closeAbsPosition <= 0.35 and
+     bodyAbsPercent >= 0.25
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// CONFIRMAÇÃO VOLUME
+//====================================================
+
+
+
+
+buyAbsorptionConfirmed =
+     buyAbsorption and
+     strongVolume
+
+
+
+
+
+
+sellAbsorptionConfirmed =
+     sellAbsorption and
+     strongVolume
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SCORE ABSORÇÃO
+//====================================================
+
+
+
+
+buyAbsorptionScore = 0.0
+
+
+
+
+buyAbsorptionScore += buyAbsorption ? 40 : 0
+
+
+buyAbsorptionScore += strongVolume ? 20 : 0
+
+
+buyAbsorptionScore += buyerPressure ? 20 : 0
+
+
+buyAbsorptionScore += trendBuy ? 20 : 0
+
+
+
+
+
+
+
+
+
+
+sellAbsorptionScore = 0.0
+
+
+
+
+sellAbsorptionScore += sellAbsorption ? 40 : 0
+
+
+sellAbsorptionScore += strongVolume ? 20 : 0
+
+
+sellAbsorptionScore += sellerPressure ? 20 : 0
+
+
+sellAbsorptionScore += trendSell ? 20 : 0
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ABSORÇÃO INSTITUCIONAL
+//====================================================
+
+
+
+
+institutionalBuyAbsorption =
+     buyAbsorptionScore >= 80
+
+
+
+
+
+
+institutionalSellAbsorption =
+     sellAbsorptionScore >= 80
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ENTRADA ANTECIPADA
+//====================================================
+
+
+
+
+earlyBuy =
+     institutionalBuyAbsorption and
+     buyerPressure
+
+
+
+
+
+
+earlySell =
+     institutionalSellAbsorption and
+     sellerPressure
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// VISUALIZAÇÃO
+//====================================================
+
+
+
+
+plotshape(
+     showAbsorption and institutionalBuyAbsorption,
+     title = "ABS BUY",
+     style = shape.labelup,
+     location = location.belowbar,
+     color = color.aqua,
+     text = "ABS BUY",
+     textcolor = color.black,
+     size = size.small
+)
+
+
+
+
+
+
+plotshape(
+     showAbsorption and institutionalSellAbsorption,
+     title = "ABS SELL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     color = color.fuchsia,
+     text = "ABS SELL",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+plotshape(
+     showAbsorption and earlyBuy,
+     title = "EARLY BUY",
+     style = shape.circle,
+     location = location.belowbar,
+     color = color.lime,
+     size = size.tiny
+)
+
+
+
+
+
+
+
+
+plotshape(
+     showAbsorption and earlySell,
+     title = "EARLY SELL",
+     style = shape.circle,
+     location = location.abovebar,
+     color = color.red,
+     size = size.tiny
+)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ALERTAS
+//====================================================
+
+
+
+
+alertcondition(
+     institutionalBuyAbsorption,
+     title = "Absorção Compradora",
+     message = "Absorção compradora institucional detectada"
+)
+
+
+
+
+
+
+alertcondition(
+     institutionalSellAbsorption,
+     title = "Absorção Vendedora",
+     message = "Absorção vendedora institucional detectada"
+)
+
+
+
+
+
+
+alertcondition(
+     earlyBuy,
+     title = "Early Buy",
+     message = "Entrada antecipada compradora"
+)
+
+
+
+
+
+
+alertcondition(
+     earlySell,
+     title = "Early Sell",
+     message = "Entrada antecipada vendedora"
+)
+//====================================================
+// PARTE 6
+// MOTOR PREDITIVO DA PRÓXIMA VELA
+//====================================================
+
+
+
+
+//====================================================
+// CONFIGURAÇÕES
+//====================================================
+
+
+predictionThreshold = input.int(
+     70,
+     "Score mínimo previsão",
+     minval = 50,
+     maxval = 100
+)
+
+
+
+
+
+
+predictionATR = input.float(
+     0.35,
+     "Sensibilidade ATR",
+     step = 0.05
+)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PROJEÇÃO DE FORÇA
+//====================================================
+
+
+
+
+projectedBody =
+     body + (atr * predictionATR)
+
+
+
+
+
+
+projectionPower =
+     projectedBody / atr
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PROJEÇÃO DE ALTA
+//====================================================
+
+
+
+
+bullProjection =
+     close > open and
+     bodyPercent >= 0.55 and
+     closePosition >= 0.70 and
+     projectionPower >= 0.80
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PROJEÇÃO DE BAIXA
+//====================================================
+
+
+
+
+bearProjection =
+     close < open and
+     bodyPercent >= 0.55 and
+     closePosition <= 0.30 and
+     projectionPower >= 0.80
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// MICRO ROMPIMENTO
+//====================================================
+
+
+
+
+microResistance =
+     ta.highest(
+          high,
+          10
+     )[1]
+
+
+
+
+
+
+microSupport =
+     ta.lowest(
+          low,
+          10
+     )[1]
+
+
+
+
+
+
+
+
+
+
+earlyBreakBuy =
+     close >= microResistance - (atr * 0.15)
+
+
+
+
+
+
+earlyBreakSell =
+     close <= microSupport + (atr * 0.15)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SCORE PREDITIVO COMPRA
+//====================================================
+
+
+
+
+predictionBuyScore = 0.0
+
+
+
+
+predictionBuyScore += bullProjection ? 25 : 0
+
+
+predictionBuyScore += buyerPressure ? 20 : 0
+
+
+predictionBuyScore += institutionalBuyAbsorption ? 20 : 0
+
+
+predictionBuyScore += trendBuy ? 15 : 0
+
+
+predictionBuyScore += breakHigh ? 10 : 0
+
+
+predictionBuyScore += strongVolume ? 10 : 0
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SCORE PREDITIVO VENDA
+//====================================================
+
+
+
+
+predictionSellScore = 0.0
+
+
+
+
+predictionSellScore += bearProjection ? 25 : 0
+
+
+predictionSellScore += sellerPressure ? 20 : 0
+
+
+predictionSellScore += institutionalSellAbsorption ? 20 : 0
+
+
+predictionSellScore += trendSell ? 15 : 0
+
+
+predictionSellScore += breakLow ? 10 : 0
+
+
+predictionSellScore += strongVolume ? 10 : 0
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// PROBABILIDADE
+//====================================================
+
+
+
+
+buyProbability =
+     math.min(
+          predictionBuyScore,
+          100
+     )
+
+
+
+
+
+
+sellProbability =
+     math.min(
+          predictionSellScore,
+          100
+     )
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// SINAL PREDITIVO FINAL
+//====================================================
+
+
+
+
+predictBuy =
+     buyProbability >= predictionThreshold
+
+
+
+
+
+
+predictSell =
+     sellProbability >= predictionThreshold
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// VISUAL
+//====================================================
+
+
+
+
+showPrediction = input.bool(
+     true,
+     "Mostrar Previsão"
+)
+
+
+
+
+
+
+
+
+
+
+plotshape(
+     showPrediction and predictBuy,
+     title = "PREDICT BUY",
+     style = shape.labelup,
+     location = location.belowbar,
+     color = color.blue,
+     text = "PRED BUY",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+
+
+plotshape(
+     showPrediction and predictSell,
+     title = "PREDICT SELL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     color = color.purple,
+     text = "PRED SELL",
+     textcolor = color.white,
+     size = size.small
+)
+
+
+
+
+
+
+
+
+
+
+//====================================================
+// ALERTAS
+//====================================================
+
+
+
+
+alertcondition(
+     predictBuy,
+     title = "Predict BUY",
+     message = "Alta probabilidade de continuação"
+)
+
+
+
+
+
+
+alertcondition(
+     predictSell,
+     title = "Predict SELL",
+     message = "Alta probabilidade de continuação de baixa"
+)
+
+

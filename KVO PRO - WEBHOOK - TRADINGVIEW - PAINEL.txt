@@ -1,0 +1,880 @@
+//@version=6
+indicator("KVO PRO - ETHEREUM V9.2 WEBHOOK", overlay=true, max_labels_count=500)
+
+// ============================================================================
+// KVO PRO - ETHEREUM
+// V9.2 - INTENSIDADE DIRECIONAL + KVO + BOOST ADAPTATIVO
+//       + CONFLUÊNCIA RÍGIDA
+//       + WEBHOOK
+//
+// PAINEL:
+//
+// DIREÇÃO DO CANDLE
+// BUY VS SELL
+// ROBO
+// CONFLUÊNCIA DO ROBO
+// RESULTADO
+//
+// WEBHOOK:
+// Envia JSON através de alert()
+//
+// IMPORTANTE:
+// O Pine Script não executa Random Forest do scikit-learn.
+// O "modelo" abaixo é uma estimativa direcional calculada no TradingView.
+// O Random Forest completo permanece no Google Colab.
+// ============================================================================
+
+
+// ============================================================================
+// CONFIGURAÇÕES
+// ============================================================================
+
+groupConfig = "KVO PRO - CONFIGURAÇÕES"
+
+corpoMinimo = input.float(0.70, "Corpo mínimo", minval=0.0, maxval=1.0, step=0.05, group=groupConfig)
+
+atrPeriodo = input.int(14, "ATR período", minval=1, group=groupConfig)
+
+estruturaLookback = input.int(20, "Estrutura", minval=2, group=groupConfig)
+
+confirmacaoLookback = input.int(5, "Confirmação", minval=2, group=groupConfig)
+
+kvoFast = input.int(34, "KVO Fast", minval=1, group=groupConfig)
+
+kvoSlow = input.int(55, "KVO Slow", minval=2, group=groupConfig)
+
+kvoSignalPeriodo = input.int(13, "KVO Signal", minval=1, group=groupConfig)
+
+boostMaximo = input.float(20.0, "Boost máximo", minval=0, maxval=100, group=groupConfig)
+
+penaltyMaximo = input.float(15.0, "Penalty máximo", minval=0, maxval=100, group=groupConfig)
+
+pesoCorpo = input.float(0.50, "Peso corpo", minval=0, maxval=1, step=0.05, group=groupConfig)
+
+pesoModelo = input.float(0.50, "Peso modelo", minval=0, maxval=1, step=0.05, group=groupConfig)
+
+mostrarCandleForca = input.bool(true, "Colorir candles de força", group=groupConfig)
+
+somenteCandleForca = input.bool(false, "Alertar somente candle de força", group=groupConfig)
+
+mostrarTabela = input.bool(true, "Mostrar painel", group=groupConfig)
+
+usarWebhook = input.bool(true, "Ativar webhook", group=groupConfig)
+
+alertaSomenteFechamento = input.bool(true, "Alertar no fechamento do candle", group=groupConfig)
+
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corVerde = color.rgb(0, 255, 100)
+
+corVerdeForte = color.rgb(0, 255, 0)
+
+corVermelho = color.rgb(255, 60, 60)
+
+corAmarelo = color.rgb(255, 210, 0)
+
+corCinza = color.rgb(150, 150, 150)
+
+corCiano = color.rgb(0, 220, 255)
+
+corBranco = color.white
+
+corFundo = color.rgb(15, 15, 20)
+
+corFundo2 = color.rgb(25, 25, 32)
+
+corBorda = color.rgb(70, 70, 80)
+
+
+// ============================================================================
+// DADOS DO CANDLE
+// ============================================================================
+
+abertura = open
+
+maxima = high
+
+minima = low
+
+fechamento = close
+
+volumeAtual = volume
+
+rangeCandle = high - low
+
+corpo = math.abs(close - open)
+
+pavioSuperior = high - math.max(open, close)
+
+pavioInferior = math.min(open, close) - low
+
+rangeSeguro = math.max(rangeCandle, syminfo.mintick)
+
+corpoPct = corpo / rangeSeguro
+
+pavioSuperiorPct = pavioSuperior / rangeSeguro
+
+pavioInferiorPct = pavioInferior / rangeSeguro
+
+
+// ============================================================================
+// DIREÇÃO
+// ============================================================================
+
+direcaoCandle = close > open ? 1 : close < open ? -1 : 0
+
+direcaoTexto = direcaoCandle > 0 ? "ALTA" : direcaoCandle < 0 ? "BAIXA" : "NEUTRA"
+
+
+// ============================================================================
+// RETORNOS
+// ============================================================================
+
+retorno1 = not na(close[1]) ? close / close[1] - 1.0 : 0.0
+
+retorno3 = not na(close[3]) ? close / close[3] - 1.0 : 0.0
+
+retorno5 = not na(close[5]) ? close / close[5] - 1.0 : 0.0
+
+
+// ============================================================================
+// MÉDIAS
+// ============================================================================
+
+mm5 = ta.sma(close, 5)
+
+mm10 = ta.sma(close, 10)
+
+mm20 = ta.sma(close, 20)
+
+distMm5 = not na(mm5) ? close / mm5 - 1.0 : 0.0
+
+distMm10 = not na(mm10) ? close / mm10 - 1.0 : 0.0
+
+distMm20 = not na(mm20) ? close / mm20 - 1.0 : 0.0
+
+
+// ============================================================================
+// VOLUME
+// ============================================================================
+
+volumeMm20 = ta.sma(volume, 20)
+
+volumeRelativo = not na(volumeMm20) and volumeMm20 != 0 ? volume / volumeMm20 : 1.0
+
+
+// ============================================================================
+// ATR
+// ============================================================================
+
+atr = ta.atr(atrPeriodo)
+
+atrSeguro = math.max(atr, syminfo.mintick)
+
+
+// ============================================================================
+// ESTRUTURA
+// ============================================================================
+
+suporte20 = ta.lowest(low[1], estruturaLookback)
+
+resistencia20 = ta.highest(high[1], estruturaLookback)
+
+suporte5 = ta.lowest(low[1], confirmacaoLookback)
+
+resistencia5 = ta.highest(high[1], confirmacaoLookback)
+
+distResistencia = (resistencia20 - close) / atrSeguro
+
+distSuporte = (close - suporte20) / atrSeguro
+
+
+// ============================================================================
+// KVO
+// ============================================================================
+
+precoTipico = (high + low + close) / 3.0
+
+tendenciaKvo = precoTipico > precoTipico[1] ? 1 : precoTipico < precoTipico[1] ? -1 : 0
+
+dmKvo = high - low
+
+var float cmKvo = 0.0
+
+if bar_index == 0
+    cmKvo := dmKvo
+else
+    cmKvo := tendenciaKvo == tendenciaKvo[1] ? cmKvo[1] + dmKvo : dmKvo + dmKvo[1]
+
+cmSeguro = math.max(cmKvo, syminfo.mintick)
+
+vfKvo = volume * math.abs(2.0 * (dmKvo / cmSeguro) - 1.0) * tendenciaKvo * 100.0
+
+kvo = ta.ema(vfKvo, kvoFast) - ta.ema(vfKvo, kvoSlow)
+
+kvoSignal = ta.ema(kvo, kvoSignalPeriodo)
+
+kvoHist = kvo - kvoSignal
+
+kvoVariacao = kvo - kvo[1]
+
+kvoDesvio = ta.stdev(kvo, 34)
+
+kvoZscore = not na(kvoDesvio) and kvoDesvio != 0 ? kvo / kvoDesvio : 0.0
+
+kvoForcaBruta = math.abs(kvoHist) / (math.abs(kvo) + math.abs(kvoSignal) + 0.000000001)
+
+kvoForca = math.min(math.max(kvoForcaBruta, 0.0), 1.0) * 100.0
+
+kvoEstado = kvo > kvoSignal and kvoVariacao > 0 ? 1 : kvo < kvoSignal and kvoVariacao < 0 ? -1 : 0
+
+
+// ============================================================================
+// CANDLE DE FORÇA
+// ============================================================================
+
+forcaCorpo = math.min(math.max(corpoPct * 100.0, 0.0), 100.0)
+
+candleForte = corpoPct >= corpoMinimo
+
+
+// ============================================================================
+// MODELO DIRECIONAL
+//
+// Como o Pine não executa Random Forest,
+// criamos uma pontuação direcional baseada em:
+//
+// Candle
+// KVO
+// Retorno 1
+// Retorno 3
+// MM5
+// MM10
+// MM20
+// Volume
+// ============================================================================
+
+float pontosAltaModelo = 0.0
+
+float pontosBaixaModelo = 0.0
+
+if close > open
+    pontosAltaModelo += 2.0
+else if close < open
+    pontosBaixaModelo += 2.0
+
+if kvoEstado > 0
+    pontosAltaModelo += 2.0
+else if kvoEstado < 0
+    pontosBaixaModelo += 2.0
+
+if retorno1 > 0
+    pontosAltaModelo += 1.0
+else if retorno1 < 0
+    pontosBaixaModelo += 1.0
+
+if retorno3 > 0
+    pontosAltaModelo += 1.0
+else if retorno3 < 0
+    pontosBaixaModelo += 1.0
+
+if close > mm5
+    pontosAltaModelo += 1.0
+else if close < mm5
+    pontosBaixaModelo += 1.0
+
+if close > mm10
+    pontosAltaModelo += 1.0
+else if close < mm10
+    pontosBaixaModelo += 1.0
+
+if close > mm20
+    pontosAltaModelo += 1.0
+else if close < mm20
+    pontosBaixaModelo += 1.0
+
+if volumeRelativo >= 1.20
+    if close > open
+        pontosAltaModelo += 0.5
+    else if close < open
+        pontosBaixaModelo += 0.5
+
+
+// ============================================================================
+// NORMALIZAÇÃO DO MODELO
+// ============================================================================
+
+pontuacaoModeloTotal = pontosAltaModelo + pontosBaixaModelo
+
+probAlta = pontuacaoModeloTotal > 0 ? pontosAltaModelo / pontuacaoModeloTotal : 0.5
+
+probBaixa = pontuacaoModeloTotal > 0 ? pontosBaixaModelo / pontuacaoModeloTotal : 0.5
+
+forcaModelo = math.max(probAlta, probBaixa) * 100.0
+
+direcaoModelo = probAlta > probBaixa ? 1 : probBaixa > probAlta ? -1 : 0
+
+direcaoModeloTexto = direcaoModelo > 0 ? "ALTA" : direcaoModelo < 0 ? "BAIXA" : "NEUTRA"
+
+
+// ============================================================================
+// INTENSIDADE BASE
+// ============================================================================
+
+intensidadeBase = forcaCorpo * pesoCorpo + forcaModelo * pesoModelo
+
+intensidadeBase := math.min(math.max(intensidadeBase, 0.0), 100.0)
+
+
+// ============================================================================
+// CONFLUÊNCIA
+// ============================================================================
+
+int confirmacoes = 0
+
+int divergencias = 0
+
+
+// Candle + Modelo
+if direcaoCandle != 0 and direcaoCandle == direcaoModelo
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+// KVO
+if direcaoCandle != 0 and kvoEstado == direcaoCandle
+    confirmacoes += 1
+else if direcaoCandle != 0 and kvoEstado != 0
+    divergencias += 1
+
+
+// Retorno 1
+if direcaoCandle > 0 and retorno1 > 0
+    confirmacoes += 1
+else if direcaoCandle < 0 and retorno1 < 0
+    confirmacoes += 1
+else if retorno1 != 0
+    divergencias += 1
+
+
+// Retorno 3
+if direcaoCandle > 0 and retorno3 > 0
+    confirmacoes += 1
+else if direcaoCandle < 0 and retorno3 < 0
+    confirmacoes += 1
+else if retorno3 != 0
+    divergencias += 1
+
+
+// MM5
+if direcaoCandle > 0 and close > mm5
+    confirmacoes += 1
+else if direcaoCandle < 0 and close < mm5
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+// MM10
+if direcaoCandle > 0 and close > mm10
+    confirmacoes += 1
+else if direcaoCandle < 0 and close < mm10
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+// MM20
+if direcaoCandle > 0 and close > mm20
+    confirmacoes += 1
+else if direcaoCandle < 0 and close < mm20
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+// ============================================================================
+// DIREÇÃO DA INTENSIDADE
+// ============================================================================
+
+float pontuacaoAlta = 0.0
+
+float pontuacaoBaixa = 0.0
+
+
+// Candle
+if direcaoCandle > 0
+    pontuacaoAlta += 2.0
+else if direcaoCandle < 0
+    pontuacaoBaixa += 2.0
+
+
+// Modelo
+if probAlta > probBaixa
+    pontuacaoAlta += probAlta * 3.0
+else if probBaixa > probAlta
+    pontuacaoBaixa += probBaixa * 3.0
+
+
+// KVO
+if kvoEstado > 0
+    pontuacaoAlta += 2.0
+else if kvoEstado < 0
+    pontuacaoBaixa += 2.0
+
+
+// Retorno 1
+if retorno1 > 0
+    pontuacaoAlta += 1.0
+else if retorno1 < 0
+    pontuacaoBaixa += 1.0
+
+
+// Retorno 3
+if retorno3 > 0
+    pontuacaoAlta += 1.0
+else if retorno3 < 0
+    pontuacaoBaixa += 1.0
+
+
+// MM5
+if close > mm5
+    pontuacaoAlta += 1.0
+else if close < mm5
+    pontuacaoBaixa += 1.0
+
+
+// MM10
+if close > mm10
+    pontuacaoAlta += 1.0
+else if close < mm10
+    pontuacaoBaixa += 1.0
+
+
+// MM20
+if close > mm20
+    pontuacaoAlta += 1.0
+else if close < mm20
+    pontuacaoBaixa += 1.0
+
+
+// ============================================================================
+// DIREÇÃO PREDOMINANTE
+// ============================================================================
+
+direcaoIntensidade = pontuacaoAlta > pontuacaoBaixa ? 1 : pontuacaoBaixa > pontuacaoAlta ? -1 : 0
+
+direcaoIntensidadeTexto = direcaoIntensidade > 0 ? "ALTA" : direcaoIntensidade < 0 ? "BAIXA" : "NEUTRA"
+
+
+// ============================================================================
+// CONVICÇÃO DIRECIONAL
+// ============================================================================
+
+pontuacaoTotal = pontuacaoAlta + pontuacaoBaixa
+
+diferencaDirecional = math.abs(pontuacaoAlta - pontuacaoBaixa)
+
+confiancaDirecional = pontuacaoTotal > 0 ? diferencaDirecional / pontuacaoTotal * 100.0 : 0.0
+
+
+// ============================================================================
+// BOOST CONFLUÊNCIA
+// ============================================================================
+
+float boostConfluenciaBruto = 0.0
+
+if confirmacoes == 0
+    boostConfluenciaBruto := 0.0
+else if confirmacoes == 1
+    boostConfluenciaBruto := 2.0
+else if confirmacoes == 2
+    boostConfluenciaBruto := 5.0
+else if confirmacoes == 3
+    boostConfluenciaBruto := 8.0
+else if confirmacoes == 4
+    boostConfluenciaBruto := 12.0
+else if confirmacoes == 5
+    boostConfluenciaBruto := 16.0
+else
+    boostConfluenciaBruto := boostMaximo
+
+
+// ============================================================================
+// FATOR MODELO
+// ============================================================================
+
+float fatorModeloBoost = 0.35
+
+if forcaModelo >= 70
+    fatorModeloBoost := 1.00
+else if forcaModelo >= 65
+    fatorModeloBoost := 0.90
+else if forcaModelo >= 60
+    fatorModeloBoost := 0.75
+else if forcaModelo >= 55
+    fatorModeloBoost := 0.55
+
+
+// ============================================================================
+// FATOR KVO
+// ============================================================================
+
+float fatorKvoBoost = 0.50
+
+if kvoForca >= 60
+    fatorKvoBoost := 1.00
+else if kvoForca >= 40
+    fatorKvoBoost := 0.90
+else if kvoForca >= 20
+    fatorKvoBoost := 0.75
+
+
+// ============================================================================
+// BOOST AJUSTADO
+// ============================================================================
+
+boostConfluenciaAjustado = boostConfluenciaBruto * fatorModeloBoost * fatorKvoBoost
+
+boostConfluenciaAjustado := math.min(boostConfluenciaAjustado, boostMaximo)
+
+
+// ============================================================================
+// BOOST VOLUME
+// ============================================================================
+
+float boostVolume = 0.0
+
+if volumeRelativo >= 1.20
+    boostVolume += 2.0
+
+if volumeRelativo >= 1.50
+    boostVolume += 2.0
+
+if volumeRelativo >= 2.00
+    boostVolume += 2.0
+
+boostVolume := math.min(boostVolume, 6.0)
+
+
+// ============================================================================
+// BOOST KVO
+// ============================================================================
+
+float boostKvo = 0.0
+
+if direcaoCandle != 0 and kvoEstado == direcaoCandle
+    if kvoForca >= 60
+        boostKvo := 5.0
+    else if kvoForca >= 40
+        boostKvo := 3.0
+    else if kvoForca >= 20
+        boostKvo := 1.0
+
+
+// ============================================================================
+// BOOST TOTAL
+// ============================================================================
+
+boostTotal = boostConfluenciaAjustado + boostVolume + boostKvo
+
+boostTotal := math.min(boostTotal, boostMaximo)
+
+
+// ============================================================================
+// PENALTY
+// ============================================================================
+
+float penalty = 0.0
+
+penalty += divergencias * 2.0
+
+
+// KVO contrário
+if direcaoCandle != 0 and kvoEstado != 0 and kvoEstado != direcaoCandle
+    penalty += 5.0
+
+
+// Modelo contrário
+if direcaoCandle != 0 and direcaoModelo != 0 and direcaoModelo != direcaoCandle
+    penalty += 5.0
+
+penalty := math.min(penalty, penaltyMaximo)
+
+
+// ============================================================================
+// PENALTY EXTRA
+// ============================================================================
+
+float penaltyConfluenciaExtra = 0.0
+
+if confirmacoes == 0
+    penaltyConfluenciaExtra := 8.0
+else if confirmacoes == 1 and divergencias >= 4
+    penaltyConfluenciaExtra := 7.0
+else if confirmacoes == 2 and divergencias >= 4
+    penaltyConfluenciaExtra := 5.0
+else if confirmacoes == 3 and divergencias >= 4
+    penaltyConfluenciaExtra := 3.0
+
+penalty += penaltyConfluenciaExtra
+
+penalty := math.min(penalty, penaltyMaximo)
+
+
+// ============================================================================
+// INTENSIDADE FINAL
+// ============================================================================
+
+intensidadeFinal = intensidadeBase + boostTotal - penalty
+
+intensidadeFinal := math.min(math.max(intensidadeFinal, 0.0), 100.0)
+
+
+// ============================================================================
+// INTENSIDADE ASSINADA
+// ============================================================================
+
+intensidadeAssinada = direcaoIntensidade > 0 ? intensidadeFinal : direcaoIntensidade < 0 ? -intensidadeFinal : 0.0
+
+
+// ============================================================================
+// CLASSIFICAÇÃO
+// ============================================================================
+
+string classificacao = "M FRACA"
+
+if intensidadeFinal >= 90
+    classificacao := "EXTREMA"
+else if intensidadeFinal >= 80
+    classificacao := "M FORTE"
+else if intensidadeFinal >= 70
+    classificacao := "FORTE"
+else if intensidadeFinal >= 60
+    classificacao := "MODERADA"
+else if intensidadeFinal >= 40
+    classificacao := "FRACA"
+
+
+// ============================================================================
+// QUALIDADE CONFLUÊNCIA
+// ============================================================================
+
+string qualidadeConfluencia = "FRACA"
+
+if confirmacoes >= 7 and divergencias == 0
+    qualidadeConfluencia := "EXTREMA"
+else if confirmacoes >= 6 and divergencias <= 1
+    qualidadeConfluencia := "M ALTA"
+else if confirmacoes >= 5 and divergencias <= 2
+    qualidadeConfluencia := "ALTA"
+else if confirmacoes >= 4 and divergencias <= 3
+    qualidadeConfluencia := "BOA"
+else if confirmacoes >= 3 and divergencias <= 4
+    qualidadeConfluencia := "MODERADA"
+else if confirmacoes <= 1 and divergencias >= 4
+    qualidadeConfluencia := "M FRACA"
+
+
+// ============================================================================
+// NÍVEL MODELO
+// ============================================================================
+
+string nivelModelo = "FRACO"
+
+if forcaModelo >= 80
+    nivelModelo := "M FORTE"
+else if forcaModelo >= 70
+    nivelModelo := "FORTE"
+else if forcaModelo >= 60
+    nivelModelo := "MODERADO"
+
+
+// ============================================================================
+// QUALIDADE BOOST
+// ============================================================================
+
+string qualidadeBoost = "BAIXA"
+
+if fatorModeloBoost >= 0.90 and fatorKvoBoost >= 0.90
+    qualidadeBoost := "ALTA"
+else if fatorModeloBoost >= 0.75 and fatorKvoBoost >= 0.75
+    qualidadeBoost := "BOA"
+else if fatorModeloBoost >= 0.55 or fatorKvoBoost >= 0.75
+    qualidadeBoost := "MODERADA"
+
+
+// ============================================================================
+// BUY / SELL
+// ============================================================================
+
+string vencedor = "EMPATE"
+
+if probAlta > probBaixa
+    vencedor := "BUY"
+else if probBaixa > probAlta
+    vencedor := "SELL"
+
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corDirecao = direcaoIntensidade > 0 ? corVerde : direcaoIntensidade < 0 ? corVermelho : corCinza
+
+corModelo = direcaoModelo > 0 ? corVerde : direcaoModelo < 0 ? corVermelho : corCinza
+
+corVencedor = vencedor == "BUY" ? corVerde : vencedor == "SELL" ? corVermelho : corCinza
+
+corClassificacao = intensidadeFinal >= 90 ? corVerdeForte : intensidadeFinal >= 70 ? corVerde : intensidadeFinal >= 60 ? corAmarelo : intensidadeFinal >= 40 ? corAmarelo : corCinza
+
+corConfluencia = qualidadeConfluencia == "EXTREMA" ? corVerdeForte : qualidadeConfluencia == "M ALTA" ? corVerde : qualidadeConfluencia == "ALTA" ? corVerde : qualidadeConfluencia == "BOA" ? corAmarelo : qualidadeConfluencia == "MODERADA" ? corAmarelo : corVermelho
+
+
+// ============================================================================
+// BARRA BUY / SELL
+// ============================================================================
+
+f_barra(valor) =>
+    tamanho = 8
+    v = math.min(math.max(valor, 0.0), 100.0)
+    preenchido = int(math.round(v / 100.0 * tamanho))
+    vazio = tamanho - preenchido
+    resultado = ""
+    for i = 0 to tamanho - 1
+        resultado += i < preenchido ? "█" : "░"
+    resultado
+
+
+barraBuy = f_barra(probAlta * 100.0)
+
+barraSell = f_barra(probBaixa * 100.0)
+
+
+// ============================================================================
+// CANDLE DE FORÇA
+// ============================================================================
+
+corCandle = candleForte ? direcaoCandle > 0 ? corVerde : direcaoCandle < 0 ? corVermelho : color.gray : na
+
+barcolor(mostrarCandleForca and candleForte ? corCandle : na)
+
+
+// ============================================================================
+// TABELA
+// ============================================================================
+
+var table painel = table.new(position.top_right, 5, 8, bgcolor=corFundo, border_width=1, border_color=corBorda)
+
+
+f_celula(coluna, linha, texto, corTexto, alinhamento) =>
+    table.cell(painel, coluna, linha, texto, text_color=corTexto, bgcolor=corFundo, text_size=size.small, text_halign=alinhamento)
+
+
+if barstate.islast and mostrarTabela
+
+    // Cabeçalho
+    f_celula(0, 0, "DIREÇÃO DO CANDLE", corBranco, text.align_center)
+    f_celula(1, 0, "BUY VS SELL", corBranco, text.align_center)
+    f_celula(2, 0, "ROBO", corBranco, text.align_center)
+    f_celula(3, 0, "CONFLUÊNCIA DO ROBO", corBranco, text.align_center)
+    f_celula(4, 0, "RESULTADO", corAmarelo, text.align_center)
+
+    // Direção
+    f_celula(0, 1, direcaoIntensidadeTexto, corDirecao, text.align_center)
+    f_celula(0, 2, "Conv. " + str.tostring(confiancaDirecional, "#.##") + "%", corBranco, text.align_center)
+    f_celula(0, 3, "Assin. " + (intensidadeAssinada >= 0 ? "+" : "-") + str.tostring(math.abs(intensidadeAssinada), "#.##") + "%", corDirecao, text.align_center)
+    f_celula(0, 4, "Candle " + (candleForte ? "FORTE" : "NORMAL"), candleForte ? corVerde : corCinza, text.align_center)
+
+    // Buy Sell
+    f_celula(1, 1, "BUY  " + barraBuy, corVerde, text.align_left)
+    f_celula(1, 2, "SELL " + barraSell, corVermelho, text.align_left)
+    f_celula(1, 3, "Alta  " + str.tostring(probAlta * 100.0, "#.##") + "%", corVerde, text.align_center)
+    f_celula(1, 4, "Baixa " + str.tostring(probBaixa * 100.0, "#.##") + "%", corVermelho, text.align_center)
+
+    // Robô
+    f_celula(2, 1, "Base   " + str.tostring(intensidadeBase, "#.##") + "%", corBranco, text.align_center)
+    f_celula(2, 2, "Modelo " + str.tostring(forcaModelo, "#.##") + "%", corModelo, text.align_center)
+    f_celula(2, 3, "Boost  " + qualidadeBoost, corCiano, text.align_center)
+    f_celula(2, 4, "Boost+ " + str.tostring(boostTotal, "#.##") + "%", corVerde, text.align_center)
+
+    // Confluência
+    f_celula(3, 1, "Confirmações " + str.tostring(confirmacoes), corVerde, text.align_center)
+    f_celula(3, 2, "Divergências " + str.tostring(divergencias), corVermelho, text.align_center)
+    f_celula(3, 3, qualidadeConfluencia, corConfluencia, text.align_center)
+    f_celula(3, 4, "Penalty " + str.tostring(penalty, "#.##") + "%", corVermelho, text.align_center)
+
+    // Resultado
+    f_celula(4, 1, "RESULTADO", corAmarelo, text.align_center)
+    f_celula(4, 2, classificacao, corClassificacao, text.align_center)
+    f_celula(4, 3, vencedor, corVencedor, text.align_center)
+    f_celula(4, 4, str.tostring(intensidadeFinal, "#.##") + "%", corClassificacao, text.align_center)
+
+    // Linha inferior
+    f_celula(0, 5, "KVO " + str.tostring(kvoForca, "#.##") + "%", kvoEstado > 0 ? corVerde : kvoEstado < 0 ? corVermelho : corCinza, text.align_center)
+    f_celula(1, 5, "Vol. " + str.tostring(volumeRelativo, "#.##") + "x", corCiano, text.align_center)
+    f_celula(2, 5, "MM5 " + (close > mm5 ? "↑" : "↓"), close > mm5 ? corVerde : corVermelho, text.align_center)
+    f_celula(3, 5, "MM20 " + (close > mm20 ? "↑" : "↓"), close > mm20 ? corVerde : corVermelho, text.align_center)
+    f_celula(4, 5, "V9.2", corCiano, text.align_center)
+
+
+// ============================================================================
+// ALERTA WEBHOOK
+// ============================================================================
+//
+// IMPORTANTE:
+//
+// NÃO usamos:
+// alertcondition(..., message=mensagemDinamica)
+//
+// porque o TradingView exige uma string constante em alertcondition.
+//
+// Usamos alert().
+// ============================================================================
+
+condicaoWebhook = usarWebhook and (not somenteCandleForca or candleForte) and (not alertaSomenteFechamento or barstate.isconfirmed)
+
+
+// ============================================================================
+// JSON WEBHOOK
+// ============================================================================
+
+mensagemWebhook = "{\"sistema\":\"KVO PRO\",\"versao\":\"V9.2\",\"ticker\":\"" + syminfo.ticker + "\",\"exchange\":\"" + syminfo.prefix + "\",\"timeframe\":\"" + timeframe.period + "\",\"timestamp\":\"" + str.tostring(time) + "\",\"open\":" + str.tostring(open) + ",\"high\":" + str.tostring(high) + ",\"low\":" + str.tostring(low) + ",\"close\":" + str.tostring(close) + ",\"volume\":" + str.tostring(volume) + ",\"direcao_candle\":\"" + direcaoTexto + "\",\"candle_forca\":" + str.tostring(forcaCorpo, "#.##") + ",\"candle_forte\":" + str.tostring(candleForte) + ",\"prob_buy\":" + str.tostring(probAlta * 100.0, "#.##") + ",\"prob_sell\":" + str.tostring(probBaixa * 100.0, "#.##") + ",\"modelo\":\"" + direcaoModeloTexto + "\",\"forca_modelo\":" + str.tostring(forcaModelo, "#.##") + ",\"kvo_estado\":" + str.tostring(kvoEstado) + ",\"kvo_forca\":" + str.tostring(kvoForca, "#.##") + ",\"volume_relativo\":" + str.tostring(volumeRelativo, "#.##") + ",\"confirmacoes\":" + str.tostring(confirmacoes) + ",\"divergencias\":" + str.tostring(divergencias) + ",\"confluencia\":\"" + qualidadeConfluencia + "\",\"boost\":" + str.tostring(boostTotal, "#.##") + ",\"penalty\":" + str.tostring(penalty, "#.##") + ",\"intensidade\":" + str.tostring(intensidadeFinal, "#.##") + ",\"intensidade_assinada\":" + str.tostring(intensidadeAssinada, "#.##") + ",\"direcao_intensidade\":\"" + direcaoIntensidadeTexto + "\",\"classificacao\":\"" + classificacao + "\",\"vencedor\":\"" + vencedor + "\"}"
+
+
+// ============================================================================
+// DISPARO WEBHOOK
+// ============================================================================
+
+if condicaoWebhook
+    alert(mensagemWebhook, alert.freq_once_per_bar_close)
+
+
+// ============================================================================
+// ALERTCONDITION
+//
+// Esta mensagem é CONSTANTE.
+// Serve para criar uma condição no TradingView.
+// Para dados dinâmicos, use o alert() acima.
+// ============================================================================
+
+alertcondition(candleForte and direcaoCandle > 0, "KVO PRO - Candle Forte Alta", "KVO PRO: candle de força de ALTA.")
+
+alertcondition(candleForte and direcaoCandle < 0, "KVO PRO - Candle Forte Baixa", "KVO PRO: candle de força de BAIXA.")
+
+alertcondition(intensidadeFinal >= 70 and direcaoIntensidade > 0, "KVO PRO - Intensidade Alta", "KVO PRO: intensidade direcional de ALTA >= 70.")
+
+alertcondition(intensidadeFinal >= 70 and direcaoIntensidade < 0, "KVO PRO - Intensidade Baixa", "KVO PRO: intensidade direcional de BAIXA >= 70.")
+
+
+// ============================================================================
+// MARCADORES
+// ============================================================================
+
+plotshape(candleForte and direcaoCandle > 0, title="Candle Forte Alta", style=shape.triangleup, location=location.belowbar, size=size.tiny, color=corVerde)
+
+plotshape(candleForte and direcaoCandle < 0, title="Candle Forte Baixa", style=shape.triangledown, location=location.abovebar, size=size.tiny, color=corVermelho)

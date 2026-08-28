@@ -1,0 +1,3183 @@
+# ============================================================
+# KVO PRO - ETHEREUM
+# V9.2 - INTENSIDADE DIRECIONAL + KVO + BOOST ADAPTATIVO
+#       + CONFLUÊNCIA RÍGIDA
+#
+# OBJETIVO:
+#
+# 1. MEDIR INTENSIDADE DO MOVIMENTO
+# 2. MEDIR DIREÇÃO DA INTENSIDADE
+# 3. MEDIR CONVICÇÃO DIRECIONAL
+# 4. MEDIR CONFLUÊNCIA
+# 5. PENALIZAR EXCESSO DE DIVERGÊNCIAS
+#
+# VISUAL:
+#
+# BUY  -> VERDE
+# SELL -> VERMELHO
+# RESULTADO -> CENTRALIZADO
+# RESULTADO MUDA DE COR CONFORME A CLASSIFICAÇÃO
+#
+# ============================================================
+
+
+# ============================================================
+# INSTALAÇÃO
+# ============================================================
+
+!pip install yfinance scikit-learn -q
+
+
+# ============================================================
+# IMPORTAÇÕES
+# ============================================================
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import re
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
+
+TICKER = "^BVSP"
+
+PERIODO = "5y"
+
+DATA_FINAL = "2026-08-27"
+
+
+# ============================================================
+# MODELO
+# ============================================================
+
+CONFIANCA_MINIMA = 0.60
+
+
+# ============================================================
+# CANDLE
+# ============================================================
+
+CORPO_MINIMO = 0.70
+
+
+# ============================================================
+# ATR
+# ============================================================
+
+ATR_PERIODO = 14
+
+
+# ============================================================
+# ESTRUTURA
+# ============================================================
+
+ESTRUTURA_LOOKBACK = 20
+
+CONFIRMACAO_LOOKBACK = 5
+
+
+# ============================================================
+# KVO
+# ============================================================
+
+KVO_FAST = 34
+
+KVO_SLOW = 55
+
+KVO_SIGNAL = 13
+
+
+# ============================================================
+# BOOST
+# ============================================================
+
+BOOST_MAXIMO = 20.0
+
+PENALTY_MAXIMO = 15.0
+
+
+# ============================================================
+# PESOS
+# ============================================================
+
+PESO_CORPO = 0.50
+
+PESO_MODELO = 0.50
+
+
+# ============================================================
+# TAMANHO DAS BARRAS
+# ============================================================
+
+BARRA_TAMANHO = 8
+
+
+# ============================================================
+# ============================================================
+# DOWNLOAD
+# ============================================================
+# ============================================================
+
+print("=" * 70)
+print("BAIXANDO DADOS DO ETHEREUM")
+print("=" * 70)
+
+dados = yf.download(
+    TICKER,
+    period=PERIODO,
+    interval="1d",
+    auto_adjust=False,
+    progress=False
+)
+
+
+# ============================================================
+# VALIDAR DOWNLOAD
+# ============================================================
+
+if dados.empty:
+
+    raise ValueError(
+        "Não foi possível baixar os dados do Ethereum."
+    )
+
+
+# ============================================================
+# CORRIGIR MULTIINDEX
+# ============================================================
+
+if isinstance(dados.columns, pd.MultiIndex):
+
+    dados.columns = dados.columns.get_level_values(0)
+
+
+# ============================================================
+# COLUNAS
+# ============================================================
+
+colunas_necessarias = [
+    "Open",
+    "High",
+    "Low",
+    "Close",
+    "Volume"
+]
+
+
+dados = dados[
+    colunas_necessarias
+].copy()
+
+
+# ============================================================
+# RENOMEAR
+# ============================================================
+
+dados.columns = [
+    "abertura",
+    "maxima",
+    "minima",
+    "fechamento",
+    "volume"
+]
+
+
+# ============================================================
+# LIMPAR
+# ============================================================
+
+dados = dados.dropna().copy()
+
+
+# ============================================================
+# DATETIME
+# ============================================================
+
+dados.index = pd.to_datetime(
+    dados.index
+)
+
+
+# ============================================================
+# REMOVER TIMEZONE
+# ============================================================
+
+if dados.index.tz is not None:
+
+    dados.index = dados.index.tz_localize(None)
+
+
+# ============================================================
+# DATA FINAL
+# ============================================================
+
+data_limite = pd.Timestamp(
+    DATA_FINAL
+)
+
+
+dados = dados[
+    dados.index <= data_limite
+].copy()
+
+
+# ============================================================
+# VALIDAR DATA
+# ============================================================
+
+if dados.empty:
+
+    raise ValueError(
+        "Não existem dados disponíveis até a DATA_FINAL."
+    )
+
+
+# ============================================================
+# ============================================================
+# 1. RANGE
+# ============================================================
+# ============================================================
+
+dados["range_candle"] = (
+    dados["maxima"] -
+    dados["minima"]
+)
+
+
+# ============================================================
+# 2. CORPO
+# ============================================================
+
+dados["corpo"] = (
+    dados["fechamento"] -
+    dados["abertura"]
+).abs()
+
+
+# ============================================================
+# 3. PAVIO SUPERIOR
+# ============================================================
+
+dados["pavio_superior"] = (
+    dados["maxima"] -
+    dados[
+        ["abertura", "fechamento"]
+    ].max(axis=1)
+)
+
+
+# ============================================================
+# 4. PAVIO INFERIOR
+# ============================================================
+
+dados["pavio_inferior"] = (
+    dados[
+        ["abertura", "fechamento"]
+    ].min(axis=1)
+    -
+    dados["minima"]
+)
+
+
+# ============================================================
+# 5. RANGE SEGURO
+# ============================================================
+
+range_seguro = (
+    dados["range_candle"]
+    .replace(0, np.nan)
+)
+
+
+# ============================================================
+# 6. CORPO %
+# ============================================================
+
+dados["corpo_pct"] = (
+    dados["corpo"] /
+    range_seguro
+)
+
+
+# ============================================================
+# 7. PAVIO SUPERIOR %
+# ============================================================
+
+dados["pavio_superior_pct"] = (
+    dados["pavio_superior"] /
+    range_seguro
+)
+
+
+# ============================================================
+# 8. PAVIO INFERIOR %
+# ============================================================
+
+dados["pavio_inferior_pct"] = (
+    dados["pavio_inferior"] /
+    range_seguro
+)
+
+
+# ============================================================
+# 9. DIREÇÃO
+#
+# 1  = ALTA
+# -1 = BAIXA
+# 0  = NEUTRO
+# ============================================================
+
+dados["direcao"] = np.where(
+
+    dados["fechamento"] >
+    dados["abertura"],
+
+    1,
+
+    np.where(
+
+        dados["fechamento"] <
+        dados["abertura"],
+
+        -1,
+
+        0
+    )
+)
+
+
+# ============================================================
+# ============================================================
+# 10. RETORNOS
+# ============================================================
+# ============================================================
+
+dados["retorno_1"] = (
+    dados["fechamento"]
+    .pct_change(1)
+)
+
+dados["retorno_3"] = (
+    dados["fechamento"]
+    .pct_change(3)
+)
+
+dados["retorno_5"] = (
+    dados["fechamento"]
+    .pct_change(5)
+)
+
+
+# ============================================================
+# ============================================================
+# 11. MÉDIAS
+# ============================================================
+# ============================================================
+
+dados["mm5"] = (
+    dados["fechamento"]
+    .rolling(5)
+    .mean()
+)
+
+dados["mm10"] = (
+    dados["fechamento"]
+    .rolling(10)
+    .mean()
+)
+
+dados["mm20"] = (
+    dados["fechamento"]
+    .rolling(20)
+    .mean()
+)
+
+
+# ============================================================
+# 12. DISTÂNCIA DAS MÉDIAS
+# ============================================================
+
+dados["dist_mm5"] = (
+    dados["fechamento"] /
+    dados["mm5"] - 1
+)
+
+dados["dist_mm10"] = (
+    dados["fechamento"] /
+    dados["mm10"] - 1
+)
+
+dados["dist_mm20"] = (
+    dados["fechamento"] /
+    dados["mm20"] - 1
+)
+
+
+# ============================================================
+# ============================================================
+# 13. VOLUME
+# ============================================================
+# ============================================================
+
+dados["volume_mm20"] = (
+    dados["volume"]
+    .rolling(20)
+    .mean()
+)
+
+dados["volume_relativo"] = (
+    dados["volume"] /
+    dados["volume_mm20"]
+)
+
+
+# ============================================================
+# ============================================================
+# 14. ATR
+# ============================================================
+# ============================================================
+
+tr1 = (
+    dados["maxima"] -
+    dados["minima"]
+)
+
+tr2 = (
+    dados["maxima"] -
+    dados["fechamento"].shift(1)
+).abs()
+
+tr3 = (
+    dados["minima"] -
+    dados["fechamento"].shift(1)
+).abs()
+
+
+dados["true_range"] = pd.concat(
+    [
+        tr1,
+        tr2,
+        tr3
+    ],
+    axis=1
+).max(axis=1)
+
+
+dados["atr"] = (
+    dados["true_range"]
+    .rolling(ATR_PERIODO)
+    .mean()
+)
+
+
+# ============================================================
+# ============================================================
+# 15. SUPORTE 20
+# ============================================================
+# ============================================================
+
+dados["suporte_20"] = (
+    dados["minima"]
+    .rolling(ESTRUTURA_LOOKBACK)
+    .min()
+    .shift(1)
+)
+
+
+# ============================================================
+# 16. RESISTÊNCIA 20
+# ============================================================
+
+dados["resistencia_20"] = (
+    dados["maxima"]
+    .rolling(ESTRUTURA_LOOKBACK)
+    .max()
+    .shift(1)
+)
+
+
+# ============================================================
+# 17. SUPORTE 5
+# ============================================================
+
+dados["suporte_5"] = (
+    dados["minima"]
+    .rolling(CONFIRMACAO_LOOKBACK)
+    .min()
+    .shift(1)
+)
+
+
+# ============================================================
+# 18. RESISTÊNCIA 5
+# ============================================================
+
+dados["resistencia_5"] = (
+    dados["maxima"]
+    .rolling(CONFIRMACAO_LOOKBACK)
+    .max()
+    .shift(1)
+)
+
+
+# ============================================================
+# 19. DISTÂNCIA DA RESISTÊNCIA
+# ============================================================
+
+dados["dist_resistencia"] = (
+    dados["resistencia_20"] -
+    dados["fechamento"]
+) / dados["atr"]
+
+
+# ============================================================
+# 20. DISTÂNCIA DO SUPORTE
+# ============================================================
+
+dados["dist_suporte"] = (
+    dados["fechamento"] -
+    dados["suporte_20"]
+) / dados["atr"]
+
+
+# ============================================================
+# ============================================================
+# 21. KVO
+# ============================================================
+# ============================================================
+
+dados["preco_tipico"] = (
+    dados["maxima"] +
+    dados["minima"] +
+    dados["fechamento"]
+) / 3
+
+
+# ============================================================
+# TENDÊNCIA
+# ============================================================
+
+dados["tendencia_kvo"] = np.where(
+
+    dados["preco_tipico"] >
+    dados["preco_tipico"].shift(1),
+
+    1,
+
+    np.where(
+
+        dados["preco_tipico"] <
+        dados["preco_tipico"].shift(1),
+
+        -1,
+
+        0
+    )
+)
+
+
+# ============================================================
+# DM
+# ============================================================
+
+dados["dm_kvo"] = (
+    dados["maxima"] -
+    dados["minima"]
+)
+
+
+# ============================================================
+# CM KVO
+# ============================================================
+
+cm_values = []
+
+cm_anterior = 0.0
+
+tendencia_anterior = 0
+
+
+for i in range(len(dados)):
+
+    dm_atual = float(
+        dados["dm_kvo"].iloc[i]
+    )
+
+    tendencia_atual = int(
+        dados["tendencia_kvo"].iloc[i]
+    )
+
+    if i == 0:
+
+        cm_atual = dm_atual
+
+    else:
+
+        if (
+            tendencia_atual ==
+            tendencia_anterior
+        ):
+
+            cm_atual = (
+                cm_anterior +
+                dm_atual
+            )
+
+        else:
+
+            cm_atual = (
+                dm_atual +
+                dados["dm_kvo"].iloc[i - 1]
+            )
+
+    cm_values.append(
+        cm_atual
+    )
+
+    cm_anterior = cm_atual
+
+    tendencia_anterior = (
+        tendencia_atual
+    )
+
+
+dados["cm_kvo"] = cm_values
+
+
+# ============================================================
+# CM SEGURO
+# ============================================================
+
+cm_seguro = (
+    dados["cm_kvo"]
+    .replace(0, np.nan)
+)
+
+
+# ============================================================
+# VOLUME FORCE
+# ============================================================
+
+dados["vf_kvo"] = (
+
+    dados["volume"]
+
+    *
+
+    np.abs(
+
+        2 *
+
+        (
+            dados["dm_kvo"] /
+            cm_seguro
+        )
+
+        - 1
+    )
+
+    *
+
+    dados["tendencia_kvo"]
+
+    *
+
+    100
+)
+
+
+# ============================================================
+# KVO
+# ============================================================
+
+dados["kvo"] = (
+
+    dados["vf_kvo"]
+    .ewm(
+        span=KVO_FAST,
+        adjust=False
+    )
+    .mean()
+
+    -
+
+    dados["vf_kvo"]
+    .ewm(
+        span=KVO_SLOW,
+        adjust=False
+    )
+    .mean()
+)
+
+
+# ============================================================
+# SIGNAL
+# ============================================================
+
+dados["kvo_signal"] = (
+
+    dados["kvo"]
+    .ewm(
+        span=KVO_SIGNAL,
+        adjust=False
+    )
+    .mean()
+)
+
+
+# ============================================================
+# HISTOGRAMA
+# ============================================================
+
+dados["kvo_hist"] = (
+    dados["kvo"] -
+    dados["kvo_signal"]
+)
+
+
+# ============================================================
+# VARIAÇÃO
+# ============================================================
+
+dados["kvo_variacao"] = (
+    dados["kvo"]
+    .diff()
+)
+
+
+# ============================================================
+# ============================================================
+# 22. KVO Z-SCORE
+# ============================================================
+# ============================================================
+
+kvo_std = (
+    dados["kvo"]
+    .rolling(34)
+    .std()
+    .replace(0, np.nan)
+)
+
+
+dados["kvo_zscore"] = (
+    dados["kvo"] /
+    kvo_std
+)
+
+
+# ============================================================
+# KVO FORÇA
+# ============================================================
+
+dados["kvo_forca_bruta"] = (
+
+    np.abs(
+        dados["kvo_hist"]
+    )
+
+    /
+
+    (
+        dados["kvo"].abs()
+        +
+        dados["kvo_signal"].abs()
+        +
+        1e-9
+    )
+)
+
+
+dados["kvo_forca"] = (
+    dados["kvo_forca_bruta"]
+    .clip(0, 1)
+    * 100
+)
+
+
+# ============================================================
+# KVO ESTADO
+# ============================================================
+
+dados["kvo_estado"] = np.where(
+
+    (
+        dados["kvo"] >
+        dados["kvo_signal"]
+    )
+
+    &
+
+    (
+        dados["kvo_variacao"] > 0
+    ),
+
+    1,
+
+    np.where(
+
+        (
+            dados["kvo"] <
+            dados["kvo_signal"]
+        )
+
+        &
+
+        (
+            dados["kvo_variacao"] < 0
+        ),
+
+        -1,
+
+        0
+    )
+)
+
+
+# ============================================================
+# ============================================================
+# 23. ALVO RANDOM FOREST
+# ============================================================
+# ============================================================
+
+dados["alvo"] = np.where(
+
+    dados["fechamento"].shift(-1) >
+    dados["fechamento"],
+
+    1,
+
+    np.where(
+
+        dados["fechamento"].shift(-1) <
+        dados["fechamento"],
+
+        0,
+
+        np.nan
+    )
+)
+
+
+# ============================================================
+# ============================================================
+# 24. FEATURES
+# ============================================================
+# ============================================================
+
+features = [
+
+    "abertura",
+    "maxima",
+    "minima",
+    "fechamento",
+
+    "volume",
+
+    "range_candle",
+    "corpo",
+
+    "pavio_superior",
+    "pavio_inferior",
+
+    "corpo_pct",
+
+    "pavio_superior_pct",
+    "pavio_inferior_pct",
+
+    "direcao",
+
+    "retorno_1",
+    "retorno_3",
+    "retorno_5",
+
+    "dist_mm5",
+    "dist_mm10",
+    "dist_mm20",
+
+    "volume_relativo",
+
+    "atr",
+
+    "dist_resistencia",
+    "dist_suporte",
+
+    "kvo",
+    "kvo_signal",
+    "kvo_hist",
+    "kvo_variacao",
+    "kvo_zscore"
+]
+
+
+# ============================================================
+# DADOS DO MODELO
+# ============================================================
+
+modelo_dados = dados[
+    features + ["alvo"]
+].replace(
+    [np.inf, -np.inf],
+    np.nan
+).dropna(
+    subset=features + ["alvo"]
+).copy()
+
+
+modelo_dados["alvo"] = (
+    modelo_dados["alvo"]
+    .astype(int)
+)
+
+
+# ============================================================
+# VALIDAR
+# ============================================================
+
+if len(modelo_dados) < 300:
+
+    raise ValueError(
+        "Poucos dados válidos para treinamento."
+    )
+
+
+# ============================================================
+# ============================================================
+# 25. DIVISÃO TEMPORAL
+# ============================================================
+# ============================================================
+
+tamanho_treino = int(
+    len(modelo_dados) * 0.80
+)
+
+
+treino = modelo_dados.iloc[
+    :tamanho_treino
+].copy()
+
+
+teste = modelo_dados.iloc[
+    tamanho_treino:
+].copy()
+
+
+if treino["alvo"].nunique() < 2:
+
+    raise ValueError(
+        "O treinamento possui apenas uma classe."
+    )
+
+
+# ============================================================
+# TREINO
+# ============================================================
+
+X_treino = treino[features]
+
+y_treino = treino["alvo"]
+
+
+# ============================================================
+# TESTE
+# ============================================================
+
+X_teste = teste[features]
+
+y_teste = teste["alvo"]
+
+
+# ============================================================
+# ============================================================
+# 26. RANDOM FOREST
+# ============================================================
+# ============================================================
+
+modelo_rf = RandomForestClassifier(
+
+    n_estimators=500,
+
+    max_depth=8,
+
+    min_samples_leaf=5,
+
+    max_features="sqrt",
+
+    class_weight="balanced",
+
+    random_state=42,
+
+    n_jobs=-1
+)
+
+
+print()
+print("TREINANDO RANDOM FOREST...")
+print()
+
+
+modelo_rf.fit(
+    X_treino,
+    y_treino
+)
+
+
+# ============================================================
+# ============================================================
+# 27. ACURÁCIA
+# ============================================================
+# ============================================================
+
+previsoes = modelo_rf.predict(
+    X_teste
+)
+
+
+acuracia = accuracy_score(
+    y_teste,
+    previsoes
+)
+
+
+# ============================================================
+# ============================================================
+# 28. ÚLTIMO CANDLE
+# ============================================================
+# ============================================================
+
+dados_validos = dados[
+    features
+].replace(
+    [np.inf, -np.inf],
+    np.nan
+).dropna()
+
+
+if dados_validos.empty:
+
+    raise ValueError(
+        "Não existem dados suficientes."
+    )
+
+
+ultimo_idx = (
+    dados_validos.index[-1]
+)
+
+
+# ============================================================
+# DADOS PARA PREVISÃO
+# ============================================================
+
+ultimo = dados.loc[
+    [ultimo_idx],
+    features
+].replace(
+    [np.inf, -np.inf],
+    np.nan
+)
+
+
+# ============================================================
+# ============================================================
+# 29. PROBABILIDADES
+# ============================================================
+# ============================================================
+
+probabilidades = (
+    modelo_rf.predict_proba(
+        ultimo
+    )[0]
+)
+
+
+classes_modelo = (
+    modelo_rf.classes_
+)
+
+
+if 0 in classes_modelo:
+
+    indice_baixa = list(
+        classes_modelo
+    ).index(0)
+
+else:
+
+    indice_baixa = None
+
+
+if 1 in classes_modelo:
+
+    indice_alta = list(
+        classes_modelo
+    ).index(1)
+
+else:
+
+    indice_alta = None
+
+
+if indice_baixa is not None:
+
+    prob_baixa = float(
+        probabilidades[indice_baixa]
+    )
+
+else:
+
+    prob_baixa = 0.0
+
+
+if indice_alta is not None:
+
+    prob_alta = float(
+        probabilidades[indice_alta]
+    )
+
+else:
+
+    prob_alta = 0.0
+
+
+# ============================================================
+# FORÇA DO MODELO
+# ============================================================
+
+forca_modelo = (
+    max(
+        prob_alta,
+        prob_baixa
+    )
+    * 100
+)
+
+
+# ============================================================
+# DIREÇÃO DO MODELO
+# ============================================================
+
+if prob_alta > prob_baixa:
+
+    direcao_modelo = 1
+
+elif prob_baixa > prob_alta:
+
+    direcao_modelo = -1
+
+else:
+
+    direcao_modelo = 0
+
+
+# ============================================================
+# ============================================================
+# 30. DADOS ATUAIS
+# ============================================================
+# ============================================================
+
+linha_atual = dados.loc[
+    ultimo_idx
+]
+
+
+abertura_atual = float(
+    linha_atual["abertura"]
+)
+
+fechamento_atual = float(
+    linha_atual["fechamento"]
+)
+
+range_atual = float(
+    linha_atual["range_candle"]
+)
+
+corpo_atual = float(
+    linha_atual["corpo"]
+)
+
+corpo_pct_atual = float(
+    linha_atual["corpo_pct"]
+)
+
+volume_atual = float(
+    linha_atual["volume"]
+)
+
+volume_relativo_atual = float(
+    linha_atual["volume_relativo"]
+)
+
+
+# ============================================================
+# ============================================================
+# 31. FORÇA DO CORPO
+# ============================================================
+# ============================================================
+
+forca_corpo = (
+    corpo_pct_atual * 100
+)
+
+
+forca_corpo = max(
+    0,
+    min(
+        100,
+        forca_corpo
+    )
+)
+
+
+corpo_forte = (
+    corpo_pct_atual >= CORPO_MINIMO
+)
+
+
+if corpo_forte:
+
+    confirmacao_corpo = (
+        "✓ Candle possui corpo forte"
+    )
+
+else:
+
+    confirmacao_corpo = (
+        "✗ Candle não possui corpo forte"
+    )
+
+
+# ============================================================
+# ============================================================
+# 32. INTENSIDADE BASE
+# ============================================================
+# ============================================================
+
+intensidade_base = (
+
+    forca_corpo *
+    PESO_CORPO
+
+    +
+
+    forca_modelo *
+    PESO_MODELO
+)
+
+
+intensidade_base = max(
+    0,
+    min(
+        100,
+        intensidade_base
+    )
+)
+
+
+# ============================================================
+# ============================================================
+# 33. DIREÇÃO DO CANDLE
+# ============================================================
+# ============================================================
+
+direcao_candle = np.sign(
+
+    fechamento_atual -
+    abertura_atual
+)
+
+
+# ============================================================
+# ============================================================
+# 34. KVO ATUAL
+# ============================================================
+# ============================================================
+
+kvo_atual = float(
+    linha_atual["kvo"]
+)
+
+kvo_signal_atual = float(
+    linha_atual["kvo_signal"]
+)
+
+kvo_hist_atual = float(
+    linha_atual["kvo_hist"]
+)
+
+kvo_variacao_atual = float(
+    linha_atual["kvo_variacao"]
+)
+
+kvo_forca_atual = float(
+    linha_atual["kvo_forca"]
+)
+
+kvo_estado_atual = int(
+    linha_atual["kvo_estado"]
+)
+
+
+# ============================================================
+# ============================================================
+# 35. CONFLUÊNCIA
+# ============================================================
+# ============================================================
+
+confirmacoes = 0
+
+divergencias = 0
+
+
+# ============================================================
+# 1 - CANDLE + MODELO
+# ============================================================
+
+if (
+
+    direcao_candle != 0
+
+    and
+
+    direcao_candle ==
+    direcao_modelo
+
+):
+
+    confirmacoes += 1
+
+else:
+
+    divergencias += 1
+
+
+# ============================================================
+# 2 - KVO
+# ============================================================
+
+if (
+
+    direcao_candle != 0
+
+    and
+
+    kvo_estado_atual ==
+    direcao_candle
+
+):
+
+    confirmacoes += 1
+
+elif (
+
+    direcao_candle != 0
+
+    and
+
+    kvo_estado_atual != 0
+
+):
+
+    divergencias += 1
+
+
+# ============================================================
+# 3 - RETORNO 1
+# ============================================================
+
+retorno_1_atual = float(
+    linha_atual["retorno_1"]
+)
+
+
+if (
+
+    direcao_candle > 0
+
+    and
+
+    retorno_1_atual > 0
+
+):
+
+    confirmacoes += 1
+
+elif (
+
+    direcao_candle < 0
+
+    and
+
+    retorno_1_atual < 0
+
+):
+
+    confirmacoes += 1
+
+elif retorno_1_atual != 0:
+
+    divergencias += 1
+
+
+# ============================================================
+# 4 - RETORNO 3
+# ============================================================
+
+retorno_3_atual = float(
+    linha_atual["retorno_3"]
+)
+
+
+if (
+
+    direcao_candle > 0
+
+    and
+
+    retorno_3_atual > 0
+
+):
+
+    confirmacoes += 1
+
+elif (
+
+    direcao_candle < 0
+
+    and
+
+    retorno_3_atual < 0
+
+):
+
+    confirmacoes += 1
+
+elif retorno_3_atual != 0:
+
+    divergencias += 1
+
+
+# ============================================================
+# 5 - MM5
+# ============================================================
+
+mm5_atual = float(
+    linha_atual["mm5"]
+)
+
+
+if (
+
+    direcao_candle > 0
+
+    and
+
+    fechamento_atual > mm5_atual
+
+):
+
+    confirmacoes += 1
+
+elif (
+
+    direcao_candle < 0
+
+    and
+
+    fechamento_atual < mm5_atual
+
+):
+
+    confirmacoes += 1
+
+else:
+
+    divergencias += 1
+
+
+# ============================================================
+# 6 - MM10
+# ============================================================
+
+mm10_atual = float(
+    linha_atual["mm10"]
+)
+
+
+if (
+
+    direcao_candle > 0
+
+    and
+
+    fechamento_atual > mm10_atual
+
+):
+
+    confirmacoes += 1
+
+elif (
+
+    direcao_candle < 0
+
+    and
+
+    fechamento_atual < mm10_atual
+
+):
+
+    confirmacoes += 1
+
+else:
+
+    divergencias += 1
+
+
+# ============================================================
+# 7 - MM20
+# ============================================================
+
+mm20_atual = float(
+    linha_atual["mm20"]
+)
+
+
+if (
+
+    direcao_candle > 0
+
+    and
+
+    fechamento_atual > mm20_atual
+
+):
+
+    confirmacoes += 1
+
+elif (
+
+    direcao_candle < 0
+
+    and
+
+    fechamento_atual < mm20_atual
+
+):
+
+    confirmacoes += 1
+
+else:
+
+    divergencias += 1
+
+
+# ============================================================
+# ============================================================
+# 36. DIREÇÃO DA INTENSIDADE
+# ============================================================
+# ============================================================
+
+pontuacao_alta = 0.0
+
+pontuacao_baixa = 0.0
+
+
+# ============================================================
+# CANDLE
+# ============================================================
+
+if direcao_candle > 0:
+
+    pontuacao_alta += 2.0
+
+elif direcao_candle < 0:
+
+    pontuacao_baixa += 2.0
+
+
+# ============================================================
+# RANDOM FOREST
+# ============================================================
+
+if prob_alta > prob_baixa:
+
+    pontuacao_alta += (
+        prob_alta * 3.0
+    )
+
+elif prob_baixa > prob_alta:
+
+    pontuacao_baixa += (
+        prob_baixa * 3.0
+    )
+
+
+# ============================================================
+# KVO
+# ============================================================
+
+if kvo_estado_atual > 0:
+
+    pontuacao_alta += 2.0
+
+elif kvo_estado_atual < 0:
+
+    pontuacao_baixa += 2.0
+
+
+# ============================================================
+# RETORNO 1
+# ============================================================
+
+if retorno_1_atual > 0:
+
+    pontuacao_alta += 1.0
+
+elif retorno_1_atual < 0:
+
+    pontuacao_baixa += 1.0
+
+
+# ============================================================
+# RETORNO 3
+# ============================================================
+
+if retorno_3_atual > 0:
+
+    pontuacao_alta += 1.0
+
+elif retorno_3_atual < 0:
+
+    pontuacao_baixa += 1.0
+
+
+# ============================================================
+# MM5
+# ============================================================
+
+if fechamento_atual > mm5_atual:
+
+    pontuacao_alta += 1.0
+
+elif fechamento_atual < mm5_atual:
+
+    pontuacao_baixa += 1.0
+
+
+# ============================================================
+# MM10
+# ============================================================
+
+if fechamento_atual > mm10_atual:
+
+    pontuacao_alta += 1.0
+
+elif fechamento_atual < mm10_atual:
+
+    pontuacao_baixa += 1.0
+
+
+# ============================================================
+# MM20
+# ============================================================
+
+if fechamento_atual > mm20_atual:
+
+    pontuacao_alta += 1.0
+
+elif fechamento_atual < mm20_atual:
+
+    pontuacao_baixa += 1.0
+
+
+# ============================================================
+# DIREÇÃO PREDOMINANTE
+# ============================================================
+
+if pontuacao_alta > pontuacao_baixa:
+
+    direcao_intensidade = "ALTA"
+
+elif pontuacao_baixa > pontuacao_alta:
+
+    direcao_intensidade = "BAIXA"
+
+else:
+
+    direcao_intensidade = "NEUTRA"
+
+
+# ============================================================
+# CONVICÇÃO
+# ============================================================
+
+pontuacao_total = (
+    pontuacao_alta +
+    pontuacao_baixa
+)
+
+
+if pontuacao_total > 0:
+
+    diferenca_direcional = abs(
+        pontuacao_alta -
+        pontuacao_baixa
+    )
+
+    confianca_direcional = (
+        diferenca_direcional /
+        pontuacao_total
+    ) * 100
+
+else:
+
+    confianca_direcional = 0.0
+
+
+# ============================================================
+# ============================================================
+# 37. BOOST DE CONFLUÊNCIA
+# ============================================================
+# ============================================================
+
+if confirmacoes == 0:
+
+    boost_confluencia_bruto = 0.0
+
+elif confirmacoes == 1:
+
+    boost_confluencia_bruto = 2.0
+
+elif confirmacoes == 2:
+
+    boost_confluencia_bruto = 5.0
+
+elif confirmacoes == 3:
+
+    boost_confluencia_bruto = 8.0
+
+elif confirmacoes == 4:
+
+    boost_confluencia_bruto = 12.0
+
+elif confirmacoes == 5:
+
+    boost_confluencia_bruto = 16.0
+
+else:
+
+    boost_confluencia_bruto = BOOST_MAXIMO
+
+
+# ============================================================
+# ============================================================
+# 38. QUALIDADE DO MODELO
+# ============================================================
+# ============================================================
+
+if forca_modelo >= 70:
+
+    fator_modelo_boost = 1.00
+
+elif forca_modelo >= 65:
+
+    fator_modelo_boost = 0.90
+
+elif forca_modelo >= 60:
+
+    fator_modelo_boost = 0.75
+
+elif forca_modelo >= 55:
+
+    fator_modelo_boost = 0.55
+
+else:
+
+    fator_modelo_boost = 0.35
+
+
+# ============================================================
+# ============================================================
+# 39. QUALIDADE KVO
+# ============================================================
+# ============================================================
+
+if kvo_forca_atual >= 60:
+
+    fator_kvo_boost = 1.00
+
+elif kvo_forca_atual >= 40:
+
+    fator_kvo_boost = 0.90
+
+elif kvo_forca_atual >= 20:
+
+    fator_kvo_boost = 0.75
+
+else:
+
+    fator_kvo_boost = 0.50
+
+
+# ============================================================
+# ============================================================
+# 40. BOOST AJUSTADO
+# ============================================================
+# ============================================================
+
+boost_confluencia_ajustado = (
+
+    boost_confluencia_bruto
+
+    *
+
+    fator_modelo_boost
+
+    *
+
+    fator_kvo_boost
+)
+
+
+boost_confluencia_ajustado = min(
+
+    boost_confluencia_ajustado,
+
+    BOOST_MAXIMO
+)
+
+
+boost = (
+    boost_confluencia_ajustado
+)
+
+
+# ============================================================
+# ============================================================
+# 41. BOOST VOLUME
+# ============================================================
+# ============================================================
+
+boost_volume = 0.0
+
+
+if volume_relativo_atual >= 1.20:
+
+    boost_volume += 2.0
+
+
+if volume_relativo_atual >= 1.50:
+
+    boost_volume += 2.0
+
+
+if volume_relativo_atual >= 2.00:
+
+    boost_volume += 2.0
+
+
+boost_volume = min(
+    boost_volume,
+    6.0
+)
+
+
+# ============================================================
+# ============================================================
+# 42. BOOST KVO
+# ============================================================
+# ============================================================
+
+boost_kvo = 0.0
+
+
+if (
+
+    direcao_candle != 0
+
+    and
+
+    kvo_estado_atual ==
+    direcao_candle
+
+):
+
+    if kvo_forca_atual >= 60:
+
+        boost_kvo = 5.0
+
+    elif kvo_forca_atual >= 40:
+
+        boost_kvo = 3.0
+
+    elif kvo_forca_atual >= 20:
+
+        boost_kvo = 1.0
+
+
+# ============================================================
+# ============================================================
+# 43. PENALTY BASE
+# ============================================================
+# ============================================================
+
+penalty = 0.0
+
+
+# ============================================================
+# PENALTY POR DIVERGÊNCIA
+# ============================================================
+
+penalty += (
+    divergencias * 2.0
+)
+
+
+# ============================================================
+# KVO CONTRÁRIO
+# ============================================================
+
+if (
+
+    direcao_candle != 0
+
+    and
+
+    kvo_estado_atual != 0
+
+    and
+
+    kvo_estado_atual !=
+    direcao_candle
+
+):
+
+    penalty += 5.0
+
+
+# ============================================================
+# MODELO CONTRÁRIO
+# ============================================================
+
+if (
+
+    direcao_candle != 0
+
+    and
+
+    direcao_modelo !=
+    direcao_candle
+
+):
+
+    penalty += 5.0
+
+
+# ============================================================
+# LIMITAR PENALTY
+# ============================================================
+
+penalty = min(
+    penalty,
+    PENALTY_MAXIMO
+)
+
+
+# ============================================================
+# ============================================================
+# 44. PENALTY EXTRA POR CONFLUÊNCIA MUITO FRACA
+# ============================================================
+# ============================================================
+
+penalty_confluencia_extra = 0.0
+
+
+# ------------------------------------------------------------
+# 0 CONFIRMAÇÕES
+# ------------------------------------------------------------
+
+if confirmacoes == 0:
+
+    penalty_confluencia_extra = 8.0
+
+
+# ------------------------------------------------------------
+# 1 CONFIRMAÇÃO E MUITAS DIVERGÊNCIAS
+# ------------------------------------------------------------
+
+elif (
+
+    confirmacoes == 1
+
+    and
+
+    divergencias >= 4
+
+):
+
+    penalty_confluencia_extra = 7.0
+
+
+# ------------------------------------------------------------
+# 2 CONFIRMAÇÕES E MUITAS DIVERGÊNCIAS
+# ------------------------------------------------------------
+
+elif (
+
+    confirmacoes == 2
+
+    and
+
+    divergencias >= 4
+
+):
+
+    penalty_confluencia_extra = 5.0
+
+
+# ------------------------------------------------------------
+# 3 CONFIRMAÇÕES E MAIS DIVERGÊNCIAS
+# ------------------------------------------------------------
+
+elif (
+
+    confirmacoes == 3
+
+    and
+
+    divergencias >= 4
+
+):
+
+    penalty_confluencia_extra = 3.0
+
+
+# ============================================================
+# APLICAR PENALTY EXTRA
+# ============================================================
+
+penalty += (
+    penalty_confluencia_extra
+)
+
+
+penalty = min(
+    penalty,
+    PENALTY_MAXIMO
+)
+
+
+# ============================================================
+# ============================================================
+# 45. BOOST TOTAL
+# ============================================================
+# ============================================================
+
+boost_total = (
+
+    boost
+
+    +
+
+    boost_volume
+
+    +
+
+    boost_kvo
+)
+
+
+boost_total = min(
+    boost_total,
+    BOOST_MAXIMO
+)
+
+
+# ============================================================
+# ============================================================
+# 46. INTENSIDADE FINAL
+# ============================================================
+# ============================================================
+
+intensidade_final = (
+
+    intensidade_base
+
+    +
+
+    boost_total
+
+    -
+
+    penalty
+)
+
+
+intensidade_final = max(
+
+    0,
+
+    min(
+        100,
+        intensidade_final
+    )
+)
+
+
+# ============================================================
+# ============================================================
+# 47. INTENSIDADE DIRECIONAL ASSINADA
+# ============================================================
+# ============================================================
+
+if direcao_intensidade == "ALTA":
+
+    intensidade_direcional_assinada = (
+        intensidade_final
+    )
+
+elif direcao_intensidade == "BAIXA":
+
+    intensidade_direcional_assinada = (
+        -intensidade_final
+    )
+
+else:
+
+    intensidade_direcional_assinada = 0.0
+
+
+# ============================================================
+# ============================================================
+# 48. CLASSIFICAÇÃO
+# ============================================================
+# ============================================================
+
+if intensidade_final < 40:
+
+    classificacao = "M FRACA"
+
+elif intensidade_final < 60:
+
+    classificacao = "FRACA"
+
+elif intensidade_final < 70:
+
+    classificacao = "MODERADA"
+
+elif intensidade_final < 80:
+
+    classificacao = "FORTE"
+
+elif intensidade_final < 90:
+
+    classificacao = "M FORTE"
+
+else:
+
+    classificacao = "EXTREMA"
+
+
+# ============================================================
+# ============================================================
+# 49. QUALIDADE DA CONFLUÊNCIA
+# ============================================================
+# ============================================================
+
+if confirmacoes >= 7 and divergencias == 0:
+
+    qualidade_confluencia = "EXTREMA"
+
+elif confirmacoes >= 6 and divergencias <= 1:
+
+    qualidade_confluencia = "M ALTA"
+
+elif confirmacoes >= 5 and divergencias <= 2:
+
+    qualidade_confluencia = "ALTA"
+
+elif confirmacoes >= 4 and divergencias <= 3:
+
+    qualidade_confluencia = "BOA"
+
+elif confirmacoes >= 3 and divergencias <= 4:
+
+    qualidade_confluencia = "MODERADA"
+
+elif confirmacoes >= 2 and divergencias >= 4:
+
+    qualidade_confluencia = "FRACA"
+
+elif confirmacoes <= 1 and divergencias >= 4:
+
+    qualidade_confluencia = "M FRACA"
+
+else:
+
+    qualidade_confluencia = "FRACA"
+
+
+# ============================================================
+# ============================================================
+# 50. NÍVEL DO MODELO
+# ============================================================
+# ============================================================
+
+if forca_modelo >= 80:
+
+    nivel_modelo = "M FORTE"
+
+elif forca_modelo >= 70:
+
+    nivel_modelo = "FORTE"
+
+elif forca_modelo >= 60:
+
+    nivel_modelo = "MODERADO"
+
+else:
+
+    nivel_modelo = "FRACO"
+
+
+# ============================================================
+# ============================================================
+# 51. QUALIDADE DO BOOST
+# ============================================================
+# ============================================================
+
+if (
+
+    fator_modelo_boost >= 0.90
+
+    and
+
+    fator_kvo_boost >= 0.90
+
+):
+
+    qualidade_boost = "ALTA"
+
+elif (
+
+    fator_modelo_boost >= 0.75
+
+    and
+
+    fator_kvo_boost >= 0.75
+
+):
+
+    qualidade_boost = "BOA"
+
+elif (
+
+    fator_modelo_boost >= 0.55
+
+    or
+
+    fator_kvo_boost >= 0.75
+
+):
+
+    qualidade_boost = "MODERADA"
+
+else:
+
+    qualidade_boost = "BAIXA"
+
+
+# ============================================================
+# ============================================================
+# 52. CORES ANSI
+# ============================================================
+# ============================================================
+
+RESET = "\033[0m"
+
+VERDE = "\033[1;92m"
+
+VERDE_FORTE = "\033[1;32m"
+
+VERMELHO = "\033[1;91m"
+
+AMARELO_DARK = "\033[1;33m"
+
+AMARELO = "\033[1;93m"
+
+AZUL = "\033[1;94m"
+
+CIANO = "\033[1;96m"
+
+BRANCO = "\033[1;97m"
+
+CINZA = "\033[1;90m"
+
+
+# ============================================================
+# COR DA CLASSIFICAÇÃO
+# ============================================================
+
+if intensidade_final < 40:
+
+    COR_CLASSIFICACAO = CINZA
+
+elif intensidade_final < 60:
+
+    COR_CLASSIFICACAO = AMARELO_DARK
+
+elif intensidade_final < 70:
+
+    COR_CLASSIFICACAO = AMARELO_DARK
+
+elif intensidade_final < 80:
+
+    COR_CLASSIFICACAO = VERDE
+
+elif intensidade_final < 90:
+
+    COR_CLASSIFICACAO = VERDE
+
+else:
+
+    COR_CLASSIFICACAO = VERDE_FORTE
+
+
+# ============================================================
+# COR DA DIREÇÃO
+# ============================================================
+
+if direcao_intensidade == "ALTA":
+
+    COR_DIRECAO = VERDE
+
+elif direcao_intensidade == "BAIXA":
+
+    COR_DIRECAO = VERMELHO
+
+else:
+
+    COR_DIRECAO = CINZA
+
+
+# ============================================================
+# COR DO MODELO
+# ============================================================
+
+if direcao_modelo > 0:
+
+    COR_MODELO = VERDE
+
+elif direcao_modelo < 0:
+
+    COR_MODELO = VERMELHO
+
+else:
+
+    COR_MODELO = CINZA
+
+
+# ============================================================
+# COR DA CONFLUÊNCIA
+# ============================================================
+
+if qualidade_confluencia == "EXTREMA":
+
+    COR_CONFLUENCIA = VERDE_FORTE
+
+elif qualidade_confluencia == "M ALTA":
+
+    COR_CONFLUENCIA = VERDE
+
+elif qualidade_confluencia == "ALTA":
+
+    COR_CONFLUENCIA = VERDE
+
+elif qualidade_confluencia == "BOA":
+
+    COR_CONFLUENCIA = AMARELO_DARK
+
+elif qualidade_confluencia == "MODERADA":
+
+    COR_CONFLUENCIA = AMARELO_DARK
+
+elif qualidade_confluencia == "FRACA":
+
+    COR_CONFLUENCIA = VERMELHO
+
+else:
+
+    COR_CONFLUENCIA = VERMELHO
+
+
+# ============================================================
+# ============================================================
+# 53. ASSINATURA
+# ============================================================
+# ============================================================
+
+if intensidade_direcional_assinada > 0:
+
+    texto_assinatura = (
+
+        "Assin.   "
+
+        +
+
+        VERDE
+
+        +
+
+        "+"
+
+        +
+
+        RESET
+
+        +
+
+        f"{abs(intensidade_direcional_assinada):.2f}%"
+
+    )
+
+elif intensidade_direcional_assinada < 0:
+
+    texto_assinatura = (
+
+        "Assin.   "
+
+        +
+
+        VERMELHO
+
+        +
+
+        "-"
+
+        +
+
+        RESET
+
+        +
+
+        f"{abs(intensidade_direcional_assinada):.2f}%"
+
+    )
+
+else:
+
+    texto_assinatura = (
+
+        "Assin.   "
+
+        +
+
+        CINZA
+
+        +
+
+        "0.00"
+
+        +
+
+        RESET
+
+        +
+
+        "%"
+
+    )
+
+
+# ============================================================
+# ============================================================
+# 54. BARRA BUY / SELL
+# ============================================================
+# ============================================================
+
+def criar_barra(
+    valor,
+    tamanho=BARRA_TAMANHO
+):
+
+    valor = max(
+        0.0,
+        min(
+            100.0,
+            float(valor)
+        )
+    )
+
+    preenchido = int(
+        round(
+            (
+                valor /
+                100.0
+            )
+            *
+            tamanho
+        )
+    )
+
+    vazio = (
+        tamanho -
+        preenchido
+    )
+
+    return (
+        "█" * preenchido
+        +
+        "░" * vazio
+    )
+
+
+# ============================================================
+# BARRAS
+# ============================================================
+
+barra_buy = criar_barra(
+    prob_alta * 100
+)
+
+
+barra_sell = criar_barra(
+    prob_baixa * 100
+)
+
+
+# ============================================================
+# ============================================================
+# 55. IDENTIFICAR VENCEDOR BUY / SELL
+# ============================================================
+# ============================================================
+
+if prob_alta > prob_baixa:
+
+    vencedor = "BUY"
+
+    COR_VENCEDOR = VERDE
+
+elif prob_baixa > prob_alta:
+
+    vencedor = "SELL"
+
+    COR_VENCEDOR = VERMELHO
+
+else:
+
+    vencedor = "EMPATE"
+
+    COR_VENCEDOR = CINZA
+
+
+# ============================================================
+# MARCADOR
+# ============================================================
+
+if vencedor == "BUY":
+
+    marcador_buy = "◀"
+
+    marcador_sell = ""
+
+elif vencedor == "SELL":
+
+    marcador_buy = ""
+
+    marcador_sell = "◀"
+
+else:
+
+    marcador_buy = ""
+
+    marcador_sell = ""
+
+
+# ============================================================
+# ============================================================
+# 56. SAÍDA FINAL
+# ============================================================
+# ============================================================
+
+print()
+
+print(
+    "KVO PRO • ETHEREUM"
+)
+
+print(
+    "─" * 108
+)
+
+print(
+    f"Data do replay: "
+    f"{ultimo_idx.strftime('%d/%m/%Y')}"
+)
+
+print()
+
+
+# ============================================================
+# LARGURA DOS BLOCOS
+# ============================================================
+
+W = 22
+
+
+# ============================================================
+# FUNÇÃO REMOVER ANSI
+# ============================================================
+
+def remover_ansi(texto):
+
+    return re.sub(
+        r"\033\[[0-9;]*m",
+        "",
+        str(texto)
+    )
+
+
+# ============================================================
+# AJUSTAR À ESQUERDA
+# ============================================================
+
+def ajustar(
+    texto,
+    largura=W
+):
+
+    texto = str(texto)
+
+    texto_limpo = remover_ansi(
+        texto
+    )
+
+    diferenca = (
+        largura -
+        len(texto_limpo)
+    )
+
+    if diferenca <= 0:
+
+        return texto_limpo[
+            :largura
+        ]
+
+    return (
+        texto
+        +
+        " " * diferenca
+    )
+
+
+# ============================================================
+# CENTRALIZAR
+# ============================================================
+
+def centralizar(
+    texto,
+    largura=W
+):
+
+    texto = str(texto)
+
+    texto_limpo = remover_ansi(
+        texto
+    )
+
+    tamanho = len(
+        texto_limpo
+    )
+
+    if tamanho >= largura:
+
+        return texto_limpo[
+            :largura
+        ]
+
+    espacos = (
+        largura -
+        tamanho
+    )
+
+    esquerda = (
+        espacos // 2
+    )
+
+    direita = (
+        espacos -
+        esquerda
+    )
+
+    return (
+        " " * esquerda
+        +
+        texto
+        +
+        " " * direita
+    )
+
+
+# ============================================================
+# ============================================================
+# 57. BLOCOS
+# ============================================================
+# ============================================================
+
+
+# ============================================================
+# DIREÇÃO
+# ============================================================
+
+bloco_direcao = [
+
+    "DIREÇÃO DO CANDLE",
+
+    "",
+
+    direcao_intensidade,
+
+    f"Conv.    {confianca_direcional:.2f}%",
+
+    texto_assinatura
+
+]
+
+
+# ============================================================
+# BUY VS SELL
+# ============================================================
+
+bloco_modelo = [
+
+    "BUY VS SELL",
+
+    "",
+
+    (
+        VERDE
+        +
+        f"BUY  {barra_buy}"
+        +
+        RESET
+        +
+        f" {marcador_buy}"
+    ),
+
+    (
+        VERMELHO
+        +
+        f"SELL {barra_sell}"
+        +
+        RESET
+        +
+        f" {marcador_sell}"
+    ),
+
+    f"Alta     {prob_alta:.2%}",
+
+    f"Baixa    {prob_baixa:.2%}",
+
+    f"Conf.    {forca_modelo:.2f}%"
+
+]
+
+
+# ============================================================
+# COMPOSIÇÃO
+# ============================================================
+
+bloco_composicao = [
+
+    "ROBO",
+
+    "",
+
+    f"Base     {intensidade_base:.2f}%",
+
+    f"Modelo   {forca_modelo:.2f}%",
+
+    f"Boost    {qualidade_boost}",
+
+    f"Boost +  {boost_total:.2f}%",
+
+    f"Penalty  {penalty:.2f}%"
+
+]
+
+
+# ============================================================
+# CONFLUÊNCIA
+# ============================================================
+
+bloco_confluencia = [
+
+    "CONFLUÊNCIA DO ROBO",
+
+    "",
+
+    f"Confirmações  {confirmacoes}",
+
+    f"Divergências  {divergencias}",
+
+    f"Qualidade     {qualidade_confluencia}",
+
+    f"Penalty extra {penalty_confluencia_extra:.2f}%",
+
+    ""
+
+]
+
+
+# ============================================================
+# RESULTADO
+# ============================================================
+
+bloco_resultado = [
+
+    "RESULTADO",
+
+    "",
+
+    classificacao
+
+]
+
+
+# ============================================================
+# LISTA
+# ============================================================
+
+blocos = [
+
+    bloco_direcao,
+
+    bloco_modelo,
+
+    bloco_composicao,
+
+    bloco_confluencia,
+
+    bloco_resultado
+
+]
+
+
+# ============================================================
+# ALTURA
+# ============================================================
+
+altura = max(
+    len(bloco)
+    for bloco in blocos
+)
+
+
+# ============================================================
+# ============================================================
+# 58. TOPO DA TABELA
+# ============================================================
+# ============================================================
+
+print(
+
+    "┌"
+    +
+    "─" * W
+    +
+    "┬"
+    +
+    "─" * W
+    +
+    "┬"
+    +
+    "─" * W
+    +
+    "┬"
+    +
+    "─" * W
+    +
+    "┬"
+    +
+    "─" * W
+    +
+    "┐"
+
+)
+
+
+# ============================================================
+# ============================================================
+# 59. CONTEÚDO
+# ============================================================
+# ============================================================
+
+for i in range(altura):
+
+    partes = []
+
+
+    # ========================================================
+    # DIREÇÃO
+    # ========================================================
+
+    if i < len(bloco_direcao):
+
+        texto = bloco_direcao[i]
+
+    else:
+
+        texto = ""
+
+
+    if i == 2:
+
+        texto = (
+            COR_DIRECAO
+            +
+            texto
+            +
+            RESET
+        )
+
+        texto = ajustar(
+            texto
+        )
+
+    else:
+
+        texto = ajustar(
+            texto
+        )
+
+
+    partes.append(
+        texto
+    )
+
+
+    # ========================================================
+    # BUY VS SELL
+    # ========================================================
+
+    if i < len(bloco_modelo):
+
+        texto_modelo = (
+            bloco_modelo[i]
+        )
+
+    else:
+
+        texto_modelo = ""
+
+
+    texto_modelo = ajustar(
+        texto_modelo
+    )
+
+
+    partes.append(
+        texto_modelo
+    )
+
+
+    # ========================================================
+    # COMPOSIÇÃO
+    # ========================================================
+
+    if i < len(bloco_composicao):
+
+        texto_composicao = (
+            bloco_composicao[i]
+        )
+
+    else:
+
+        texto_composicao = ""
+
+
+    texto_composicao = ajustar(
+        texto_composicao
+    )
+
+
+    partes.append(
+        texto_composicao
+    )
+
+
+    # ========================================================
+    # CONFLUÊNCIA
+    # ========================================================
+
+    if i < len(bloco_confluencia):
+
+        texto_confluencia = (
+            bloco_confluencia[i]
+        )
+
+    else:
+
+        texto_confluencia = ""
+
+
+    # --------------------------------------------------------
+    # QUALIDADE DA CONFLUÊNCIA
+    # --------------------------------------------------------
+
+    if i == 4:
+
+        texto_confluencia = (
+
+            COR_CONFLUENCIA
+
+            +
+
+            f"Qualidade     {qualidade_confluencia}"
+
+            +
+
+            RESET
+
+        )
+
+
+    texto_confluencia = ajustar(
+        texto_confluencia
+    )
+
+
+    partes.append(
+        texto_confluencia
+    )
+
+
+    # ========================================================
+    # RESULTADO
+    # ========================================================
+
+    if i < len(bloco_resultado):
+
+        texto_resultado = (
+            bloco_resultado[i]
+        )
+
+    else:
+
+        texto_resultado = ""
+
+
+    # --------------------------------------------------------
+    # TÍTULO
+    # --------------------------------------------------------
+
+    if i == 0:
+
+        texto_resultado = centralizar(
+
+            AMARELO_DARK
+
+            +
+
+            "RESULTADO"
+
+            +
+
+            RESET
+
+        )
+
+
+    # --------------------------------------------------------
+    # RESULTADO CENTRALIZADO
+    # --------------------------------------------------------
+
+    elif i == 2:
+
+        texto_resultado = centralizar(
+
+            COR_CLASSIFICACAO
+
+            +
+
+            classificacao
+
+            +
+
+            RESET
+
+        )
+
+
+    # --------------------------------------------------------
+    # DEMAIS LINHAS
+    # --------------------------------------------------------
+
+    else:
+
+        texto_resultado = ajustar(
+            texto_resultado
+        )
+
+
+    partes.append(
+        texto_resultado
+    )
+
+
+    # ========================================================
+    # IMPRIMIR
+    # ========================================================
+
+    print(
+
+        "│"
+
+        +
+
+        "│".join(partes)
+
+        +
+
+        "│"
+
+    )
+
+
+# ============================================================
+# ============================================================
+# 60. BASE
+# ============================================================
+# ============================================================
+
+print(
+
+    "└"
+    +
+    "─" * W
+    +
+    "┴"
+    +
+    "─" * W
+    +
+    "┴"
+    +
+    "─" * W
+    +
+    "┴"
+    +
+    "─" * W
+    +
+    "┴"
+    +
+    "─" * W
+    +
+    "┘"
+
+)
