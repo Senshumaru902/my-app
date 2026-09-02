@@ -1,0 +1,1053 @@
+# ============================================================
+# KVO PRO - IBOVESPA DIÁRIO
+# V7 - Previsão do Proximo Candle...
+#
+# RESULTADO MOSTRA:
+# - Volume
+# - Volume relativo
+# - Tamanho do corpo
+# - Corpo em % do range
+# - Direção do candle
+# - Previsão >= 60%
+# - Sinal de COMPRA / VENDA
+#
+# REGRAS:
+# 1. DADOS SOMENTE ATÉ 20/08/2026
+# 2. CONFIANÇA MÍNIMA = 60%
+# 3. CORPO MÍNIMO = 70% DO RANGE
+# 4. CORPO FORTE + ALTA + PREVISÃO ALTA = COMPRA
+# 5. CORPO FORTE + BAIXA + PREVISÃO BAIXA = VENDA
+# 6. OUTROS CASOS = SEM ENTRADA
+#
+# IMPORTANTE:
+# - PAVIOS NÃO SÃO USADOS COMO CONFIRMAÇÃO
+# - NOME DO CANDLE NÃO É USADO COMO CONFIRMAÇÃO
+# - DIREÇÃO ALTA = VERDE + NEGRITO
+# - DIREÇÃO BAIXA = VERMELHO + NEGRITO
+# ============================================================
+
+
+# ============================================================
+# INSTALAÇÃO
+# ============================================================
+
+!pip install yfinance scikit-learn -q
+
+
+# ============================================================
+# IMPORTAÇÕES
+# ============================================================
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
+
+TICKER = "^BVSP"
+
+PERIODO = "5y"
+
+DATA_FINAL = "2026-08-27"
+
+
+# ============================================================
+# CONFIANÇA MÍNIMA
+# ============================================================
+
+CONFIANCA_MINIMA = 0.60
+
+
+# ============================================================
+# CORPO MÍNIMO PARA CONFIRMAÇÃO
+#
+# 0.70 = 70% DO RANGE
+# ============================================================
+
+CORPO_MINIMO = 0.70
+
+
+# ============================================================
+# INDICADORES
+# ============================================================
+
+ATR_PERIODO = 14
+
+ESTRUTURA_LOOKBACK = 20
+
+CONFIRMACAO_LOOKBACK = 5
+
+
+# ============================================================
+# CORES DO TERMINAL / GOOGLE COLAB
+# ============================================================
+
+VERDE = "\033[92m"
+
+VERMELHO = "\033[91m"
+
+NEGRITO = "\033[1m"
+
+RESET = "\033[0m"
+
+
+# ============================================================
+# DOWNLOAD DOS DADOS
+# ============================================================
+
+print("=" * 60)
+print("BAIXANDO DADOS DO IBOVESPA")
+print("=" * 60)
+
+dados = yf.download(
+    TICKER,
+    period=PERIODO,
+    interval="1d",
+    auto_adjust=False,
+    progress=False
+)
+
+
+if dados.empty:
+
+    raise ValueError(
+        "Não foi possível baixar os dados do Ibovespa."
+    )
+
+
+# ============================================================
+# CORRIGIR MULTIINDEX
+# ============================================================
+
+if isinstance(dados.columns, pd.MultiIndex):
+
+    dados.columns = dados.columns.get_level_values(0)
+
+
+# ============================================================
+# SELECIONAR COLUNAS
+# ============================================================
+
+colunas_necessarias = [
+    "Open",
+    "High",
+    "Low",
+    "Close",
+    "Volume"
+]
+
+
+dados = dados[
+    colunas_necessarias
+].copy()
+
+
+# ============================================================
+# RENOMEAR
+# ============================================================
+
+dados.columns = [
+    "abertura",
+    "maxima",
+    "minima",
+    "fechamento",
+    "volume"
+]
+
+
+# ============================================================
+# LIMPAR
+# ============================================================
+
+dados = dados.dropna().copy()
+
+
+# ============================================================
+# GARANTIR DATETIME
+# ============================================================
+
+dados.index = pd.to_datetime(
+    dados.index
+)
+
+
+# ============================================================
+# LIMITAR ATÉ DATA FINAL
+# ============================================================
+
+data_limite = pd.Timestamp(
+    DATA_FINAL
+)
+
+
+dados = dados[
+    dados.index <= data_limite
+].copy()
+
+
+if dados.empty:
+
+    raise ValueError(
+        "Não existem dados até a data informada."
+    )
+
+
+# ============================================================
+# 1. RANGE DO CANDLE
+# ============================================================
+
+dados["range_candle"] = (
+    dados["maxima"] -
+    dados["minima"]
+)
+
+
+# ============================================================
+# 2. CORPO
+# ============================================================
+
+dados["corpo"] = (
+    dados["fechamento"] -
+    dados["abertura"]
+).abs()
+
+
+# ============================================================
+# 3. PAVIO SUPERIOR
+#
+# Mantido apenas para as features do modelo.
+# NÃO É USADO COMO CONFIRMAÇÃO DO SINAL.
+# ============================================================
+
+dados["pavio_superior"] = (
+    dados["maxima"] -
+    dados[
+        ["abertura", "fechamento"]
+    ].max(axis=1)
+)
+
+
+# ============================================================
+# 4. PAVIO INFERIOR
+#
+# Mantido apenas para as features do modelo.
+# NÃO É USADO COMO CONFIRMAÇÃO DO SINAL.
+# ============================================================
+
+dados["pavio_inferior"] = (
+    dados[
+        ["abertura", "fechamento"]
+    ].min(axis=1)
+    -
+    dados["minima"]
+)
+
+
+# ============================================================
+# 5. RANGE SEGURO
+# ============================================================
+
+range_seguro = (
+    dados["range_candle"]
+    .replace(0, np.nan)
+)
+
+
+# ============================================================
+# 6. PERCENTUAL DO CORPO
+# ============================================================
+
+dados["corpo_pct"] = (
+    dados["corpo"] /
+    range_seguro
+)
+
+
+# ============================================================
+# 7. PERCENTUAL DOS PAVIOS
+#
+# Mantidos para o modelo.
+# Não são usados para validar COMPRA/VENDA.
+# ============================================================
+
+dados["pavio_superior_pct"] = (
+    dados["pavio_superior"] /
+    range_seguro
+)
+
+
+dados["pavio_inferior_pct"] = (
+    dados["pavio_inferior"] /
+    range_seguro
+)
+
+
+# ============================================================
+# 8. DIREÇÃO
+# ============================================================
+
+dados["direcao"] = np.where(
+    dados["fechamento"] >
+    dados["abertura"],
+    1,
+    -1
+)
+
+
+# ============================================================
+# 9. RETORNOS
+# ============================================================
+
+dados["retorno_1"] = (
+    dados["fechamento"]
+    .pct_change(1)
+)
+
+
+dados["retorno_3"] = (
+    dados["fechamento"]
+    .pct_change(3)
+)
+
+
+dados["retorno_5"] = (
+    dados["fechamento"]
+    .pct_change(5)
+)
+
+
+# ============================================================
+# 10. MÉDIAS
+# ============================================================
+
+dados["mm5"] = (
+    dados["fechamento"]
+    .rolling(5)
+    .mean()
+)
+
+
+dados["mm10"] = (
+    dados["fechamento"]
+    .rolling(10)
+    .mean()
+)
+
+
+dados["mm20"] = (
+    dados["fechamento"]
+    .rolling(20)
+    .mean()
+)
+
+
+# ============================================================
+# 11. DISTÂNCIA DAS MÉDIAS
+# ============================================================
+
+dados["dist_mm5"] = (
+    dados["fechamento"] /
+    dados["mm5"] - 1
+)
+
+
+dados["dist_mm10"] = (
+    dados["fechamento"] /
+    dados["mm10"] - 1
+)
+
+
+dados["dist_mm20"] = (
+    dados["fechamento"] /
+    dados["mm20"] - 1
+)
+
+
+# ============================================================
+# 12. VOLUME
+# ============================================================
+
+dados["volume_mm20"] = (
+    dados["volume"]
+    .rolling(20)
+    .mean()
+)
+
+
+dados["volume_relativo"] = (
+    dados["volume"] /
+    dados["volume_mm20"]
+)
+
+
+# ============================================================
+# 13. ATR
+# ============================================================
+
+tr1 = (
+    dados["maxima"] -
+    dados["minima"]
+)
+
+
+tr2 = (
+    dados["maxima"] -
+    dados["fechamento"].shift(1)
+).abs()
+
+
+tr3 = (
+    dados["minima"] -
+    dados["fechamento"].shift(1)
+).abs()
+
+
+dados["true_range"] = pd.concat(
+    [
+        tr1,
+        tr2,
+        tr3
+    ],
+    axis=1
+).max(axis=1)
+
+
+dados["atr"] = (
+    dados["true_range"]
+    .rolling(ATR_PERIODO)
+    .mean()
+)
+
+
+# ============================================================
+# 14. SUPORTE E RESISTÊNCIA
+# ============================================================
+
+dados["resistencia_20"] = (
+    dados["maxima"]
+    .rolling(ESTRUTURA_LOOKBACK)
+    .max()
+    .shift(1)
+)
+
+
+dados["suporte_20"] = (
+    dados["minima"]
+    .rolling(ESTRUTURA_LOOKBACK)
+    .min()
+    .shift(1)
+)
+
+
+dados["resistencia_5"] = (
+    dados["maxima"]
+    .rolling(CONFIRMACAO_LOOKBACK)
+    .max()
+    .shift(1)
+)
+
+
+dados["suporte_5"] = (
+    dados["minima"]
+    .rolling(CONFIRMACAO_LOOKBACK)
+    .min()
+    .shift(1)
+)
+
+
+# ============================================================
+# 15. DISTÂNCIA DA ESTRUTURA
+# ============================================================
+
+dados["dist_resistencia"] = (
+    dados["resistencia_20"] -
+    dados["fechamento"]
+) / dados["atr"]
+
+
+dados["dist_suporte"] = (
+    dados["fechamento"] -
+    dados["suporte_20"]
+) / dados["atr"]
+
+
+# ============================================================
+# 16. ALVO DO MODELO
+#
+# 1 = fechamento seguinte sobe
+# 0 = fechamento seguinte não sobe
+# ============================================================
+
+dados["alvo"] = np.where(
+    dados["fechamento"].shift(-1) >
+    dados["fechamento"],
+    1,
+    0
+)
+
+
+# ============================================================
+# 17. FEATURES DO RANDOM FOREST
+# ============================================================
+
+features = [
+
+    "abertura",
+    "maxima",
+    "minima",
+    "fechamento",
+
+    "volume",
+
+    "range_candle",
+    "corpo",
+
+    "pavio_superior",
+    "pavio_inferior",
+
+    "corpo_pct",
+
+    "pavio_superior_pct",
+    "pavio_inferior_pct",
+
+    "direcao",
+
+    "retorno_1",
+    "retorno_3",
+    "retorno_5",
+
+    "dist_mm5",
+    "dist_mm10",
+    "dist_mm20",
+
+    "volume_relativo",
+
+    "atr",
+
+    "dist_resistencia",
+    "dist_suporte"
+]
+
+
+# ============================================================
+# 18. PREPARAR DADOS DO MODELO
+# ============================================================
+
+modelo_dados = dados[
+    features + ["alvo"]
+].dropna().copy()
+
+
+if len(modelo_dados) < 300:
+
+    raise ValueError(
+        "Poucos dados válidos para treinamento."
+    )
+
+
+# ============================================================
+# 19. DIVISÃO TEMPORAL
+# ============================================================
+
+tamanho_treino = int(
+    len(modelo_dados) * 0.80
+)
+
+
+treino = modelo_dados.iloc[
+    :tamanho_treino
+].copy()
+
+
+teste = modelo_dados.iloc[
+    tamanho_treino:
+].copy()
+
+
+# ============================================================
+# 20. TREINO
+# ============================================================
+
+X_treino = treino[
+    features
+]
+
+
+y_treino = treino[
+    "alvo"
+]
+
+
+# ============================================================
+# 21. TESTE
+# ============================================================
+
+X_teste = teste[
+    features
+]
+
+
+y_teste = teste[
+    "alvo"
+]
+
+
+# ============================================================
+# 22. RANDOM FOREST
+# ============================================================
+
+modelo_rf = RandomForestClassifier(
+
+    n_estimators=500,
+
+    max_depth=8,
+
+    min_samples_leaf=5,
+
+    max_features="sqrt",
+
+    class_weight="balanced",
+
+    random_state=42,
+
+    n_jobs=-1
+)
+
+
+# ============================================================
+# 23. TREINAMENTO
+# ============================================================
+
+print()
+print("Treinando Random Forest...")
+
+
+modelo_rf.fit(
+    X_treino,
+    y_treino
+)
+
+
+# ============================================================
+# 24. TESTE DO MODELO
+# ============================================================
+
+previsoes = modelo_rf.predict(
+    X_teste
+)
+
+
+acuracia = accuracy_score(
+    y_teste,
+    previsoes
+)
+
+
+# ============================================================
+# 25. ÚLTIMO CANDLE VÁLIDO
+# ============================================================
+
+dados_validos = dados[
+    features
+].dropna()
+
+
+if dados_validos.empty:
+
+    raise ValueError(
+        "Não existem dados suficientes para previsão."
+    )
+
+
+ultimo_idx = (
+    dados_validos.index[-1]
+)
+
+
+# ============================================================
+# 26. DADOS PARA PREVISÃO
+# ============================================================
+
+ultimo = dados.loc[
+    [ultimo_idx],
+    features
+]
+
+
+# ============================================================
+# 27. PROBABILIDADES
+# ============================================================
+
+probabilidades = (
+    modelo_rf.predict_proba(
+        ultimo
+    )[0]
+)
+
+
+prob_baixa = float(
+    probabilidades[0]
+)
+
+
+prob_alta = float(
+    probabilidades[1]
+)
+
+
+# ============================================================
+# 28. PREVISÃO
+# ============================================================
+
+if prob_alta >= prob_baixa:
+
+    previsao = "ALTA"
+
+    probabilidade = prob_alta
+
+else:
+
+    previsao = "BAIXA"
+
+    probabilidade = prob_baixa
+
+
+# ============================================================
+# 29. DADOS DO ÚLTIMO CANDLE
+# ============================================================
+
+linha_atual = dados.loc[
+    ultimo_idx
+]
+
+
+volume_atual = float(
+    linha_atual["volume"]
+)
+
+
+volume_relativo = float(
+    linha_atual["volume_relativo"]
+)
+
+
+abertura_atual = float(
+    linha_atual["abertura"]
+)
+
+
+fechamento_atual = float(
+    linha_atual["fechamento"]
+)
+
+
+range_atual = float(
+    linha_atual["range_candle"]
+)
+
+
+corpo_atual = float(
+    linha_atual["corpo"]
+)
+
+
+corpo_pct_atual = float(
+    linha_atual["corpo_pct"]
+)
+
+
+# ============================================================
+# 30. DIREÇÃO DO CANDLE
+# ============================================================
+
+if fechamento_atual > abertura_atual:
+
+    direcao_candle = "ALTA"
+
+elif fechamento_atual < abertura_atual:
+
+    direcao_candle = "BAIXA"
+
+else:
+
+    direcao_candle = "NEUTRO"
+
+
+# ============================================================
+# 31. CONFIRMAÇÃO PELO TAMANHO DO CORPO
+# ============================================================
+
+corpo_forte = (
+    corpo_pct_atual >= CORPO_MINIMO
+)
+
+
+# ============================================================
+# 32. SINAL FINAL
+# ============================================================
+
+sinal = "SEM ENTRADA"
+
+
+# ============================================================
+# COMPRA
+# ============================================================
+
+if (
+    corpo_forte
+    and
+    direcao_candle == "ALTA"
+    and
+    previsao == "ALTA"
+    and
+    probabilidade >= CONFIANCA_MINIMA
+):
+
+    sinal = "COMPRA"
+
+
+# ============================================================
+# VENDA
+# ============================================================
+
+elif (
+    corpo_forte
+    and
+    direcao_candle == "BAIXA"
+    and
+    previsao == "BAIXA"
+    and
+    probabilidade >= CONFIANCA_MINIMA
+):
+
+    sinal = "VENDA"
+
+
+# ============================================================
+# 33. FORMATAR DIREÇÃO COM CORES
+# ============================================================
+
+if direcao_candle == "ALTA":
+
+    direcao_formatada = (
+        f"{VERDE}{NEGRITO}"
+        f"{direcao_candle}"
+        f"{RESET}"
+    )
+
+elif direcao_candle == "BAIXA":
+
+    direcao_formatada = (
+        f"{VERMELHO}{NEGRITO}"
+        f"{direcao_candle}"
+        f"{RESET}"
+    )
+
+else:
+
+    direcao_formatada = direcao_candle
+
+
+# ============================================================
+# 34. RESULTADO FINAL
+# ============================================================
+
+print()
+print("=" * 60)
+print("              KVO PRO - IBOVESPA")
+print("=" * 60)
+
+print()
+
+
+# ============================================================
+# DATA
+# ============================================================
+
+print(
+    f"DATA                  : "
+    f"{ultimo_idx.strftime('%d/%m/%Y')}"
+)
+
+
+print()
+
+
+# ============================================================
+# VOLUME
+# ============================================================
+
+print("-" * 60)
+print("VOLUME")
+print("-" * 60)
+
+print()
+
+print(
+    f"VOLUME                : "
+    f"{volume_atual:,.0f}"
+)
+
+
+print(
+    f"VOLUME RELATIVO       : "
+    f"{volume_relativo:.2f}x"
+)
+
+
+print()
+
+
+# ============================================================
+# CORPO
+# ============================================================
+
+print("-" * 60)
+print("CORPO DO CANDLE")
+print("-" * 60)
+
+print()
+
+print(
+    f"TAMANHO DO CORPO     : "
+    f"{corpo_atual:,.2f}"
+)
+
+
+print(
+    f"RANGE DO CANDLE       : "
+    f"{range_atual:,.2f}"
+)
+
+
+print(
+    f"CORPO / RANGE         : "
+    f"{corpo_pct_atual:.2%}"
+)
+
+
+# ============================================================
+# DIREÇÃO COLORIDA
+# ============================================================
+
+print(
+    f"DIREÇÃO               : "
+    f"{direcao_formatada}"
+)
+
+
+# ============================================================
+# STATUS DO CORPO
+# ============================================================
+
+if corpo_forte:
+
+    print(
+        f"CORPO                 : "
+        f"FORTE >= {CORPO_MINIMO:.0%}"
+    )
+
+else:
+
+    print(
+        f"CORPO                 : "
+        f"FRACO < {CORPO_MINIMO:.0%}"
+    )
+
+
+print()
+
+
+# ============================================================
+# CONFIRMAÇÃO DO CORPO
+# ============================================================
+
+if corpo_forte:
+
+    print(
+        "✓ Candle possui corpo forte"
+    )
+
+else:
+
+    print(
+        "✗ Candle não possui corpo forte"
+    )
+
+
+print()
+
+
+# ============================================================
+# PREVISÃO
+# ============================================================
+
+print("-" * 60)
+print("PREVISÃO")
+print("-" * 60)
+
+print()
+
+
+if probabilidade >= CONFIANCA_MINIMA:
+
+    print(
+        f"PREVISÃO              : "
+        f"{previsao}"
+    )
+
+    print(
+        f"PROBABILIDADE         : "
+        f"{probabilidade:.2%}"
+    )
+
+else:
+
+    print(
+        "PREVISÃO              : "
+        "ABAIXO DE 60%"
+    )
+
+
+print()
+
+
+# ============================================================
+# SINAL
+# ============================================================
+
+print("-" * 60)
+print("SINAL")
+print("-" * 60)
+
+print()
+
+print(
+    f"SINAL FINAL           : "
+    f"{sinal}"
+)
+
+
+print()
+
+
+# ============================================================
+# ACURÁCIA DO MODELO
+# ============================================================
+
+print(
+    f"ACURÁCIA DO MODELO    : "
+    f"{acuracia:.2%}"
+)
+
+
+print()
+
+print("=" * 60)
+
