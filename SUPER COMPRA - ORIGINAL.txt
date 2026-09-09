@@ -1,0 +1,767 @@
+//@version=6
+indicator("KVO PRO - ETHEREUM V11.2 LONG ONLY PROBABILÍSTICO + MICRO MTF - SUAVIZAÇÃO INTERNA", overlay=true, max_labels_count=500, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO - ETHEREUM V11.2 LONG ONLY
+// MTF: 1m | 15m | 30m | 4h | DIÁRIO
+// OBJETIVO: COMPRA / ALTA / LONG / MICRO-ROMPIMENTO / MICRO-TENDÊNCIA
+//
+// IMPORTANTE:
+// - Não utiliza timeframes de segundos.
+// - O algoritmo trabalha exclusivamente com sinais LONG/COMPRA.
+// - A "probabilidade" é um score probabilístico técnico ponderado; não é uma
+//   probabilidade estatística calibrada por machine learning.
+// - O sinal final exige confluência local + MTF + KVO + ATR + microestrutura.
+// ============================================================================
+
+// ============================================================================
+// CONFIGURAÇÕES
+// ============================================================================
+
+groupConfig = "KVO PRO - CONFIGURAÇÕES"
+
+corpoMinimo = input.float(0.70, "Corpo mínimo", minval=0.0, maxval=1.0, step=0.05, group=groupConfig)
+atrPeriodo = input.int(14, "ATR período", minval=2, group=groupConfig)
+atrSuavePeriodo = input.int(5, "ATR suavização", minval=2, maxval=30, group=groupConfig)
+atrRegimePeriodo = input.int(50, "ATR regime", minval=10, group=groupConfig)
+estruturaLookback = input.int(20, "Estrutura", minval=5, group=groupConfig)
+confirmacaoLookback = input.int(5, "Confirmação", minval=2, group=groupConfig)
+kvoFast = input.int(34, "KVO Fast", minval=2, group=groupConfig)
+kvoSlow = input.int(55, "KVO Slow", minval=3, group=groupConfig)
+kvoSignalPeriodo = input.int(13, "KVO Signal", minval=2, group=groupConfig)
+suavizacaoPeriodo = input.int(5, "Suavização harmônica", minval=2, maxval=20, group=groupConfig)
+probabilidadeMinima = input.float(70.0, "Probabilidade mínima LONG", minval=50.0, maxval=99.0, step=1.0, group=groupConfig)
+confluenciaMinima = input.float(65.0, "Confluência mínima", minval=0.0, maxval=100.0, step=1.0, group=groupConfig)
+mostrarCandleForca = input.bool(true, "Colorir candles de força", group=groupConfig)
+mostrarTabela = input.bool(true, "Mostrar painel", group=groupConfig)
+mostrarSinalGrafico = input.bool(true, "Plotar sinal LONG", group=groupConfig)
+mostrarPrevisaoGrafico = input.bool(true, "Plotar previsão probabilística", group=groupConfig)
+usarWebhook = input.bool(true, "Ativar webhook", group=groupConfig)
+alertaSomenteFechamento = input.bool(true, "Alertar no fechamento", group=groupConfig)
+
+// ============================================================================
+// LONG TARGET
+// ============================================================================
+
+groupLong = "KVO PRO - LONG TARGET"
+ativarLong = input.bool(true, "Ativar previsão LONG", group=groupLong)
+longMinimoIntensidade = input.float(65.0, "Intensidade mínima LONG", minval=0, maxval=100, step=1, group=groupLong)
+longMinimoConfianca = input.float(60.0, "Confiança mínima LONG", minval=0, maxval=100, step=1, group=groupLong)
+longMinimoMTF = input.float(65.0, "MTF mínimo LONG", minval=0, maxval=100, step=1, group=groupLong)
+longMinimoKvo = input.float(55.0, "KVO mínimo LONG", minval=0, maxval=100, step=1, group=groupLong)
+longMinimoPico = input.float(55.0, "PICO mínimo LONG", minval=0, maxval=100, step=1, group=groupLong)
+longMinimoMicro = input.float(65.0, "Micro-score mínimo LONG", minval=0, maxval=100, step=1, group=groupLong)
+usarFiltroResistencia = input.bool(true, "Usar filtro de resistência", group=groupLong)
+distanciaMinimaResistenciaATR = input.float(0.60, "Distância mínima resistência / ATR", minval=0, maxval=10, step=0.10, group=groupLong)
+
+// ============================================================================
+// MICRO-ROMPIMENTO / MICRO-TENDÊNCIA
+// ============================================================================
+
+groupMicro = "KVO PRO - MICRO-ROMPIMENTO + MICRO-TENDÊNCIA"
+ativarMicroRompimento = input.bool(true, "Ativar micro-rompimento", group=groupMicro)
+microLookback = input.int(5, "Lookback micro-rompimento", minval=2, maxval=30, group=groupMicro)
+microTrendFast = input.int(5, "Micro tendência EMA rápida", minval=2, maxval=20, group=groupMicro)
+microTrendSlow = input.int(13, "Micro tendência EMA lenta", minval=3, maxval=50, group=groupMicro)
+microSlopeLookback = input.int(2, "Inclinação micro", minval=1, maxval=10, group=groupMicro)
+microMinimoVolume = input.float(1.10, "Volume mínimo rompimento", minval=0.0, step=0.05, group=groupMicro)
+microMinimoATR = input.float(0.05, "Extensão mínima rompimento / ATR", minval=0.0, step=0.01, group=groupMicro)
+microScoreMinimo = input.float(60.0, "Score mínimo micro", minval=0, maxval=100, step=1, group=groupMicro)
+
+// ============================================================================
+// MTF FIXO - SEM SEGUNDOS
+// ============================================================================
+
+groupMTF = "KVO PRO - MTF CONFLUÊNCIA"
+usarMTF1 = input.bool(true, "Usar 1m", group=groupMTF)
+usarMTF15 = input.bool(true, "Usar 15m", group=groupMTF)
+usarMTF30 = input.bool(true, "Usar 30m", group=groupMTF)
+usarMTF240 = input.bool(true, "Usar 4h", group=groupMTF)
+usarMTFD = input.bool(true, "Usar Diário", group=groupMTF)
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corVerde = color.rgb(0, 220, 90)
+corVerdeForte = color.rgb(0, 255, 0)
+corCiano = color.rgb(0, 220, 255)
+corAzul = color.rgb(0, 150, 255)
+corAmarelo = color.rgb(255, 210, 0)
+corCinza = color.rgb(150, 150, 150)
+corBranco = color.white
+corFundo = color.rgb(15, 15, 20)
+corBorda = color.rgb(80, 80, 90)
+
+// ============================================================================
+// FUNÇÕES DE SUAVIZAÇÃO / HARMONIZAÇÃO
+// ============================================================================
+
+f_suavizar(src, periodo) =>
+    e1 = ta.ema(src, periodo)
+    e2 = ta.ema(e1, periodo)
+    e3 = ta.ema(e2, periodo)
+    (e1 + e2 + e3) / 3.0
+
+f_clamp(v, minimo, maximo) =>
+    math.min(math.max(v, minimo), maximo)
+
+// ============================================================================
+// DADOS DO CANDLE
+// ============================================================================
+
+rangeCandle = math.max(high - low, syminfo.mintick)
+corpo = math.abs(close - open)
+corpoPct = corpo / rangeCandle
+pavioSuperior = high - math.max(open, close)
+pavioInferior = math.min(open, close) - low
+direcaoCandle = close > open ? 1 : close < open ? -1 : 0
+candleForte = corpoPct >= corpoMinimo
+candleAltaForte = candleForte and direcaoCandle > 0
+forcaCorpo = f_clamp(corpoPct * 100.0, 0.0, 100.0)
+
+// ============================================================================
+// RETORNOS / MÉDIAS / VOLUME
+// ============================================================================
+
+retorno1 = close[1] != 0 ? (close / close[1] - 1.0) * 100.0 : 0.0
+retorno3 = close[3] != 0 ? (close / close[3] - 1.0) * 100.0 : 0.0
+retorno5 = close[5] != 0 ? (close / close[5] - 1.0) * 100.0 : 0.0
+
+mm5 = ta.ema(close, 5)
+mm10 = ta.ema(close, 10)
+mm20 = ta.ema(close, 20)
+mm50 = ta.ema(close, 50)
+mm100 = ta.ema(close, 100)
+
+volumeMedio = ta.sma(volume, 20)
+volumeRelativo = not na(volumeMedio) and volumeMedio > 0 ? volume / volumeMedio : 1.0
+volumeSuave = f_suavizar(volumeRelativo, suavizacaoPeriodo)
+
+// ============================================================================
+// ATR APRIMORADO
+// ============================================================================
+
+atrBruto = ta.atr(atrPeriodo)
+atrSuave = ta.ema(atrBruto, atrSuavePeriodo)
+atrMediaRegime = ta.sma(atrSuave, atrRegimePeriodo)
+atrSeguro = math.max(nz(atrSuave, atrBruto), syminfo.mintick)
+atrRegime = not na(atrMediaRegime) and atrMediaRegime > 0 ? atrSuave / atrMediaRegime : 1.0
+atrExpansaoBase = atrSuave[1] != 0 ? atrSuave / atrSuave[1] : 1.0
+atrExpansao = f_suavizar(atrExpansaoBase, suavizacaoPeriodo)
+atrNormalizado = close != 0 ? atrSeguro / close * 100.0 : 0.0
+atrMuitoForte = atrRegime >= 1.35 and atrExpansao >= 1.03
+atrForte = atrRegime >= 1.10 and atrExpansao >= 1.00
+atrFraco = atrRegime <= 0.80
+atrBoaCompra = atrForte or (atrRegime >= 0.90 and atrExpansao >= 1.00)
+atrScore = atrMuitoForte ? 100.0 : atrForte ? 82.0 : atrBoaCompra ? 68.0 : atrFraco ? 38.0 : 55.0
+atrClassificacao = atrMuitoForte ? "MUITO FORTE" : atrForte ? "FORTE" : atrBoaCompra ? "BOA" : atrFraco ? "FRACA" : "NORMAL"
+corAtr = atrScore >= 80 ? corVerde : atrScore >= 60 ? corCiano : corCinza
+
+// ============================================================================
+// ESTRUTURA / RESISTÊNCIA
+// ============================================================================
+
+suporte20 = ta.lowest(low[1], estruturaLookback)
+resistencia20 = ta.highest(high[1], estruturaLookback)
+suporte5 = ta.lowest(low[1], confirmacaoLookback)
+resistencia5 = ta.highest(high[1], confirmacaoLookback)
+
+distanciaResistenciaAtual = not na(resistencia20) and resistencia20 > close ? (resistencia20 - close) / atrSeguro : 999.0
+resistenciaDisponivel = not na(resistencia20) and resistencia20 > close
+resistenciaProxima = resistenciaDisponivel and distanciaResistenciaAtual < distanciaMinimaResistenciaATR
+filtroResistenciaLong = not usarFiltroResistencia or not resistenciaProxima
+
+// ============================================================================
+// KVO SUAVIZADO
+// ============================================================================
+
+precoTipico = (high + low + close) / 3.0
+tendenciaKvo = precoTipico > precoTipico[1] ? 1 : precoTipico < precoTipico[1] ? -1 : 0
+dmKvo = math.max(high - low, syminfo.mintick)
+
+var float cmKvo = 0.0
+if bar_index == 0
+    cmKvo := dmKvo
+else
+    cmKvo := tendenciaKvo == tendenciaKvo[1] ? cmKvo[1] + dmKvo : dmKvo + dmKvo[1]
+
+cmSeguro = math.max(math.abs(cmKvo), syminfo.mintick)
+vfKvo = volume * math.abs(2.0 * (dmKvo / cmSeguro) - 1.0) * tendenciaKvo * 100.0
+kvoBruto = ta.ema(vfKvo, kvoFast) - ta.ema(vfKvo, kvoSlow)
+kvo = f_suavizar(kvoBruto, suavizacaoPeriodo)
+kvoSignal = ta.ema(kvo, kvoSignalPeriodo)
+kvoHist = kvo - kvoSignal
+kvoVariacao = kvo - kvo[1]
+kvoDesvio = ta.stdev(kvo, 34)
+kvoZscore = not na(kvoDesvio) and kvoDesvio > 0 ? kvo / kvoDesvio : 0.0
+kvoEstadoAlta = kvo > kvoSignal and kvoVariacao > 0
+kvoForcaBruta = math.abs(kvoHist) / (math.abs(kvo) + math.abs(kvoSignal) + 0.000000001)
+kvoForca = f_clamp(kvoForcaBruta, 0.0, 1.0) * 100.0
+kvoScoreLong = kvoEstadoAlta ? 50.0 + math.min(kvoForca * 0.50, 50.0) : 50.0
+kvoScoreLong := f_clamp(kvoScoreLong, 0.0, 100.0)
+kvoEstadoTexto = kvoEstadoAlta ? "ALTA" : "NEUTRO"
+corKvo = kvoEstadoAlta ? corVerde : corCinza
+
+// ============================================================================
+// MICRO-TENDÊNCIA
+// ============================================================================
+
+microEmaFast = ta.ema(close, microTrendFast)
+microEmaSlow = ta.ema(close, microTrendSlow)
+microSlope = microEmaFast - microEmaFast[microSlopeLookback]
+microSlopePct = close != 0 ? microSlope / close * 100.0 : 0.0
+microTendenciaAlta = microEmaFast > microEmaSlow and microSlope > 0
+microTendenciaFormacao = microEmaFast > microEmaSlow or microSlope > 0
+microTrendScore = microTendenciaAlta ? 100.0 : microTendenciaFormacao ? 68.0 : 45.0
+
+// ============================================================================
+// MICRO-ROMPIMENTO LONG
+// ============================================================================
+
+microResistencia = ta.highest(high[1], microLookback)
+microRompimentoAlta = ativarMicroRompimento and not na(microResistencia) and close > microResistencia
+microDistanciaAltaATR = microRompimentoAlta ? (close - microResistencia) / atrSeguro : 0.0
+microVolumeConfirmado = volumeSuave >= microMinimoVolume
+microATRConfirmado = microDistanciaAltaATR >= microMinimoATR
+microCandleConfirmado = candleAltaForte
+microEstruturaAlta = close > microResistencia or close > resistencia5
+
+float microScoreAlta = 0.0
+if microRompimentoAlta
+    microScoreAlta += 35.0
+if microTendenciaAlta
+    microScoreAlta += 25.0
+else if microTendenciaFormacao
+    microScoreAlta += 12.0
+if microCandleConfirmado
+    microScoreAlta += 15.0
+if microVolumeConfirmado and microRompimentoAlta
+    microScoreAlta += 10.0
+if microATRConfirmado
+    microScoreAlta += 15.0
+microScoreAlta := f_clamp(microScoreAlta, 0.0, 100.0)
+
+microLongConfirmado = microRompimentoAlta and microScoreAlta >= microScoreMinimo
+microFormacaoAlta = microRompimentoAlta or microTendenciaAlta
+microTexto = microLongConfirmado ? "MICRO LONG" : microRompimentoAlta ? "MICRO ROMPIMENTO" : microTendenciaAlta ? "MICRO TENDÊNCIA" : microTendenciaFormacao ? "MICRO FORMAÇÃO" : "AGUARDANDO"
+corMicro = microLongConfirmado ? corVerdeForte : microFormacaoAlta ? corVerde : corCinza
+
+// ============================================================================
+// MODELO LOCAL BULLISH
+// ============================================================================
+
+float pontosAlta = 0.0
+float pesoLocal = 0.0
+
+pesoLocal += 1.0
+if close > mm5
+    pontosAlta += 1.0
+
+pesoLocal += 1.0
+if close > mm10
+    pontosAlta += 1.0
+
+pesoLocal += 1.5
+if close > mm20
+    pontosAlta += 1.5
+
+pesoLocal += 1.5
+if mm20 > mm50
+    pontosAlta += 1.5
+
+pesoLocal += 1.0
+if retorno1 > 0
+    pontosAlta += 1.0
+
+pesoLocal += 1.0
+if retorno3 > 0
+    pontosAlta += 1.0
+
+pesoLocal += 1.0
+if retorno5 > 0
+    pontosAlta += 1.0
+
+pesoLocal += 1.0
+if volumeRelativo >= 1.20 and close > open
+    pontosAlta += 1.0
+
+pesoLocal += 2.0
+if kvoEstadoAlta
+    pontosAlta += 2.0
+
+pesoLocal += 2.0
+if microTendenciaAlta
+    pontosAlta += 2.0
+
+pesoLocal += 2.0
+if microRompimentoAlta
+    pontosAlta += 2.0
+
+probModeloAlta = pesoLocal > 0 ? pontosAlta / pesoLocal * 100.0 : 50.0
+probModeloAlta := f_clamp(probModeloAlta, 0.0, 100.0)
+probModeloAltaSuave = f_suavizar(probModeloAlta, suavizacaoPeriodo)
+
+// ============================================================================
+// CONFLUÊNCIA LOCAL SOMENTE BULLISH
+// ============================================================================
+
+int confirmacoesAlta = 0
+int totalConfluencias = 0
+
+// Tendência
+if close > mm20 and mm20 > mm50
+    confirmacoesAlta += 1
+totalConfluencias += 1
+
+// KVO
+totalConfluencias += 1
+if kvoEstadoAlta
+    confirmacoesAlta += 1
+
+// Retornos
+totalConfluencias += 1
+if retorno1 > 0 and retorno3 > 0
+    confirmacoesAlta += 1
+
+// Volume
+totalConfluencias += 1
+if volumeSuave >= 1.10
+    confirmacoesAlta += 1
+
+// ATR + candle
+totalConfluencias += 1
+if atrBoaCompra and direcaoCandle > 0
+    confirmacoesAlta += 1
+
+// Micro tendência
+totalConfluencias += 1
+if microTendenciaAlta
+    confirmacoesAlta += 1
+
+// Micro rompimento
+totalConfluencias += 1
+if microRompimentoAlta
+    confirmacoesAlta += 1
+
+// Estrutura
+totalConfluencias += 1
+if close > resistencia5 or close > mm20
+    confirmacoesAlta += 1
+
+confluencia = totalConfluencias > 0 ? confirmacoesAlta / totalConfluencias * 100.0 : 0.0
+confluencia := f_clamp(confluencia, 0.0, 100.0)
+qualidadeConfluencia = confluencia >= 85 ? "EXTREMA" : confluencia >= 75 ? "MUITO ALTA" : confluencia >= 65 ? "ALTA" : confluencia >= 50 ? "BOA" : confluencia >= 35 ? "MODERADA" : "FRACA"
+
+// ============================================================================
+// MTF - TENDÊNCIA + RSI + MACD + ATR + VOLUME
+// ============================================================================
+
+f_mtfScoreLong() =>
+    e5 = ta.ema(close, 5)
+    e20 = ta.ema(close, 20)
+    e50 = ta.ema(close, 50)
+    rsi = ta.rsi(close, 14)
+    [macdLine, macdSignal, macdHist] = ta.macd(close, 12, 26, 9)
+    atrLocal = ta.atr(14)
+    atrBase = ta.sma(atrLocal, 50)
+    volBase = ta.sma(volume, 20)
+    float s = 0.0
+    s += close > e5 ? 0.18 : 0.0
+    s += e5 > e20 ? 0.22 : 0.0
+    s += e20 > e50 ? 0.22 : 0.0
+    s += rsi >= 55 ? 0.15 : rsi >= 50 ? 0.07 : 0.0
+    s += macdHist > 0 ? 0.15 : 0.0
+    s += not na(atrBase) and atrLocal >= atrBase ? 0.04 : 0.0
+    s += not na(volBase) and volume >= volBase and close > open ? 0.04 : 0.0
+    f_clamp(s, 0.0, 1.0)
+
+mtf1mRaw = request.security(syminfo.tickerid, "1", f_mtfScoreLong(), lookahead=barmerge.lookahead_off)
+mtf15mRaw = request.security(syminfo.tickerid, "15", f_mtfScoreLong(), lookahead=barmerge.lookahead_off)
+mtf30mRaw = request.security(syminfo.tickerid, "30", f_mtfScoreLong(), lookahead=barmerge.lookahead_off)
+mtf4hRaw = request.security(syminfo.tickerid, "240", f_mtfScoreLong(), lookahead=barmerge.lookahead_off)
+mtfDailyRaw = request.security(syminfo.tickerid, "1D", f_mtfScoreLong(), lookahead=barmerge.lookahead_off)
+
+mtf1m = f_suavizar(mtf1mRaw, suavizacaoPeriodo)
+mtf15m = f_suavizar(mtf15mRaw, suavizacaoPeriodo)
+mtf30m = f_suavizar(mtf30mRaw, suavizacaoPeriodo)
+mtf4h = f_suavizar(mtf4hRaw, suavizacaoPeriodo)
+mtfDaily = f_suavizar(mtfDailyRaw, suavizacaoPeriodo)
+
+prob1m = f_clamp(mtf1m * 100.0, 0.0, 100.0)
+prob15m = f_clamp(mtf15m * 100.0, 0.0, 100.0)
+prob30m = f_clamp(mtf30m * 100.0, 0.0, 100.0)
+prob4h = f_clamp(mtf4h * 100.0, 0.0, 100.0)
+probDaily = f_clamp(mtfDaily * 100.0, 0.0, 100.0)
+
+float mtfSoma = 0.0
+float mtfPeso = 0.0
+if usarMTF1
+    mtfSoma += mtf1m * 0.10
+    mtfPeso += 0.10
+if usarMTF15
+    mtfSoma += mtf15m * 0.15
+    mtfPeso += 0.15
+if usarMTF30
+    mtfSoma += mtf30m * 0.15
+    mtfPeso += 0.15
+if usarMTF240
+    mtfSoma += mtf4h * 0.25
+    mtfPeso += 0.25
+if usarMTFD
+    mtfSoma += mtfDaily * 0.35
+    mtfPeso += 0.35
+
+mtfScoreLong = mtfPeso > 0 ? mtfSoma / mtfPeso : 0.0
+mtfPercentualLong = f_clamp(mtfScoreLong * 100.0, 0.0, 100.0)
+mtfConcordanteLong = mtfPercentualLong >= longMinimoMTF
+mtfTexto = mtfConcordanteLong ? "MTF LONG" : "MTF EM FORMAÇÃO"
+corMTF = mtfConcordanteLong ? corVerde : corCinza
+
+// ============================================================================
+// INTENSIDADE LONG
+// ============================================================================
+
+intensidadeBase = forcaCorpo * 0.15 + probModeloAltaSuave * 0.25 + kvoScoreLong * 0.15 + mtfPercentualLong * 0.25 + confluencia * 0.10 + atrScore * 0.10
+
+boostMicro = microLongConfirmado ? 8.0 : microTendenciaAlta ? 4.0 : 0.0
+boostVolume = volumeSuave >= 1.50 and direcaoCandle > 0 ? 4.0 : volumeSuave >= 1.20 and direcaoCandle > 0 ? 2.0 : 0.0
+boostHarmonia = mtfPercentualLong >= 75 and kvoEstadoAlta and microTendenciaAlta ? 5.0 : 0.0
+penaltyExaustao = close > mm20 and corpoPct < 0.35 and pavioSuperior > corpo ? 8.0 : 0.0
+
+intensidadeFinal = f_clamp(intensidadeBase + boostMicro + boostVolume + boostHarmonia - penaltyExaustao, 0.0, 100.0)
+intensidadeSuave = f_suavizar(intensidadeFinal, suavizacaoPeriodo)
+classificacao = intensidadeSuave >= 90 ? "EXTREMA" : intensidadeSuave >= 80 ? "MUITO FORTE" : intensidadeSuave >= 70 ? "FORTE" : intensidadeSuave >= 60 ? "MODERADA" : intensidadeSuave >= 40 ? "FRACA" : "MUITO FRACA"
+corClassificacao = intensidadeSuave >= 80 ? corVerdeForte : intensidadeSuave >= 70 ? corVerde : intensidadeSuave >= 60 ? corCiano : intensidadeSuave >= 40 ? corAmarelo : corCinza
+
+// ============================================================================
+// PICO LONG / IMPULSO LONG
+// ============================================================================
+
+novoTopo = not na(ta.highest(high[1], estruturaLookback)) and high > ta.highest(high[1], estruturaLookback)
+impulsoAlta = retorno1 > 0 and retorno3 > 0 and close > mm20
+exaustaoAlta = close > mm20 and corpoPct < 0.35 and pavioSuperior > corpo
+
+float picoScoreAlta = 0.0
+if novoTopo
+    picoScoreAlta += 30.0
+if impulsoAlta
+    picoScoreAlta += 25.0
+if volumeRelativo >= 1.20 and direcaoCandle > 0
+    picoScoreAlta += 15.0
+if kvoEstadoAlta
+    picoScoreAlta += 15.0
+if atrBoaCompra and direcaoCandle > 0
+    picoScoreAlta += 15.0
+if microTendenciaAlta
+    picoScoreAlta += 10.0
+picoScoreAlta := f_clamp(picoScoreAlta, 0.0, 100.0)
+
+picoExtremoAlta = picoScoreAlta >= 85 and not exaustaoAlta
+picoForteAlta = picoScoreAlta >= 70 and not picoExtremoAlta
+picoModeradoAlta = picoScoreAlta >= 55 and not picoForteAlta and not picoExtremoAlta
+classificacaoPico = picoExtremoAlta ? "PICO EXTREMO LONG" : picoForteAlta ? "PICO FORTE LONG" : picoModeradoAlta ? "PICO MODERADO LONG" : "PICO EM FORMAÇÃO"
+corPico = picoExtremoAlta ? corVerdeForte : picoForteAlta ? corVerde : picoModeradoAlta ? corCiano : corCinza
+
+// ============================================================================
+// PREVISÃO PROBABILÍSTICA LONG
+// ============================================================================
+
+// Pesos normalizados: 20% local + 35% MTF + 15% micro + 10% KVO +
+// 8% ATR + 12% confluência.
+probAtrLong = atrMuitoForte ? 1.00 : atrForte ? 0.88 : atrBoaCompra ? 0.72 : atrFraco ? 0.35 : 0.55
+probMicroLong = microScoreAlta / 100.0
+probMtfLong = mtfPercentualLong / 100.0
+probKvoLong = kvoScoreLong / 100.0
+probConfLong = confluencia / 100.0
+probLocalLong = probModeloAltaSuave / 100.0
+
+probabilidadeBaseLong = (probLocalLong * 0.20 + probMtfLong * 0.35 + probMicroLong * 0.15 + probKvoLong * 0.10 + probAtrLong * 0.08 + probConfLong * 0.12) * 100.0
+
+// Harmonização: média de EMA, EMA da EMA e EMA da EMA da EMA.
+probabilidadeLong = f_suavizar(probabilidadeBaseLong, suavizacaoPeriodo)
+
+// Bônus somente quando os componentes bullish estão simultaneamente alinhados.
+if microLongConfirmado and mtfPercentualLong >= 70 and kvoEstadoAlta
+    probabilidadeLong += 4.0
+if picoForteAlta and mtfPercentualLong >= 70
+    probabilidadeLong += 2.0
+if exaustaoAlta
+    probabilidadeLong -= 6.0
+
+probabilidadeLong := f_clamp(probabilidadeLong, 0.0, 99.0)
+probabilidadeLongSuave = f_suavizar(probabilidadeLong, suavizacaoPeriodo)
+probabilidadeLongSuave := f_clamp(probabilidadeLongSuave, 0.0, 99.0)
+confiancaLong = probabilidadeLongSuave
+
+// ============================================================================
+// SCORE LONG
+// ============================================================================
+
+float scoreLong = 0.0
+if probModeloAltaSuave >= 60
+    scoreLong += 10.0
+if mtfPercentualLong >= 60
+    scoreLong += 15.0
+if mtfPercentualLong >= 75
+    scoreLong += 8.0
+if kvoEstadoAlta
+    scoreLong += 10.0
+if kvoForca >= longMinimoKvo
+    scoreLong += 8.0
+if confluencia >= confluenciaMinima
+    scoreLong += 10.0
+if microTendenciaAlta
+    scoreLong += 10.0
+if microLongConfirmado
+    scoreLong += 12.0
+else if microRompimentoAlta
+    scoreLong += 6.0
+if picoScoreAlta >= longMinimoPico
+    scoreLong += 6.0
+if atrBoaCompra
+    scoreLong += 5.0
+if volumeSuave >= 1.20 and direcaoCandle > 0
+    scoreLong += 4.0
+if intensidadeSuave >= longMinimoIntensidade
+    scoreLong += 6.0
+if probabilidadeLongSuave >= 80
+    scoreLong += 8.0
+else if probabilidadeLongSuave >= 70
+    scoreLong += 5.0
+if exaustaoAlta
+    scoreLong -= 10.0
+if mtfDaily < 0.45
+    scoreLong -= 5.0
+if mtf4h < 0.45
+    scoreLong -= 4.0
+
+scoreLong := f_clamp(scoreLong, 0.0, 100.0)
+
+// ============================================================================
+// CONDIÇÕES DO SINAL LONG
+// ============================================================================
+
+longDirecional = probModeloAltaSuave >= 52.0
+longForca = intensidadeSuave >= longMinimoIntensidade
+longConfianca = probabilidadeLongSuave >= longMinimoConfianca
+longMTF = mtfPercentualLong >= longMinimoMTF
+longKvo = kvoEstadoAlta and kvoForca >= longMinimoKvo
+longPico = picoScoreAlta >= longMinimoPico
+longMicro = not ativarMicroRompimento or microLongConfirmado
+longConfluencia = confluencia >= confluenciaMinima
+longEstrutura = close > mm20 and mm20 > mm50
+
+longBase = ativarLong and longDirecional and longForca and longConfianca and longMTF and longKvo and longPico and longMicro and longConfluencia and longEstrutura and filtroResistenciaLong
+
+// Previsão probabilística independente, mas somente LONG.
+sinalProbabilisticoLong = ativarLong and probabilidadeLongSuave >= probabilidadeMinima and scoreLong >= 70.0 and mtfPercentualLong >= longMinimoMTF and microScoreAlta >= longMinimoMicro and not exaustaoAlta
+
+sinalCompra = longBase and sinalProbabilisticoLong
+longForte = sinalCompra and scoreLong >= 80.0 and probabilidadeLongSuave >= 80.0
+longExtremo = sinalCompra and scoreLong >= 90.0 and probabilidadeLongSuave >= 90.0 and mtfDaily >= 70.0 and mtf4h >= 70.0
+
+// ============================================================================
+// ALVOS LONGOS ADAPTATIVOS
+// ============================================================================
+
+multiplicadorForca = scoreLong >= 90 ? 1.30 : scoreLong >= 80 ? 1.18 : scoreLong >= 70 ? 1.08 : 1.00
+multiplicadorProb = probabilidadeLongSuave >= 90 ? 1.20 : probabilidadeLongSuave >= 80 ? 1.12 : probabilidadeLongSuave >= 70 ? 1.05 : 1.00
+multiplicadorATR = atrMuitoForte ? 1.15 : atrForte ? 1.08 : atrFraco ? 0.92 : 1.00
+multiplicadorMicro = microScoreAlta >= 85 ? 1.15 : microScoreAlta >= 70 ? 1.08 : 1.00
+multiplicadorPico = picoExtremoAlta ? 1.12 : picoForteAlta ? 1.06 : 1.00
+
+multiplicadorAlvo = f_clamp(multiplicadorForca * multiplicadorProb * multiplicadorATR * multiplicadorMicro * multiplicadorPico, 0.75, 1.75)
+
+entradaLong = close
+alvo1Long = entradaLong + atrSeguro * 1.0 * multiplicadorAlvo
+alvo2Long = entradaLong + atrSeguro * 2.0 * multiplicadorAlvo
+alvo3Long = entradaLong + atrSeguro * 3.0 * multiplicadorAlvo
+alvo4Long = entradaLong + atrSeguro * 4.0 * multiplicadorAlvo
+alvo5Long = entradaLong + atrSeguro * 5.0 * multiplicadorAlvo
+
+float alvoPrincipal = alvo1Long
+string alvoPrincipalNome = "ALVO 1"
+if scoreLong >= 90 and probabilidadeLongSuave >= 90
+    alvoPrincipal := alvo4Long
+    alvoPrincipalNome := "ALVO 4"
+else if scoreLong >= 80 and probabilidadeLongSuave >= 80
+    alvoPrincipal := alvo3Long
+    alvoPrincipalNome := "ALVO 3"
+else if scoreLong >= 70 and probabilidadeLongSuave >= 70
+    alvoPrincipal := alvo2Long
+    alvoPrincipalNome := "ALVO 2"
+
+if usarFiltroResistencia and resistenciaDisponivel and alvoPrincipal > resistencia20
+    alvoPrincipal := resistencia20
+    alvoPrincipalNome := "RESISTÊNCIA"
+
+distAlvo1Pct = entradaLong != 0 ? (alvo1Long / entradaLong - 1.0) * 100.0 : 0.0
+distAlvo2Pct = entradaLong != 0 ? (alvo2Long / entradaLong - 1.0) * 100.0 : 0.0
+distAlvo3Pct = entradaLong != 0 ? (alvo3Long / entradaLong - 1.0) * 100.0 : 0.0
+distAlvo4Pct = entradaLong != 0 ? (alvo4Long / entradaLong - 1.0) * 100.0 : 0.0
+distAlvo5Pct = entradaLong != 0 ? (alvo5Long / entradaLong - 1.0) * 100.0 : 0.0
+distAlvoPrincipalPct = entradaLong != 0 ? (alvoPrincipal / entradaLong - 1.0) * 100.0 : 0.0
+distAlvoPrincipalATR = (alvoPrincipal - entradaLong) / atrSeguro
+
+// ============================================================================
+// RESULTADO - SOMENTE LONG
+// ============================================================================
+
+string statusLong = "SEM SINAL LONG"
+if longExtremo
+    statusLong := "LONG EXTREMO"
+else if longForte
+    statusLong := "LONG FORTE"
+else if sinalCompra
+    statusLong := "LONG CONFIRMADO"
+else if sinalProbabilisticoLong
+    statusLong := "LONG PROBABILÍSTICO"
+else if probabilidadeLongSuave >= 60 and mtfPercentualLong >= 50
+    statusLong := "LONG EM FORMAÇÃO"
+
+corStatusLong = longExtremo ? corVerdeForte : longForte ? corVerde : sinalCompra ? corCiano : sinalProbabilisticoLong ? corAzul : corCinza
+resultadoTexto = sinalCompra ? "COMPRA LONG" : sinalProbabilisticoLong ? "PREVISÃO LONG" : probabilidadeLongSuave >= 60 ? "LONG EM FORMAÇÃO" : "AGUARDANDO LONG"
+corResultado = sinalCompra ? corVerdeForte : sinalProbabilisticoLong ? corCiano : probabilidadeLongSuave >= 60 ? corAmarelo : corCinza
+
+// ============================================================================
+// COLORAÇÃO DOS CANDLES
+// ============================================================================
+
+corCandle = candleAltaForte ? corVerde : corCinza
+barcolor(mostrarCandleForca and candleForte ? corCandle : na)
+
+// ============================================================================
+// PLOT NO GRÁFICO
+// ============================================================================
+
+plotshape(mostrarSinalGrafico and sinalCompra, title="KVO PRO LONG", style=shape.triangleup, location=location.belowbar, size=size.small, color=corVerdeForte, text="LONG")
+plotshape(mostrarSinalGrafico and sinalProbabilisticoLong and not sinalCompra, title="Previsão LONG", style=shape.circle, location=location.belowbar, size=size.tiny, color=corCiano, text="P")
+// Micro-rompimento NÃO é plotado no gráfico. Ele aparece somente no indicador/painel.
+
+if mostrarPrevisaoGrafico and (sinalCompra or sinalProbabilisticoLong)
+    label.new(bar_index, low - atrSeguro * 0.25, "LONG " + str.tostring(probabilidadeLongSuave, "#.##") + "%\nScore " + str.tostring(scoreLong, "#.##") + "%\n" + alvoPrincipalNome, style=label.style_label_up, textcolor=corBranco, color=sinalCompra ? corVerde : corAzul, size=size.small)
+
+// ============================================================================
+// PAINEL - ESQUERDA SUPERIOR
+// ============================================================================
+
+var table painel = table.new(position.top_left, 5, 30, bgcolor=corFundo, border_width=1, border_color=corBorda)
+
+f_celula(coluna, linha, texto, corTexto, alinhamento) =>
+    table.cell(painel, coluna, linha, texto, text_color=corTexto, bgcolor=corFundo, text_size=size.small, text_halign=alinhamento)
+
+if barstate.islast and mostrarTabela
+    f_celula(0, 0, "LONG", corBranco, text.align_center)
+    f_celula(1, 0, "PROBABILIDADE", corBranco, text.align_center)
+    f_celula(2, 0, "CONFLUÊNCIA", corBranco, text.align_center)
+    f_celula(3, 0, "MTF", corBranco, text.align_center)
+    f_celula(4, 0, "RESULTADO", corAmarelo, text.align_center)
+
+    f_celula(0, 1, "LONG", corVerdeForte, text.align_center)
+    f_celula(0, 2, "Intensidade " + str.tostring(intensidadeSuave, "#.##") + "%", corClassificacao, text.align_center)
+    f_celula(0, 3, "Candle " + (candleAltaForte ? "ALTA FORTE" : "NORMAL"), candleAltaForte ? corVerde : corCinza, text.align_center)
+    f_celula(0, 4, "Micro " + microTexto, corMicro, text.align_center)
+    f_celula(0, 5, "KVO " + kvoEstadoTexto + " " + str.tostring(kvoForca, "#.##") + "%", corKvo, text.align_center)
+
+    f_celula(1, 1, "LONG " + str.tostring(probabilidadeLongSuave, "#.##") + "%", probabilidadeLongSuave >= probabilidadeMinima ? corVerdeForte : corCiano, text.align_center)
+    f_celula(1, 2, "Modelo " + str.tostring(probModeloAltaSuave, "#.##") + "%", corAzul, text.align_center)
+    f_celula(1, 3, "Conf. " + str.tostring(confiancaLong, "#.##") + "%", corBranco, text.align_center)
+    f_celula(1, 4, "Previsão LONG", corVerde, text.align_center)
+    f_celula(1, 5, "Score " + str.tostring(scoreLong, "#.##") + "%", scoreLong >= 70 ? corVerde : corCinza, text.align_center)
+
+    f_celula(2, 1, qualidadeConfluencia, confluencia >= confluenciaMinima ? corVerde : corCinza, text.align_center)
+    f_celula(2, 2, "Confirmações " + str.tostring(confirmacoesAlta), corVerde, text.align_center)
+    f_celula(2, 3, "Total " + str.tostring(totalConfluencias), corBranco, text.align_center)
+    f_celula(2, 4, "PICO " + str.tostring(picoScoreAlta, "#.##") + "%", corPico, text.align_center)
+    f_celula(2, 5, classificacaoPico, corPico, text.align_center)
+
+    f_celula(3, 1, "1m " + str.tostring(prob1m, "#.##") + "%", prob1m >= 60 ? corVerde : corCinza, text.align_center)
+    f_celula(3, 2, "15m " + str.tostring(prob15m, "#.##") + "%", prob15m >= 60 ? corVerde : corCinza, text.align_center)
+    f_celula(3, 3, "30m " + str.tostring(prob30m, "#.##") + "%", prob30m >= 60 ? corVerde : corCinza, text.align_center)
+    f_celula(3, 4, "4h " + str.tostring(prob4h, "#.##") + "%", prob4h >= 60 ? corVerde : corCinza, text.align_center)
+    f_celula(3, 5, "DIÁRIO " + str.tostring(probDaily, "#.##") + "%", probDaily >= 60 ? corVerde : corCinza, text.align_center)
+
+    f_celula(4, 1, resultadoTexto, corResultado, text.align_center)
+    f_celula(4, 2, statusLong, corStatusLong, text.align_center)
+    f_celula(4, 3, "Prob. LONG " + str.tostring(probabilidadeLongSuave, "#.##") + "%", corResultado, text.align_center)
+    f_celula(4, 4, "Micro " + microTexto + " " + str.tostring(microScoreAlta, "#.##") + "%", corMicro, text.align_center)
+    f_celula(4, 5, "ATR " + atrClassificacao + " " + str.tostring(atrRegime, "#.##") + "x", corAtr, text.align_center)
+    f_celula(4, 6, "MTF LONG " + str.tostring(mtfPercentualLong, "#.##") + "%", corMTF, text.align_center)
+    f_celula(4, 7, "ALVO PRINCIPAL " + alvoPrincipalNome, corVerdeForte, text.align_center)
+    f_celula(4, 8, "ENTRADA " + str.tostring(entradaLong, format.mintick), corBranco, text.align_center)
+    f_celula(4, 9, "ALVO 1 " + str.tostring(alvo1Long, format.mintick) + " | +" + str.tostring(distAlvo1Pct, "#.##") + "%", corCiano, text.align_center)
+    f_celula(4, 10, "ALVO 2 " + str.tostring(alvo2Long, format.mintick) + " | +" + str.tostring(distAlvo2Pct, "#.##") + "%", corVerde, text.align_center)
+    f_celula(4, 11, "ALVO 3 " + str.tostring(alvo3Long, format.mintick) + " | +" + str.tostring(distAlvo3Pct, "#.##") + "%", corVerdeForte, text.align_center)
+    f_celula(4, 12, "ALVO 4 " + str.tostring(alvo4Long, format.mintick) + " | +" + str.tostring(distAlvo4Pct, "#.##") + "%", corVerdeForte, text.align_center)
+    f_celula(4, 13, "ALVO 5 " + str.tostring(alvo5Long, format.mintick) + " | +" + str.tostring(distAlvo5Pct, "#.##") + "%", corVerdeForte, text.align_center)
+    f_celula(4, 14, "DIST. PRINCIPAL " + str.tostring(distAlvoPrincipalPct, "#.##") + "% | " + str.tostring(distAlvoPrincipalATR, "#.##") + " ATR", corCiano, text.align_center)
+    f_celula(4, 15, "RESISTÊNCIA " + (resistenciaProxima ? "PRÓXIMA" : "LIVRE") + " | " + str.tostring(distanciaResistenciaAtual, "#.##") + " ATR", resistenciaProxima ? corAmarelo : corVerde, text.align_center)
+    f_celula(4, 16, "ATR REGIME " + str.tostring(atrRegime, "#.##") + "x", corAtr, text.align_center)
+    f_celula(4, 17, "ATR EXPANSÃO " + str.tostring(atrExpansao, "#.##") + "x", corAtr, text.align_center)
+    f_celula(4, 18, "ATR % " + str.tostring(atrNormalizado, "#.##") + "%", corAtr, text.align_center)
+    f_celula(4, 19, "VOLUME " + str.tostring(volumeSuave, "#.##") + "x", volumeSuave >= 1.20 ? corVerde : corCinza, text.align_center)
+    f_celula(4, 20, "KVO Z " + str.tostring(kvoZscore, "#.##"), corKvo, text.align_center)
+    f_celula(4, 21, "MULT ALVO " + str.tostring(multiplicadorAlvo, "#.##") + "x", corCiano, text.align_center)
+    f_celula(4, 22, "LONG FORTE " + (longForte ? "SIM" : "NÃO"), longForte ? corVerdeForte : corCinza, text.align_center)
+    f_celula(4, 23, "LONG EXTREMO " + (longExtremo ? "SIM" : "NÃO"), longExtremo ? corVerdeForte : corCinza, text.align_center)
+    f_celula(4, 24, "SINAL PROB. " + (sinalProbabilisticoLong ? "SIM" : "NÃO"), sinalProbabilisticoLong ? corCiano : corCinza, text.align_center)
+    f_celula(4, 25, "MICRO SINAL " + (microLongConfirmado ? "SIM" : "NÃO"), microLongConfirmado ? corVerde : corCinza, text.align_center)
+    f_celula(4, 26, "MTF CONFLUÊNCIA " + str.tostring(mtfPercentualLong, "#.##") + "%", corMTF, text.align_center)
+    f_celula(4, 27, "KVO PRO V11.2 LONG", corBranco, text.align_center)
+    f_celula(4, 28, "SUAVIZAÇÃO INTERNA " + str.tostring(suavizacaoPeriodo) + " PERÍODOS", corCiano, text.align_center)
+    f_celula(4, 29, "MODO LONG EXCLUSIVO", corCinza, text.align_center)
+
+// ============================================================================
+// WEBHOOK JSON - SOMENTE LONG
+// ============================================================================
+
+mensagemWebhook = "{" +
+     "\"sistema\":\"KVO PRO\"," +
+     "\"versao\":\"V11.2 LONG ONLY PROBABILISTICO MICRO MTF\"," +
+     "\"ticker\":\"" + syminfo.ticker + "\"," +
+     "\"exchange\":\"" + syminfo.prefix + "\"," +
+     "\"timeframe\":\"" + timeframe.period + "\"," +
+     "\"timestamp\":\"" + str.tostring(time) + "\"," +
+     "\"close\":" + str.tostring(close) + "," +
+     "\"prob_long\":" + str.tostring(probabilidadeLongSuave, "#.##") + "," +
+     "\"previsao\":\"LONG\"," +
+     "\"score_long\":" + str.tostring(scoreLong, "#.##") + "," +
+     "\"intensidade_long\":" + str.tostring(intensidadeSuave, "#.##") + "," +
+     "\"confluencia\":" + str.tostring(confluencia, "#.##") + "," +
+     "\"mtf_1m\":" + str.tostring(prob1m, "#.##") + "," +
+     "\"mtf_15m\":" + str.tostring(prob15m, "#.##") + "," +
+     "\"mtf_30m\":" + str.tostring(prob30m, "#.##") + "," +
+     "\"mtf_4h\":" + str.tostring(prob4h, "#.##") + "," +
+     "\"mtf_diario\":" + str.tostring(probDaily, "#.##") + "," +
+     "\"mtf_percentual_long\":" + str.tostring(mtfPercentualLong, "#.##") + "," +
+     "\"kvo_forca\":" + str.tostring(kvoForca, "#.##") + "," +
+     "\"kvo_zscore\":" + str.tostring(kvoZscore, "#.##") + "," +
+     "\"atr_regime\":" + str.tostring(atrRegime, "#.##") + "," +
+     "\"atr_expansao\":" + str.tostring(atrExpansao, "#.##") + "," +
+     "\"micro_score_long\":" + str.tostring(microScoreAlta, "#.##") + "," +
+     "\"micro_rompimento_long\":" + str.tostring(microRompimentoAlta) + "," +
+     "\"micro_tendencia_long\":" + str.tostring(microTendenciaAlta) + "," +
+     "\"pico_score_long\":" + str.tostring(picoScoreAlta, "#.##") + "," +
+     "\"alvo_principal_nome\":\"" + alvoPrincipalNome + "\"," +
+     "\"alvo_principal\":" + str.tostring(alvoPrincipal, format.mintick) + "," +
+     "\"multiplicador_alvo\":" + str.tostring(multiplicadorAlvo, "#.##") + "," +
+     "\"long_base\":" + str.tostring(longBase) + "," +
+     "\"sinal_probabilistico_long\":" + str.tostring(sinalProbabilisticoLong) + "," +
+     "\"sinal_compra_long\":" + str.tostring(sinalCompra) +
+     "}"
+
+condicaoWebhook = usarWebhook and (not alertaSomenteFechamento or barstate.isconfirmed) and (sinalProbabilisticoLong or sinalCompra)
+if condicaoWebhook
+    alert(mensagemWebhook, alert.freq_once_per_bar_close)
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+
+alertcondition(sinalCompra, "KVO PRO - SINAL COMPRA LONG", "KVO PRO: sinal LONG confirmado com previsão probabilística.")
+alertcondition(sinalProbabilisticoLong, "KVO PRO - PREVISÃO PROBABILÍSTICA LONG", "KVO PRO: previsão probabilística LONG confirmada.")
+alertcondition(microLongConfirmado, "KVO PRO - MICRO ROMPIMENTO LONG", "KVO PRO: micro-rompimento LONG confirmado.")
+alertcondition(longForte, "KVO PRO - LONG FORTE", "KVO PRO: LONG FORTE confirmado.")
+alertcondition(longExtremo, "KVO PRO - LONG EXTREMO", "KVO PRO: LONG EXTREMO confirmado.")
+alertcondition(picoExtremoAlta, "KVO PRO - PICO EXTREMO LONG", "KVO PRO: PICO EXTREMO LONG detectado.")

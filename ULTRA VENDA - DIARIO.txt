@@ -1,0 +1,2194 @@
+
+//@version=6
+indicator("KVO PRO - ETHEREUM V11.0 SHORT PROBABILISTIC DIÁRIO", overlay=true, max_labels_count=500, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO V11.0 - DIÁRIO
+// SHORT PROBABILÍSTICO
+// ============================================================================
+//
+// OPERAÇÃO EXCLUSIVA:
+// 1D = DIÁRIO
+//
+// IMPORTANTE:
+// O algoritmo força todos os cálculos para o timeframe Diário.
+// Pode ser colocado em outros gráficos, mas a análise operacional continua
+// sendo feita exclusivamente com candles diários.
+//
+// NÃO UTILIZA TIMEFRAMES EM SEGUNDOS
+// NÃO UTILIZA MTF INTRADIÁRIO
+// ============================================================================
+
+
+// ============================================================================
+// CONFIGURAÇÕES
+// ============================================================================
+
+groupConfig = "V11.0 DIÁRIO - CONFIGURAÇÕES"
+
+corpoMinimo = input.float(0.60, "Corpo mínimo", minval=0.10, maxval=1.00, step=0.05, group=groupConfig)
+
+atrPeriodo = input.int(14, "ATR período", minval=2, group=groupConfig)
+
+suavizacaoPeriodo = input.int(5, "Suavização", minval=2, maxval=30, group=groupConfig)
+
+estruturaLookback = input.int(30, "Estrutura diária", minval=5, maxval=200, group=groupConfig)
+
+confirmacaoLookback = input.int(8, "Confirmação diária", minval=2, maxval=50, group=groupConfig)
+
+microLookback = input.int(5, "Micro-rompimento diário", minval=2, maxval=30, group=groupConfig)
+
+microTrendFast = input.int(5, "Micro tendência rápida", minval=2, maxval=20, group=groupConfig)
+
+microTrendSlow = input.int(13, "Micro tendência lenta", minval=5, maxval=50, group=groupConfig)
+
+kvoFast = input.int(34, "KVO Fast", minval=2, group=groupConfig)
+
+kvoSlow = input.int(55, "KVO Slow", minval=3, group=groupConfig)
+
+kvoSignalPeriodo = input.int(13, "KVO Signal", minval=2, group=groupConfig)
+
+volumePeriodo = input.int(20, "Volume média diária", minval=5, group=groupConfig)
+
+boostMaximo = input.float(25.0, "Boost máximo", minval=0, maxval=50, group=groupConfig)
+
+penaltyMaximo = input.float(20.0, "Penalty máximo", minval=0, maxval=50, group=groupConfig)
+
+mostrarTabela = input.bool(true, "Mostrar painel", group=groupConfig)
+
+mostrarProbabilidadeGrafico = input.bool(true, "Plotar probabilidade no gráfico", group=groupConfig)
+
+mostrarMicroBreakout = input.bool(true, "Marcar micro-rompimento", group=groupConfig)
+
+mostrarCandleForca = input.bool(true, "Colorir candle de força", group=groupConfig)
+
+usarWebhook = input.bool(true, "Ativar webhook", group=groupConfig)
+
+alertaSomenteFechamento = input.bool(true, "Alertar somente fechamento diário", group=groupConfig)
+
+
+// ============================================================================
+// CONTROLE DIÁRIO
+// ============================================================================
+
+groupDiario = "V11.0 DIÁRIO - CONTROLE"
+
+usarSomenteDiario = input.bool(true, "Forçar análise Diário", group=groupDiario)
+
+bloquearIntradiario = input.bool(true, "Bloquear sinais intradiários", group=groupDiario)
+
+
+
+
+// ============================================================================
+// SHORT
+// ============================================================================
+
+groupShort = "V11.0 DIÁRIO - SHORT PROBABILÍSTICO"
+
+ativarShort = input.bool(true, "Ativar SHORT", group=groupShort)
+
+probMinimaShort = input.float(72.0, "Probabilidade mínima SHORT", minval=50, maxval=99, step=1, group=groupShort)
+
+probMinimaForte = input.float(82.0, "Probabilidade SHORT FORTE", minval=50, maxval=99, step=1, group=groupShort)
+
+probMinimaExtremo = input.float(90.0, "Probabilidade SHORT EXTREMO", minval=60, maxval=99, step=1, group=groupShort)
+
+confluenciaMinima = input.int(7, "Confluência mínima", minval=2, maxval=15, group=groupShort)
+
+usarFiltroSuporte = input.bool(true, "Filtro de suporte", group=groupShort)
+
+distanciaMinimaSuporteATR = input.float(0.60, "Distância mínima do suporte ATR", minval=0.10, maxval=10, step=0.10, group=groupShort)
+
+
+// ============================================================================
+// MODELO PROBABILÍSTICO
+// ============================================================================
+
+groupProb = "V11.0 DIÁRIO - MODELO PROBABILÍSTICO"
+
+probSensibilidade = input.float(4.0, "Sensibilidade probabilística", minval=1, maxval=10, step=0.5, group=groupProb)
+
+probSuavizacao = input.int(5, "Suavização probabilidade", minval=2, maxval=30, group=groupProb)
+
+calibracaoPeriodo = input.int(100, "Janela calibração diária", minval=20, maxval=500, group=groupProb)
+
+horizonteCalibracao = input.int(5, "Horizonte calibração diário", minval=1, maxval=30, group=groupProb)
+
+pesoProbModelo = input.float(0.70, "Peso modelo", minval=0, maxval=1, step=0.05, group=groupProb)
+
+pesoProbHistorica = input.float(0.30, "Peso histórico", minval=0, maxval=1, step=0.05, group=groupProb)
+
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corVerde = color.rgb(0, 255, 100)
+
+corVerdeForte = color.rgb(0, 255, 0)
+
+corVermelho = color.rgb(255, 60, 60)
+
+corVermelhoForte = color.rgb(255, 0, 0)
+
+corAmarelo = color.rgb(255, 210, 0)
+
+corCinza = color.rgb(150, 150, 150)
+
+corCiano = color.rgb(0, 220, 255)
+
+corAzul = color.rgb(0, 150, 255)
+
+corBranco = color.white
+
+corRoxo = color.rgb(180, 80, 255)
+
+corFundo = color.rgb(15, 15, 20)
+
+corBorda = color.rgb(70, 70, 80)
+
+
+// ============================================================================
+// DADOS DIÁRIOS
+// ============================================================================
+
+[openD, highD, lowD, closeD, volumeD] = request.security(
+     syminfo.tickerid,
+     "1D",
+     [open, high, low, close, volume],
+     lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// SÉRIES DIÁRIAS
+// ============================================================================
+
+rangeCandle = highD - lowD
+
+rangeSeguro = math.max(rangeCandle, syminfo.mintick)
+
+corpo = math.abs(closeD - openD)
+
+corpoPct = corpo / rangeSeguro
+
+pavioSuperior = highD - math.max(openD, closeD)
+
+pavioInferior = math.min(openD, closeD) - lowD
+
+pavioSuperiorPct = pavioSuperior / rangeSeguro
+
+pavioInferiorPct = pavioInferior / rangeSeguro
+
+direcaoCandle = closeD > openD ? 1 : closeD < openD ? -1 : 0
+
+
+// ============================================================================
+// RETORNOS DIÁRIOS
+// ============================================================================
+
+retorno1 = not na(closeD[1]) ? closeD / closeD[1] - 1 : 0.0
+
+retorno3 = not na(closeD[3]) ? closeD / closeD[3] - 1 : 0.0
+
+retorno5 = not na(closeD[5]) ? closeD / closeD[5] - 1 : 0.0
+
+retorno10 = not na(closeD[10]) ? closeD / closeD[10] - 1 : 0.0
+
+
+// ============================================================================
+// MÉDIAS DIÁRIAS
+// ============================================================================
+
+mm5 = ta.ema(closeD, 5)
+
+mm10 = ta.ema(closeD, 10)
+
+mm20 = ta.ema(closeD, 20)
+
+mm50 = ta.ema(closeD, 50)
+
+mm100 = ta.ema(closeD, 100)
+
+distMm5 = closeD != 0 ? (closeD / mm5 - 1) * 100 : 0.0
+
+distMm20 = closeD != 0 ? (closeD / mm20 - 1) * 100 : 0.0
+
+distMm50 = closeD != 0 ? (closeD / mm50 - 1) * 100 : 0.0
+
+
+// ============================================================================
+// MICRO-TENDÊNCIA DIÁRIA
+// ============================================================================
+
+microFast = ta.ema(closeD, microTrendFast)
+
+microSlow = ta.ema(closeD, microTrendSlow)
+
+microFastAnterior = microFast[1]
+
+microSlowAnterior = microSlow[1]
+
+microTrendBaixa = microFast < microSlow and microFastAnterior <= microSlowAnterior
+
+microTrendAlta = microFast > microSlow and microFastAnterior >= microSlowAnterior
+
+microTrendDist = closeD != 0 ? math.abs(microFast - microSlow) / closeD * 100 : 0.0
+
+microTrendScore = microFast < microSlow ? math.min(100.0, 50.0 + microTrendDist * 100.0) : 0.0
+
+
+// ============================================================================
+// ATR DIÁRIO
+// ============================================================================
+
+atrBruto = ta.atr(atrPeriodo)
+
+atrSuaveEMA = ta.ema(atrBruto, suavizacaoPeriodo)
+
+atrSuaveRMA = ta.rma(atrBruto, suavizacaoPeriodo)
+
+atrHarmonizado = atrSuaveEMA * 0.60 + atrSuaveRMA * 0.40
+
+atrSeguro = math.max(atrHarmonizado, syminfo.mintick)
+
+atrMedia = ta.ema(atrHarmonizado, 34)
+
+atrRatio = atrMedia > 0 ? atrHarmonizado / atrMedia : 1.0
+
+atrExpansao = atrHarmonizado > atrHarmonizado[1]
+
+atrContraindo = atrHarmonizado < atrHarmonizado[1]
+
+atrPercentual = closeD != 0 ? atrSeguro / closeD * 100 : 0.0
+
+atrRegime =
+     atrRatio >= 1.35 ? 100.0 :
+     atrRatio >= 1.15 ? 85.0 :
+     atrRatio >= 1.00 ? 70.0 :
+     atrRatio >= 0.85 ? 55.0 :
+     40.0
+
+
+// ============================================================================
+// VOLUME DIÁRIO
+// ============================================================================
+
+volumeMedia = ta.ema(volumeD, volumePeriodo)
+
+volumeRelativo = volumeMedia > 0 ? volumeD / volumeMedia : 1.0
+
+volumeScore =
+     volumeRelativo >= 2.50 ? 100.0 :
+     volumeRelativo >= 2.00 ? 95.0 :
+     volumeRelativo >= 1.50 ? 85.0 :
+     volumeRelativo >= 1.20 ? 72.0 :
+     volumeRelativo >= 1.00 ? 60.0 :
+     40.0
+
+
+// ============================================================================
+// ESTRUTURA DIÁRIA
+// ============================================================================
+
+suporte = ta.lowest(lowD[1], estruturaLookback)
+
+resistencia = ta.highest(highD[1], estruturaLookback)
+
+microSuporte = ta.lowest(lowD[1], microLookback)
+
+microResistencia = ta.highest(highD[1], microLookback)
+
+distSuporteATR = (closeD - suporte) / atrSeguro
+
+distResistenciaATR = (resistencia - closeD) / atrSeguro
+
+
+// ============================================================================
+// MICRO-ROMPIMENTO DIÁRIO
+// ============================================================================
+
+microBreakoutVenda = closeD < microSuporte
+
+microBreakoutVendaWick = lowD < microSuporte and closeD < openD
+
+microBreakoutForca =
+     microBreakoutVenda ? 100.0 :
+     microBreakoutVendaWick ? 75.0 :
+     closeD < microSuporte + atrSeguro * 0.15 ? 55.0 :
+     25.0
+
+
+// ============================================================================
+// ROMPIMENTO ESTRUTURAL DIÁRIO
+// ============================================================================
+
+rompimentoEstruturalVenda = closeD < suporte
+
+forcaRompimento =
+     rompimentoEstruturalVenda ? 100.0 :
+     microBreakoutVenda ? 80.0 :
+     microBreakoutVendaWick ? 65.0 :
+     30.0
+
+
+// ============================================================================
+// KVO DIÁRIO
+// ============================================================================
+
+precoTipico = (highD + lowD + closeD) / 3.0
+
+tendenciaKvo =
+     precoTipico > precoTipico[1] ? 1 :
+     precoTipico < precoTipico[1] ? -1 :
+     0
+
+dmKvo = highD - lowD
+
+dmSeguro = math.max(dmKvo, syminfo.mintick)
+
+vfKvo = volumeD * (2 * (dmKvo / dmSeguro) - 1) * tendenciaKvo
+
+kvo = ta.ema(vfKvo, kvoFast) - ta.ema(vfKvo, kvoSlow)
+
+kvoSignal = ta.ema(kvo, kvoSignalPeriodo)
+
+kvoHist = kvo - kvoSignal
+
+kvoVariacao = kvo - kvo[1]
+
+kvoDesvio = ta.stdev(kvo, 34)
+
+kvoZscore = kvoDesvio > 0 ? kvo / kvoDesvio : 0.0
+
+kvoEstado =
+     kvo < kvoSignal and kvoVariacao < 0 ? -1 :
+     kvo > kvoSignal and kvoVariacao > 0 ? 1 :
+     0
+
+kvoForcaBruta =
+     math.abs(kvoHist) /
+     (math.abs(kvo) + math.abs(kvoSignal) + 0.000001)
+
+kvoForca = math.min(100.0, kvoForcaBruta * 100.0)
+
+kvoVendaScore =
+     kvoEstado < 0 ? kvoForca :
+     kvoEstado == 0 ? kvoForca * 0.35 :
+     0.0
+
+
+// ============================================================================
+// RSI DIÁRIO
+// ============================================================================
+
+rsi = ta.rsi(closeD, 14)
+
+rsiVendaScore =
+     rsi <= 25 ? 100.0 :
+     rsi <= 35 ? 90.0 :
+     rsi <= 45 ? 75.0 :
+     rsi < 50 ? 60.0 :
+     40.0
+
+
+// ============================================================================
+// MOMENTUM DIÁRIO
+// ============================================================================
+
+momentum = ta.roc(closeD, 5)
+
+momentumVendaScore =
+     momentum <= -3 ? 100.0 :
+     momentum <= -2 ? 90.0 :
+     momentum <= -1 ? 80.0 :
+     momentum < 0 ? 65.0 :
+     35.0
+
+
+// ============================================================================
+// SUAVIZAÇÃO
+// ============================================================================
+
+f_harmonizar(src, len) =>
+    emaValor = ta.ema(src, len)
+    rmaValor = ta.rma(src, len)
+    emaValor * 0.60 + rmaValor * 0.40
+
+kvoHarmonizado = f_harmonizar(kvoForca, suavizacaoPeriodo)
+
+momentumHarmonizado = f_harmonizar(momentum, suavizacaoPeriodo)
+
+microScoreHarmonizado = f_harmonizar(microBreakoutForca, suavizacaoPeriodo)
+
+
+// ============================================================================
+// MODELO DIRECIONAL
+// ============================================================================
+
+float pontosVenda = 0.0
+
+float pontosCompra = 0.0
+
+
+if closeD < openD
+    pontosVenda += 2
+else if closeD > openD
+    pontosCompra += 2
+
+
+if closeD < mm5
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if closeD < mm10
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if closeD < mm20
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if closeD < mm50
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if retorno1 < 0
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if retorno3 < 0
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if retorno5 < 0
+    pontosVenda += 1
+else
+    pontosCompra += 1
+
+
+if kvoEstado < 0
+    pontosVenda += 2
+else if kvoEstado > 0
+    pontosCompra += 2
+
+
+if volumeRelativo >= 1.20 and closeD < openD
+    pontosVenda += 1
+
+
+if microFast < microSlow
+    pontosVenda += 2
+else
+    pontosCompra += 2
+
+
+if microBreakoutVenda
+    pontosVenda += 3
+
+
+if rompimentoEstruturalVenda
+    pontosVenda += 3
+
+
+totalModelo = pontosVenda + pontosCompra
+
+probModeloVenda =
+     totalModelo > 0 ?
+     pontosVenda / totalModelo * 100 :
+     50.0
+
+probModeloCompra =
+     totalModelo > 0 ?
+     pontosCompra / totalModelo * 100 :
+     50.0
+
+
+// ============================================================================
+// MODELO LOGÍSTICO
+// ============================================================================
+
+scoreNormalizado = (probModeloVenda - 50.0) / 50.0
+
+scoreKvo = (kvoVendaScore - 50.0) / 50.0
+
+scoreMicro = (microScoreHarmonizado - 50.0) / 50.0
+
+scoreVolume = (volumeScore - 50.0) / 50.0
+
+scoreATR = (atrRegime - 50.0) / 50.0
+
+scoreMomentum =
+     momentumHarmonizado < 0 ?
+     math.min(1.0, math.abs(momentumHarmonizado) / 5.0) :
+     -math.min(1.0, momentumHarmonizado / 5.0)
+
+scoreEstrutura =
+     rompimentoEstruturalVenda ? 1.0 :
+     microBreakoutVenda ? 0.75 :
+     -0.10
+
+scoreTendencia =
+     microFast < microSlow ?
+     math.min(1.0, 0.50 + microTrendScore / 200.0) :
+     -0.50
+
+scoreComposto =
+     scoreNormalizado * 0.20 +
+     scoreKvo * 0.15 +
+     scoreMicro * 0.15 +
+     scoreVolume * 0.10 +
+     scoreATR * 0.10 +
+     scoreMomentum * 0.10 +
+     scoreEstrutura * 0.10 +
+     scoreTendencia * 0.10
+
+probLogisticaVenda =
+     1.0 /
+     (1.0 + math.exp(-probSensibilidade * scoreComposto)) *
+     100.0
+
+
+// ============================================================================
+// MTF DIÁRIO
+// ============================================================================
+//
+// Em vez de combinar 1m/15m/30m/4H/1D,
+// o modelo diário utiliza uma confirmação interna baseada em:
+//
+// EMA 8
+// EMA 21
+// EMA 50
+// Momentum diário
+// KVO proxy diário
+// Breakout diário
+// ATR diário
+//
+// Isso evita redundância e mantém a operação exclusivamente no Diário.
+// ============================================================================
+
+ema8D = ta.ema(closeD, 8)
+
+ema21D = ta.ema(closeD, 21)
+
+ema50D = ta.ema(closeD, 50)
+
+atrLocal = ta.atr(14)
+
+atrLocalMedia = ta.ema(atrLocal, 34)
+
+atrLocalRatio =
+     atrLocalMedia > 0 ?
+     atrLocal / atrLocalMedia :
+     1.0
+
+microBaixaD =
+     ema8D < ema21D and
+     ema21D < ema50D
+
+distanciaD =
+     closeD != 0 ?
+     (ema21D - closeD) / closeD * 100.0 :
+     0.0
+
+trendScoreD =
+     microBaixaD ?
+     math.min(100.0, 55.0 + math.abs(distanciaD) * 10.0) :
+     closeD < ema21D ? 55.0 :
+     30.0
+
+retornoLocalD =
+     not na(closeD[3]) ?
+     closeD / closeD[3] - 1.0 :
+     0.0
+
+momentumScoreD =
+     retornoLocalD < -0.02 ? 100.0 :
+     retornoLocalD < -0.01 ? 85.0 :
+     retornoLocalD < 0 ? 65.0 :
+     30.0
+
+kvoProxyD =
+     ta.ema(volumeD * math.sign(ta.change((highD + lowD + closeD) / 3.0)), 13)
+
+kvoProxyMediaD = ta.ema(kvoProxyD, 21)
+
+kvoScoreD =
+     kvoProxyD < kvoProxyMediaD ? 85.0 :
+     40.0
+
+breakoutD =
+     closeD < ta.lowest(lowD[1], 5)
+
+breakoutScoreD =
+     breakoutD ? 100.0 :
+     closeD < ta.lowest(lowD[1], 8) + atrLocal * 0.15 ? 65.0 :
+     30.0
+
+atrScoreD =
+     atrLocalRatio >= 1.0 ? 80.0 :
+     45.0
+
+scoreDiario =
+     trendScoreD * 0.35 +
+     momentumScoreD * 0.20 +
+     kvoScoreD * 0.20 +
+     breakoutScoreD * 0.15 +
+     atrScoreD * 0.10
+
+direcaoDiaria =
+     scoreDiario >= 55.0 ? -1 :
+     1
+
+mtfPercentualVenda = scoreDiario
+
+mtfDirecao = direcaoDiaria
+
+mtfConcordante = mtfDirecao < 0
+
+mtfTexto =
+     mtfDirecao < 0 ? "↓ VENDA" :
+     mtfDirecao > 0 ? "↑ COMPRA" :
+     "→ NEUTRO"
+
+
+// ============================================================================
+// PROBABILIDADE DO MODELO
+// ============================================================================
+
+probabilidadeModelo =
+     probLogisticaVenda * 0.55 +
+     mtfPercentualVenda * 0.25 +
+     probModeloVenda * 0.20
+
+probabilidadeModelo :=
+     math.min(99.0, math.max(1.0, probabilidadeModelo))
+
+
+// ============================================================================
+// CONFLUÊNCIAS DIÁRIAS
+// ============================================================================
+
+int confirmacoes = 0
+
+int divergencias = 0
+
+
+if direcaoCandle < 0
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if kvoEstado < 0
+    confirmacoes += 1
+else if kvoEstado > 0
+    divergencias += 1
+
+
+if closeD < mm5
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if closeD < mm10
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if closeD < mm20
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if closeD < mm50
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if retorno1 < 0
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if retorno3 < 0
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if microFast < microSlow
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if microBreakoutVenda
+    confirmacoes += 1
+
+
+if volumeRelativo >= 1.20
+    confirmacoes += 1
+
+
+if mtfPercentualVenda >= 65.0
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+if atrRatio >= 1.0
+    confirmacoes += 1
+
+
+// ============================================================================
+// CONFLUÊNCIA PERCENTUAL
+// ============================================================================
+
+totalConfluencia = confirmacoes + divergencias
+
+confluenciaPercentual =
+     totalConfluencia > 0 ?
+     confirmacoes / totalConfluencia * 100.0 :
+     0.0
+
+
+// ============================================================================
+// BOOST
+// ============================================================================
+
+boostConfluencia =
+     confirmacoes >= 12 ? 25.0 :
+     confirmacoes >= 10 ? 20.0 :
+     confirmacoes >= 8 ? 15.0 :
+     confirmacoes >= 6 ? 10.0 :
+     confirmacoes >= 4 ? 5.0 :
+     0.0
+
+boostKvo =
+     kvoEstado < 0 and kvoForca >= 70 ? 5.0 :
+     kvoEstado < 0 and kvoForca >= 50 ? 3.0 :
+     0.0
+
+boostVolume =
+     volumeRelativo >= 2.0 ? 5.0 :
+     volumeRelativo >= 1.5 ? 3.0 :
+     volumeRelativo >= 1.2 ? 2.0 :
+     0.0
+
+boostBreakout =
+     microBreakoutVenda ? 5.0 :
+     microBreakoutVendaWick ? 2.0 :
+     0.0
+
+boostDiario =
+     mtfPercentualVenda >= 85 ? 8.0 :
+     mtfPercentualVenda >= 75 ? 6.0 :
+     mtfPercentualVenda >= 65 ? 4.0 :
+     0.0
+
+boostTotal =
+     math.min(
+         boostMaximo,
+         boostConfluencia +
+         boostKvo +
+         boostVolume +
+         boostBreakout +
+         boostDiario)
+
+
+// ============================================================================
+// PENALTY
+// ============================================================================
+
+penalty =
+     divergencias * 2.0 +
+     (kvoEstado > 0 ? 6.0 : 0.0) +
+     (mtfDirecao > 0 ? 8.0 : 0.0) +
+     (microFast > microSlow ? 6.0 : 0.0) +
+     (atrRatio < 0.75 ? 4.0 : 0.0)
+
+penaltyFinal =
+     math.min(penaltyMaximo, penalty)
+
+
+// ============================================================================
+// PROBABILIDADE PRÉ-CALIBRAÇÃO
+// ============================================================================
+
+probabilidadePreCalibracao =
+     probabilidadeModelo +
+     boostTotal * 0.45 -
+     penaltyFinal * 0.55
+
+probabilidadePreCalibracao :=
+     math.min(
+         99.0,
+         math.max(
+             1.0,
+             probabilidadePreCalibracao))
+
+
+// ============================================================================
+// DIREÇÃO
+// ============================================================================
+
+direcaoIntensidade =
+     probabilidadePreCalibracao >= 50.0 ? -1 :
+     1
+
+direcaoTexto =
+     direcaoIntensidade < 0 ? "BAIXA" :
+     "ALTA"
+
+
+// ============================================================================
+// SINAL BASE PARA CALIBRAÇÃO
+// ============================================================================
+
+sinalBaseCalibracao =
+     probabilidadePreCalibracao >= 65.0 and
+     direcaoIntensidade < 0 and
+     mtfPercentualVenda >= 55.0
+
+
+// ============================================================================
+// CALIBRAÇÃO HISTÓRICA DIÁRIA
+// ============================================================================
+
+sinalAnterior =
+     sinalBaseCalibracao[horizonteCalibracao]
+
+movimentoFavoravel =
+     closeD < closeD[horizonteCalibracao]
+
+resultadoHistorico =
+     sinalAnterior and movimentoFavoravel
+
+amostraHistorica =
+     ta.sma(
+         sinalAnterior ? 1.0 : 0.0,
+         calibracaoPeriodo) *
+     calibracaoPeriodo
+
+acertosHistoricos =
+     ta.sma(
+         resultadoHistorico ? 1.0 : 0.0,
+         calibracaoPeriodo) *
+     calibracaoPeriodo
+
+taxaHistorica =
+     amostraHistorica >= 5.0 ?
+     acertosHistoricos / amostraHistorica * 100.0 :
+     probabilidadePreCalibracao
+
+pesoHistoricoEfetivo =
+     amostraHistorica >= 10.0 ?
+     pesoProbHistorica :
+     0.0
+
+pesoModeloEfetivo =
+     amostraHistorica >= 10.0 ?
+     pesoProbModelo :
+     1.0
+
+somaPesos =
+     pesoModeloEfetivo +
+     pesoHistoricoEfetivo
+
+probabilidadeCalibrada =
+     somaPesos > 0 ?
+     (
+         probabilidadePreCalibracao * pesoModeloEfetivo +
+         taxaHistorica * pesoHistoricoEfetivo
+     ) / somaPesos :
+     probabilidadePreCalibracao
+
+
+// ============================================================================
+// PROBABILIDADE SUAVIZADA
+// ============================================================================
+
+probabilidadeSuave =
+     ta.ema(
+         probabilidadeCalibrada,
+         probSuavizacao)
+
+probabilidadeFinal =
+     math.min(
+         99.0,
+         math.max(
+             1.0,
+             probabilidadeSuave))
+
+
+// ============================================================================
+// INTENSIDADE FINAL
+// ============================================================================
+
+intensidadeBase =
+     probabilidadeModelo * 0.55 +
+     confluenciaPercentual * 0.20 +
+     kvoForca * 0.10 +
+     microScoreHarmonizado * 0.10 +
+     atrRegime * 0.05
+
+intensidadeFinal =
+     intensidadeBase +
+     boostTotal -
+     penaltyFinal
+
+intensidadeFinal :=
+     math.min(
+         100.0,
+         math.max(
+             0.0,
+             intensidadeFinal))
+
+
+// ============================================================================
+// CLASSIFICAÇÃO
+// ============================================================================
+
+string classificacao = "FRACA"
+
+if intensidadeFinal >= 90
+    classificacao := "EXTREMA"
+else if intensidadeFinal >= 80
+    classificacao := "M FORTE"
+else if intensidadeFinal >= 70
+    classificacao := "FORTE"
+else if intensidadeFinal >= 60
+    classificacao := "MODERADA"
+
+
+string classificacaoProb = "BAIXA"
+
+if probabilidadeFinal >= 90
+    classificacaoProb := "EXTREMA"
+else if probabilidadeFinal >= 82
+    classificacaoProb := "M ALTA"
+else if probabilidadeFinal >= 72
+    classificacaoProb := "ALTA"
+else if probabilidadeFinal >= 60
+    classificacaoProb := "MODERADA"
+
+
+// ============================================================================
+// SUPORTE DIÁRIO
+// ============================================================================
+
+suporteDisponivel =
+     not na(suporte)
+
+distanciaSuporteAtual =
+     suporteDisponivel ?
+     (closeD - suporte) / atrSeguro :
+     999.0
+
+suporteProximo =
+     suporteDisponivel and
+     distanciaSuporteAtual < distanciaMinimaSuporteATR
+
+filtroSuporte =
+     not usarFiltroSuporte or
+     not suporteProximo
+
+
+// ============================================================================
+// CANDLE FORTE DIÁRIO
+// ============================================================================
+
+candleForte =
+     corpoPct >= corpoMinimo
+
+condicaoCandle =
+     candleForte and
+     direcaoCandle < 0
+
+
+// ============================================================================
+// CONDIÇÕES SHORT DIÁRIAS
+// ============================================================================
+
+condicaoTendencia =
+     direcaoIntensidade < 0 and
+     microFast < microSlow
+
+condicaoKvo =
+     kvoEstado < 0 and
+     kvoForca >= 40.0
+
+condicaoMTF =
+     mtfDirecao < 0 and
+     mtfPercentualVenda >= 65.0
+
+condicaoATR =
+     atrRatio >= 0.85
+
+condicaoConfluencia =
+     confirmacoes >= confluenciaMinima
+
+condicaoProbabilidade =
+     probabilidadeFinal >= probMinimaShort
+
+condicaoMicro =
+     microBreakoutVenda or
+     microBreakoutVendaWick or
+     microTrendBaixa
+
+condicaoVolume =
+     volumeRelativo >= 1.0
+
+
+// ============================================================================
+// CONTROLE DE FECHAMENTO DIÁRIO
+// ============================================================================
+
+novoDia =
+     ta.change(time("1D")) != 0
+
+diaOperacional =
+     timeframe.isdaily or
+     timeframe.isweekly or
+     timeframe.ismonthly or
+     usarSomenteDiario
+
+fechamentoDiario =
+     timeframe.isdaily ?
+     barstate.isconfirmed :
+     barstate.isconfirmed
+
+
+// ============================================================================
+// SHORT BASE
+// ============================================================================
+
+shortBase =
+     ativarShort and
+     diaOperacional and
+     condicaoTendencia and
+     condicaoKvo and
+     condicaoMTF and
+     condicaoATR and
+     condicaoConfluencia and
+     condicaoProbabilidade and
+     condicaoMicro and
+     filtroSuporte and
+     fechamentoDiario
+
+
+// ============================================================================
+// SHORT FORTE
+// ============================================================================
+
+shortForte =
+     shortBase and
+     probabilidadeFinal >= probMinimaForte and
+     intensidadeFinal >= 75.0
+
+
+// ============================================================================
+// SHORT EXTREMO
+// ============================================================================
+
+shortExtremo =
+     shortBase and
+     probabilidadeFinal >= probMinimaExtremo and
+     intensidadeFinal >= 85.0 and
+     mtfPercentualVenda >= 80.0 and
+     confluenciaPercentual >= 70.0
+
+
+// ============================================================================
+// STATUS
+// ============================================================================
+
+string statusShort = "SEM SHORT"
+
+if shortExtremo
+    statusShort := "SHORT EXTREMO"
+else if shortForte
+    statusShort := "SHORT FORTE"
+else if shortBase
+    statusShort := "SHORT"
+else if probabilidadeFinal >= 60.0
+    statusShort := "SHORT EM FORMAÇÃO"
+
+
+// ============================================================================
+// POTENCIAL
+// ============================================================================
+
+string potencialShort = "BAIXO"
+
+if probabilidadeFinal >= 90
+    potencialShort := "EXTREMO"
+else if probabilidadeFinal >= 82
+    potencialShort := "ALTO"
+else if probabilidadeFinal >= 72
+    potencialShort := "BOM"
+else if probabilidadeFinal >= 60
+    potencialShort := "MODERADO"
+
+
+// ============================================================================
+// MULTIPLICADOR DE ALVO
+// ============================================================================
+
+multiplicadorProb =
+     probabilidadeFinal >= 95 ? 1.40 :
+     probabilidadeFinal >= 90 ? 1.30 :
+     probabilidadeFinal >= 82 ? 1.20 :
+     probabilidadeFinal >= 75 ? 1.10 :
+     1.00
+
+multiplicadorMTF =
+     mtfPercentualVenda >= 90 ? 1.20 :
+     mtfPercentualVenda >= 80 ? 1.12 :
+     mtfPercentualVenda >= 70 ? 1.06 :
+     1.00
+
+multiplicadorATR =
+     atrRatio >= 1.50 ? 1.20 :
+     atrRatio >= 1.25 ? 1.12 :
+     atrRatio >= 1.00 ? 1.05 :
+     0.92
+
+multiplicadorMicro =
+     rompimentoEstruturalVenda ? 1.15 :
+     microBreakoutVenda ? 1.08 :
+     1.00
+
+multiplicadorAlvo =
+     math.min(
+         1.80,
+         math.max(
+             0.75,
+             multiplicadorProb *
+             multiplicadorMTF *
+             multiplicadorATR *
+             multiplicadorMicro))
+
+
+// ============================================================================
+// ENTRADA
+// ============================================================================
+
+entradaShort = closeD
+
+
+// ============================================================================
+// ALVOS DIÁRIOS
+// ============================================================================
+
+alvo1Short =
+     entradaShort -
+     atrSeguro * 1.0 *
+     multiplicadorAlvo
+
+alvo2Short =
+     entradaShort -
+     atrSeguro * 2.0 *
+     multiplicadorAlvo
+
+alvo3Short =
+     entradaShort -
+     atrSeguro * 3.0 *
+     multiplicadorAlvo
+
+alvo4Short =
+     entradaShort -
+     atrSeguro * 4.0 *
+     multiplicadorAlvo
+
+alvo5Short =
+     entradaShort -
+     atrSeguro * 5.0 *
+     multiplicadorAlvo
+
+
+// ============================================================================
+// DISTÂNCIAS
+// ============================================================================
+
+distAlvo1Pct =
+     entradaShort != 0 ?
+     (entradaShort - alvo1Short) /
+     entradaShort * 100.0 :
+     0.0
+
+distAlvo2Pct =
+     entradaShort != 0 ?
+     (entradaShort - alvo2Short) /
+     entradaShort * 100.0 :
+     0.0
+
+distAlvo3Pct =
+     entradaShort != 0 ?
+     (entradaShort - alvo3Short) /
+     entradaShort * 100.0 :
+     0.0
+
+distAlvo4Pct =
+     entradaShort != 0 ?
+     (entradaShort - alvo4Short) /
+     entradaShort * 100.0 :
+     0.0
+
+distAlvo5Pct =
+     entradaShort != 0 ?
+     (entradaShort - alvo5Short) /
+     entradaShort * 100.0 :
+     0.0
+
+
+distAlvo1ATR =
+     (entradaShort - alvo1Short) /
+     atrSeguro
+
+distAlvo2ATR =
+     (entradaShort - alvo2Short) /
+     atrSeguro
+
+distAlvo3ATR =
+     (entradaShort - alvo3Short) /
+     atrSeguro
+
+distAlvo4ATR =
+     (entradaShort - alvo4Short) /
+     atrSeguro
+
+distAlvo5ATR =
+     (entradaShort - alvo5Short) /
+     atrSeguro
+
+
+// ============================================================================
+// ALVO PRINCIPAL
+// ============================================================================
+
+float alvoPrincipal = alvo1Short
+
+string alvoPrincipalNome = "ALVO 1"
+
+
+if probabilidadeFinal >= 90.0
+    alvoPrincipal := alvo5Short
+    alvoPrincipalNome := "ALVO 5"
+
+else if probabilidadeFinal >= 82.0
+    alvoPrincipal := alvo4Short
+    alvoPrincipalNome := "ALVO 4"
+
+else if probabilidadeFinal >= 75.0
+    alvoPrincipal := alvo3Short
+    alvoPrincipalNome := "ALVO 3"
+
+else if probabilidadeFinal >= 70.0
+    alvoPrincipal := alvo2Short
+    alvoPrincipalNome := "ALVO 2"
+
+
+// ============================================================================
+// PROTEÇÃO DO SUPORTE
+// ============================================================================
+
+if usarFiltroSuporte and suporteDisponivel and alvoPrincipal < suporte
+    alvoPrincipal := suporte
+    alvoPrincipalNome := "SUPORTE"
+
+
+distAlvoPrincipalPct =
+     entradaShort != 0 ?
+     (entradaShort - alvoPrincipal) /
+     entradaShort * 100.0 :
+     0.0
+
+distAlvoPrincipalATR =
+     (entradaShort - alvoPrincipal) /
+     atrSeguro
+
+
+// ============================================================================
+// CORES DINÂMICAS
+// ============================================================================
+
+corProb =
+     probabilidadeFinal >= 90 ? corVermelhoForte :
+     probabilidadeFinal >= 82 ? corVermelho :
+     probabilidadeFinal >= 72 ? corAmarelo :
+     probabilidadeFinal >= 60 ? corCiano :
+     corCinza
+
+corMTF =
+     mtfPercentualVenda >= 85 ? corVermelhoForte :
+     mtfPercentualVenda >= 70 ? corVermelho :
+     mtfPercentualVenda >= 55 ? corAmarelo :
+     corCinza
+
+corStatus =
+     shortExtremo ? corVermelhoForte :
+     shortForte ? corVermelho :
+     shortBase ? corCiano :
+     corCinza
+
+
+// ============================================================================
+// CANDLE DE FORÇA
+// ============================================================================
+
+corCandle =
+     candleForte and direcaoCandle < 0 ?
+     corVermelho :
+     na
+
+barcolor(
+     mostrarCandleForca ?
+     corCandle :
+     na)
+
+
+// ============================================================================
+// MICRO-ROMPIMENTO
+// ============================================================================
+
+plotshape(
+     mostrarMicroBreakout and microBreakoutVenda,
+     title="Micro Rompimento Venda Diário",
+     style=shape.triangledown,
+     location=location.abovebar,
+     size=size.tiny,
+     color=corVermelhoForte)
+
+
+// ============================================================================
+// PROBABILIDADE NO GRÁFICO
+// ============================================================================
+
+plotshape(
+     mostrarProbabilidadeGrafico and shortBase,
+     title="SHORT Probabilístico Diário",
+     style=shape.labeldown,
+     location=location.abovebar,
+     size=size.tiny,
+     color=corProb,
+     text="SHORT")
+
+
+// ============================================================================
+// LABEL DO SHORT
+// ============================================================================
+
+if mostrarProbabilidadeGrafico and shortBase and barstate.isconfirmed
+
+    label.new(
+         bar_index,
+         highD + atrSeguro * 0.25,
+         "SHORT\n" +
+         str.tostring(probabilidadeFinal, "#.0") +
+         "%\n" +
+         potencialShort,
+         style=label.style_label_down,
+         color=corProb,
+         textcolor=color.white,
+         size=size.tiny)
+
+
+// ============================================================================
+// BARRA DE PROBABILIDADE
+// ============================================================================
+
+f_barra(valor) =>
+    tamanho = 10
+
+    v = math.min(
+         100.0,
+         math.max(
+             0.0,
+             valor))
+
+    preenchido =
+         int(
+             math.round(
+                 v / 100.0 *
+                 tamanho))
+
+    resultado = ""
+
+    for i = 0 to tamanho - 1
+        resultado +=
+             i < preenchido ?
+             "█" :
+             "░"
+
+    resultado
+
+
+barraProb =
+     f_barra(probabilidadeFinal)
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+var table painel =
+     table.new(
+         position.top_right,
+         5,
+         32,
+         bgcolor=corFundo,
+         border_width=1,
+         border_color=corBorda)
+
+
+f_celula(coluna, linha, texto, corTexto, alinhamento) =>
+    table.cell(
+         painel,
+         coluna,
+         linha,
+         texto,
+         text_color=corTexto,
+         bgcolor=corFundo,
+         text_size=size.small,
+         text_halign=alinhamento)
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+if barstate.islast and mostrarTabela
+
+    f_celula(0, 0, "DIREÇÃO", corBranco, text.align_center)
+
+    f_celula(1, 0, "PROBABILIDADE", corBranco, text.align_center)
+
+    f_celula(2, 0, "INDICADORES", corBranco, text.align_center)
+
+    f_celula(3, 0, "DIÁRIO", corBranco, text.align_center)
+
+    f_celula(4, 0, "RESULTADO", corAmarelo, text.align_center)
+
+
+    f_celula(
+         0,
+         1,
+         "DIREÇÃO " + direcaoTexto,
+         corVermelho,
+         text.align_center)
+
+
+    f_celula(
+         0,
+         2,
+         "INTENSIDADE " +
+         str.tostring(intensidadeFinal, "#.##") +
+         "%",
+         corProb,
+         text.align_center)
+
+
+    f_celula(
+         0,
+         3,
+         "CANDLE " +
+         (candleForte ? "FORTE" : "NORMAL"),
+         candleForte ? corVermelho : corCinza,
+         text.align_center)
+
+
+    microTexto =
+         microTrendBaixa ? "BAIXA" :
+         microTrendAlta ? "ALTA" :
+         "NEUTRA"
+
+    microCor =
+         microTrendBaixa ? corVermelho :
+         microTrendAlta ? corVerde :
+         corCinza
+
+
+    f_celula(
+         0,
+         4,
+         "MICRO " + microTexto,
+         microCor,
+         text.align_center)
+
+
+    f_celula(
+         1,
+         1,
+         "SHORT " + barraProb,
+         corProb,
+         text.align_left)
+
+
+    f_celula(
+         1,
+         2,
+         "PROB. " +
+         str.tostring(probabilidadeFinal, "#.##") +
+         "%",
+         corProb,
+         text.align_center)
+
+
+    f_celula(
+         1,
+         3,
+         classificacaoProb,
+         corProb,
+         text.align_center)
+
+
+    f_celula(
+         1,
+         4,
+         "MODELO " +
+         str.tostring(probabilidadeModelo, "#.##") +
+         "%",
+         corCiano,
+         text.align_center)
+
+
+    f_celula(
+         2,
+         1,
+         "KVO " +
+         str.tostring(kvoForca, "#.##") +
+         "%",
+         kvoEstado < 0 ?
+         corVermelho :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         2,
+         2,
+         "ATR " +
+         str.tostring(atrRatio, "#.##") +
+         "x",
+         atrRatio >= 1 ?
+         corCiano :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         2,
+         3,
+         "VOL " +
+         str.tostring(volumeRelativo, "#.##") +
+         "x",
+         volumeRelativo >= 1.2 ?
+         corCiano :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         2,
+         4,
+         "MOM " +
+         str.tostring(momentum, "#.##") +
+         "%",
+         momentum < 0 ?
+         corVermelho :
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         3,
+         1,
+         "DIÁRIO " +
+         str.tostring(scoreDiario, "#") +
+         "%",
+         mtfDirecao < 0 ?
+         corVermelho :
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         3,
+         2,
+         "EMA 8 " +
+         str.tostring(ema8D, format.mintick),
+         microBaixaD ?
+         corVermelho :
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         3,
+         3,
+         "EMA 21 " +
+         str.tostring(ema21D, format.mintick),
+         closeD < ema21D ?
+         corVermelho :
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         3,
+         4,
+         "EMA 50 " +
+         str.tostring(ema50D, format.mintick),
+         closeD < ema50D ?
+         corVermelho :
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         3,
+         5,
+         "D " +
+         str.tostring(mtfPercentualVenda, "#.##") +
+         "%",
+         corMTF,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         1,
+         statusShort,
+         corStatus,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         2,
+         "PROB " +
+         str.tostring(probabilidadeFinal, "#.##") +
+         "%",
+         corProb,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         3,
+         "CONF " +
+         str.tostring(confirmacoes) +
+         " / " +
+         str.tostring(divergencias),
+         confirmacoes >= confluenciaMinima ?
+         corVerde :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         4,
+         "CONFL. " +
+         str.tostring(confluenciaPercentual, "#.##") +
+         "%",
+         confluenciaPercentual >= 70 ?
+         corVerde :
+         corAmarelo,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         5,
+         "MICRO BREAK " +
+         (microBreakoutVenda ? "SIM" : "NÃO"),
+         microBreakoutVenda ?
+         corVermelho :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         6,
+         "POTENCIAL " +
+         potencialShort,
+         corProb,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         7,
+         "ALVO PRINCIPAL",
+         corVerdeForte,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         8,
+         alvoPrincipalNome +
+         " " +
+         str.tostring(
+             alvoPrincipal,
+             format.mintick),
+         corVerdeForte,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         9,
+         "DIST " +
+         str.tostring(
+             distAlvoPrincipalPct,
+             "#.##") +
+         "%",
+         corCiano,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         10,
+         "ATR " +
+         str.tostring(
+             distAlvoPrincipalATR,
+             "#.##") +
+         "x",
+         corCiano,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         11,
+         "ALVO 1 " +
+         str.tostring(
+             alvo1Short,
+             format.mintick),
+         corCiano,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         12,
+         "ALVO 2 " +
+         str.tostring(
+             alvo2Short,
+             format.mintick),
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         13,
+         "ALVO 3 " +
+         str.tostring(
+             alvo3Short,
+             format.mintick),
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         14,
+         "ALVO 4 " +
+         str.tostring(
+             alvo4Short,
+             format.mintick),
+         corVerdeForte,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         15,
+         "ALVO 5 " +
+         str.tostring(
+             alvo5Short,
+             format.mintick),
+         corVerdeForte,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         16,
+         "MULT. " +
+         str.tostring(
+             multiplicadorAlvo,
+             "#.##") +
+         "x",
+         corAmarelo,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         17,
+         "ATR " +
+         str.tostring(
+             atrPercentual,
+             "#.##") +
+         "%",
+         corCiano,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         18,
+         "PENALTY " +
+         str.tostring(
+             penaltyFinal,
+             "#.##"),
+         corVermelho,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         19,
+         "BOOST " +
+         str.tostring(
+             boostTotal,
+             "#.##"),
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         20,
+         "HIST " +
+         str.tostring(
+             taxaHistorica,
+             "#.##") +
+         "%",
+         amostraHistorica >= 10 ?
+         corCiano :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         21,
+         "AMOSTRAS " +
+         str.tostring(
+             amostraHistorica,
+             "#"),
+         corBranco,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         22,
+         "SUPORTE " +
+         str.tostring(
+             suporte,
+             format.mintick),
+         suporteProximo ?
+         corVermelho :
+         corCiano,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         23,
+         "DIST SUP " +
+         str.tostring(
+             distanciaSuporteAtual,
+             "#.##") +
+         " ATR",
+         suporteProximo ?
+         corVermelho :
+         corVerde,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         24,
+         "TENDÊNCIA " +
+         (condicaoTendencia ?
+         "BAIXA" :
+         "NÃO"),
+         condicaoTendencia ?
+         corVermelho :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         25,
+         "KVO " +
+         (condicaoKvo ?
+         "BAIXA" :
+         "NÃO"),
+         condicaoKvo ?
+         corVermelho :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         26,
+         "DIÁRIO " +
+         mtfTexto,
+         corMTF,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         27,
+         "ATR REGIME " +
+         str.tostring(
+             atrRegime,
+             "#"),
+         corCiano,
+         text.align_center)
+
+
+    rompimentoTexto =
+         rompimentoEstruturalVenda ?
+         "ESTRUTURAL" :
+         microBreakoutVenda ?
+         "MICRO" :
+         "NÃO"
+
+    rompimentoCor =
+         rompimentoEstruturalVenda ?
+         corVermelhoForte :
+         microBreakoutVenda ?
+         corVermelho :
+         corCinza
+
+
+    f_celula(
+         4,
+         28,
+         "ROMPIMENTO " +
+         rompimentoTexto,
+         rompimentoCor,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         29,
+         "SINAL " +
+         (shortBase ?
+         "VENDA" :
+         "AGUARDAR"),
+         shortBase ?
+         corVermelhoForte :
+         corCinza,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         30,
+         classificacao,
+         corProb,
+         text.align_center)
+
+
+    f_celula(
+         4,
+         31,
+         "TIMEFRAME 1D",
+         corRoxo,
+         text.align_center)
+
+
+// ============================================================================
+// PLOT DO ALVO PRINCIPAL
+// ============================================================================
+
+plot(
+     shortBase ?
+     alvoPrincipal :
+     na,
+     title="Alvo Principal SHORT Diário",
+     color=corVerde,
+     linewidth=2,
+     style=plot.style_linebr)
+
+
+// ============================================================================
+// PLOT DO SUPORTE
+// ============================================================================
+
+plot(
+     suporte,
+     title="Suporte Estrutural Diário",
+     color=color.new(corCiano, 50),
+     linewidth=1)
+
+
+// ============================================================================
+// SINAL PRINCIPAL
+// ============================================================================
+
+plotshape(
+     shortBase,
+     title="SINAL SHORT PROBABILÍSTICO DIÁRIO",
+     style=shape.square,
+     location=location.abovebar,
+     size=size.small,
+     color=corProb)
+
+
+// ============================================================================
+// WEBHOOK
+// ============================================================================
+
+condicaoWebhook =
+     usarWebhook and
+     shortBase and
+     (
+         not alertaSomenteFechamento or
+         barstate.isconfirmed
+     )
+
+
+microTendenciaWebhook =
+     microTrendBaixa ?
+     "BAIXA" :
+     microTrendAlta ?
+     "ALTA" :
+     "NEUTRA"
+
+
+mensagemWebhook =
+     "{\"sistema\":\"KVO PRO\"," +
+     "\"versao\":\"V11.0 SHORT PROBABILISTIC DIARIO\"," +
+     "\"ticker\":\"" + syminfo.ticker + "\"," +
+     "\"exchange\":\"" + syminfo.prefix + "\"," +
+     "\"timeframe_operacional\":\"1D\"," +
+     "\"timeframe_grafico\":\"" + timeframe.period + "\"," +
+     "\"timestamp\":\"" + str.tostring(time) + "\"," +
+     "\"close\":" + str.tostring(closeD) + "," +
+     "\"probabilidade_short\":" + str.tostring(probabilidadeFinal, "#.##") + "," +
+     "\"probabilidade_modelo\":" + str.tostring(probabilidadeModelo, "#.##") + "," +
+     "\"probabilidade_pre_calibracao\":" + str.tostring(probabilidadePreCalibracao, "#.##") + "," +
+     "\"taxa_historica\":" + str.tostring(taxaHistorica, "#.##") + "," +
+     "\"amostras_historicas\":" + str.tostring(amostraHistorica, "#.##") + "," +
+     "\"intensidade\":" + str.tostring(intensidadeFinal, "#.##") + "," +
+     "\"classificacao\":\"" + classificacao + "\"," +
+     "\"classificacao_probabilidade\":\"" + classificacaoProb + "\"," +
+     "\"kvo_estado\":" + str.tostring(kvoEstado) + "," +
+     "\"kvo_forca\":" + str.tostring(kvoForca, "#.##") + "," +
+     "\"atr\":" + str.tostring(atrSeguro, format.mintick) + "," +
+     "\"atr_ratio\":" + str.tostring(atrRatio, "#.##") + "," +
+     "\"atr_regime\":" + str.tostring(atrRegime, "#.##") + "," +
+     "\"volume_relativo\":" + str.tostring(volumeRelativo, "#.##") + "," +
+     "\"rsi\":" + str.tostring(rsi, "#.##") + "," +
+     "\"momentum\":" + str.tostring(momentum, "#.##") + "," +
+     "\"micro_tendencia\":\"" + microTendenciaWebhook + "\"," +
+     "\"micro_breakout\":" + str.tostring(microBreakoutVenda) + "," +
+     "\"rompimento_estrutural\":" + str.tostring(rompimentoEstruturalVenda) + "," +
+     "\"analise_diaria\":" + str.tostring(scoreDiario, "#.##") + "," +
+     "\"ema_8\":" + str.tostring(ema8D, format.mintick) + "," +
+     "\"ema_21\":" + str.tostring(ema21D, format.mintick) + "," +
+     "\"ema_50\":" + str.tostring(ema50D, format.mintick) + "," +
+     "\"mtf_percentual_venda\":" + str.tostring(mtfPercentualVenda, "#.##") + "," +
+     "\"confirmacoes\":" + str.tostring(confirmacoes) + "," +
+     "\"divergencias\":" + str.tostring(divergencias) + "," +
+     "\"confluencia_percentual\":" + str.tostring(confluenciaPercentual, "#.##") + "," +
+     "\"boost\":" + str.tostring(boostTotal, "#.##") + "," +
+     "\"penalty\":" + str.tostring(penaltyFinal, "#.##") + "," +
+     "\"status_short\":\"" + statusShort + "\"," +
+     "\"potencial_short\":\"" + potencialShort + "\"," +
+     "\"entrada_short\":" + str.tostring(entradaShort, format.mintick) + "," +
+     "\"multiplicador_alvo\":" + str.tostring(multiplicadorAlvo, "#.####") + "," +
+     "\"alvo_1\":" + str.tostring(alvo1Short, format.mintick) + "," +
+     "\"alvo_2\":" + str.tostring(alvo2Short, format.mintick) + "," +
+     "\"alvo_3\":" + str.tostring(alvo3Short, format.mintick) + "," +
+     "\"alvo_4\":" + str.tostring(alvo4Short, format.mintick) + "," +
+     "\"alvo_5\":" + str.tostring(alvo5Short, format.mintick) + "," +
+     "\"alvo_principal_nome\":\"" + alvoPrincipalNome + "\"," +
+     "\"alvo_principal\":" + str.tostring(alvoPrincipal, format.mintick) + "," +
+     "\"dist_alvo_principal_pct\":" + str.tostring(distAlvoPrincipalPct, "#.##") + "," +
+     "\"dist_alvo_principal_atr\":" + str.tostring(distAlvoPrincipalATR, "#.##") + "," +
+     "\"sinal_venda\":" + str.tostring(shortBase) + "," +
+     "\"short_forte\":" + str.tostring(shortForte) + "," +
+     "\"short_extremo\":" + str.tostring(shortExtremo) +
+     "}"
+
+
+// ============================================================================
+// ALERTA WEBHOOK
+// ============================================================================
+
+if condicaoWebhook
+    alert(
+         mensagemWebhook,
+         alert.freq_once_per_bar_close)
+
+
+// ============================================================================
+// ALERTCONDITION
+// ============================================================================
+
+alertcondition(
+     shortBase,
+     "KVO PRO V11 DIÁRIO - SHORT PROBABILÍSTICO",
+     "KVO PRO V11 DIÁRIO: SHORT probabilístico confirmado.")
+
+
+alertcondition(
+     shortForte,
+     "KVO PRO V11 DIÁRIO - SHORT FORTE",
+     "KVO PRO V11 DIÁRIO: SHORT FORTE confirmado.")
+
+
+alertcondition(
+     shortExtremo,
+     "KVO PRO V11 DIÁRIO - SHORT EXTREMO",
+     "KVO PRO V11 DIÁRIO: SHORT EXTREMO confirmado.")
+
+
+alertcondition(
+     microBreakoutVenda,
+     "KVO PRO V11 DIÁRIO - MICRO ROMPIMENTO",
+     "KVO PRO V11 DIÁRIO: micro-rompimento de baixa detectado.")
+
+
+alertcondition(
+     probabilidadeFinal >= 90.0,
+     "KVO PRO V11 DIÁRIO - PROBABILIDADE EXTREMA",
+     "KVO PRO V11 DIÁRIO: probabilidade SHORT >= 90%.")
+

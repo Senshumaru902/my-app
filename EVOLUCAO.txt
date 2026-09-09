@@ -1,0 +1,3617 @@
+//@version=6
+indicator("KVO PRO - ETHEREUM V10.0 LONG TARGET + PICO V3", overlay=true, max_labels_count=500)
+
+// ============================================================================
+// KVO PRO - ETHEREUM V10.0
+// LONG TARGET
+//
+// BASE:
+// V9.2 MTF + ATR + WEBHOOK + PICO V3
+//
+// NOVO:
+// + LONG
+// + ALVO 1
+// + ALVO 2
+// + ALVO 3
+// + ALVO ESTENDIDO
+// + ALVO PRINCIPAL
+// + DISTÂNCIA %
+// + DISTÂNCIA ATR
+// + POTENCIAL LONG
+// + FILTRO ESTRUTURAL
+// + WEBHOOK JSON COMPLETO
+// ============================================================================
+
+
+// ============================================================================
+// CONFIGURAÇÕES
+// ============================================================================
+
+groupConfig = "KVO PRO - CONFIGURAÇÕES"
+
+corpoMinimo = input.float(
+     0.70,
+     "Corpo mínimo",
+     minval=0.0,
+     maxval=1.0,
+     step=0.05,
+     group=groupConfig
+)
+
+atrPeriodo = input.int(
+     14,
+     "ATR período",
+     minval=1,
+     group=groupConfig
+)
+
+estruturaLookback = input.int(
+     20,
+     "Estrutura",
+     minval=2,
+     group=groupConfig
+)
+
+confirmacaoLookback = input.int(
+     5,
+     "Confirmação",
+     minval=2,
+     group=groupConfig
+)
+
+kvoFast = input.int(
+     34,
+     "KVO Fast",
+     minval=1,
+     group=groupConfig
+)
+
+kvoSlow = input.int(
+     55,
+     "KVO Slow",
+     minval=2,
+     group=groupConfig
+)
+
+kvoSignalPeriodo = input.int(
+     13,
+     "KVO Signal",
+     minval=1,
+     group=groupConfig
+)
+
+boostMaximo = input.float(
+     20.0,
+     "Boost máximo",
+     minval=0,
+     maxval=100,
+     group=groupConfig
+)
+
+penaltyMaximo = input.float(
+     15.0,
+     "Penalty máximo",
+     minval=0,
+     maxval=100,
+     group=groupConfig
+)
+
+pesoCorpo = input.float(
+     0.50,
+     "Peso corpo",
+     minval=0,
+     maxval=1,
+     step=0.05,
+     group=groupConfig
+)
+
+pesoModelo = input.float(
+     0.50,
+     "Peso modelo",
+     minval=0,
+     maxval=1,
+     step=0.05,
+     group=groupConfig
+)
+
+mostrarCandleForca = input.bool(
+     true,
+     "Colorir candles de força",
+     group=groupConfig
+)
+
+somenteCandleForca = input.bool(
+     false,
+     "Alertar somente candle de força",
+     group=groupConfig
+)
+
+mostrarTabela = input.bool(
+     true,
+     "Mostrar painel",
+     group=groupConfig
+)
+
+usarWebhook = input.bool(
+     true,
+     "Ativar webhook",
+     group=groupConfig
+)
+
+alertaSomenteFechamento = input.bool(
+     true,
+     "Alertar no fechamento do candle",
+     group=groupConfig
+)
+
+
+// ============================================================================
+// CONFIGURAÇÃO LONG TARGET
+// ============================================================================
+
+groupLong = "KVO PRO - LONG TARGET"
+
+ativarLong = input.bool(
+     true,
+     "Ativar previsão LONG",
+     group=groupLong
+)
+
+longMinimoIntensidade = input.float(
+     70.0,
+     "Intensidade mínima LONG",
+     minval=0,
+     maxval=100,
+     step=1,
+     group=groupLong
+)
+
+longMinimoConfianca = input.float(
+     50.0,
+     "Confiança mínima LONG",
+     minval=0,
+     maxval=100,
+     step=1,
+     group=groupLong
+)
+
+longMinimoMTF = input.float(
+     50.0,
+     "MTF mínimo LONG",
+     minval=0,
+     maxval=100,
+     step=5,
+     group=groupLong
+)
+
+longMinimoKvo = input.float(
+     40.0,
+     "KVO mínimo LONG",
+     minval=0,
+     maxval=100,
+     step=5,
+     group=groupLong
+)
+
+longMinimoPico = input.float(
+     60.0,
+     "PICO mínimo LONG",
+     minval=0,
+     maxval=100,
+     step=1,
+     group=groupLong
+)
+
+usarFiltroResistencia = input.bool(
+     true,
+     "Usar filtro de resistência",
+     group=groupLong
+)
+
+distanciaMinimaResistenciaATR = input.float(
+     0.50,
+     "Distância mínima resistência / ATR",
+     minval=0,
+     maxval=10,
+     step=0.10,
+     group=groupLong
+)
+
+
+// ============================================================================
+// MULTI TIMEFRAME
+// ============================================================================
+
+groupMTF = "KVO PRO - MULTI TIMEFRAME"
+
+tf1 = input.timeframe("5", "MTF 1", group=groupMTF)
+tf2 = input.timeframe("15", "MTF 2", group=groupMTF)
+tf3 = input.timeframe("60", "MTF 3", group=groupMTF)
+tf4 = input.timeframe("240", "MTF 4", group=groupMTF)
+
+usarMTF1 = input.bool(true, "Usar MTF 1", group=groupMTF)
+usarMTF2 = input.bool(true, "Usar MTF 2", group=groupMTF)
+usarMTF3 = input.bool(true, "Usar MTF 3", group=groupMTF)
+usarMTF4 = input.bool(true, "Usar MTF 4", group=groupMTF)
+
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corVerde = color.rgb(0, 255, 100)
+corVerdeForte = color.rgb(0, 255, 0)
+corVermelho = color.rgb(255, 60, 60)
+corAmarelo = color.rgb(255, 210, 0)
+corCinza = color.rgb(150, 150, 150)
+corCiano = color.rgb(0, 220, 255)
+corAzul = color.rgb(0, 150, 255)
+corBranco = color.white
+
+corFundo = color.rgb(15, 15, 20)
+corFundo2 = color.rgb(25, 25, 32)
+corBorda = color.rgb(70, 70, 80)
+
+
+// ============================================================================
+// DADOS DO CANDLE
+// ============================================================================
+
+abertura = open
+maxima = high
+minima = low
+fechamento = close
+volumeAtual = volume
+
+rangeCandle = high - low
+corpo = math.abs(close - open)
+
+pavioSuperior = high - math.max(open, close)
+pavioInferior = math.min(open, close) - low
+
+rangeSeguro = math.max(rangeCandle, syminfo.mintick)
+
+corpoPct = corpo / rangeSeguro
+
+pavioSuperiorPct = pavioSuperior / rangeSeguro
+pavioInferiorPct = pavioInferior / rangeSeguro
+
+
+// ============================================================================
+// DIREÇÃO
+// ============================================================================
+
+direcaoCandle =
+     close > open ? 1 :
+     close < open ? -1 :
+     0
+
+direcaoTexto =
+     direcaoCandle > 0 ?
+     "ALTA" :
+     direcaoCandle < 0 ?
+     "BAIXA" :
+     "NEUTRA"
+
+
+// ============================================================================
+// RETORNOS
+// ============================================================================
+
+retorno1 =
+     not na(close[1]) ?
+     close / close[1] - 1.0 :
+     0.0
+
+retorno3 =
+     not na(close[3]) ?
+     close / close[3] - 1.0 :
+     0.0
+
+retorno5 =
+     not na(close[5]) ?
+     close / close[5] - 1.0 :
+     0.0
+
+
+// ============================================================================
+// MÉDIAS
+// ============================================================================
+
+mm5 = ta.sma(close, 5)
+mm10 = ta.sma(close, 10)
+mm20 = ta.sma(close, 20)
+
+distMm5 =
+     not na(mm5) ?
+     close / mm5 - 1.0 :
+     0.0
+
+distMm10 =
+     not na(mm10) ?
+     close / mm10 - 1.0 :
+     0.0
+
+distMm20 =
+     not na(mm20) ?
+     close / mm20 - 1.0 :
+     0.0
+
+
+// ============================================================================
+// VOLUME
+// ============================================================================
+
+volumeMm20 = ta.sma(volume, 20)
+
+volumeRelativo =
+     not na(volumeMm20) and volumeMm20 != 0 ?
+     volume / volumeMm20 :
+     1.0
+
+
+// ============================================================================
+// ATR
+// ============================================================================
+
+atr = ta.atr(atrPeriodo)
+
+atrSeguro = math.max(
+     atr,
+     syminfo.mintick
+)
+
+atrRelativo =
+     not na(close) and close != 0 ?
+     atr / close * 100.0 :
+     0.0
+
+atrMedia = ta.sma(atr, 20)
+
+atrForte =
+     not na(atrMedia) and atr > atrMedia
+
+atrFraco =
+     not na(atrMedia) and atr < atrMedia
+
+atrDirecao =
+     close > open ? 1 :
+     close < open ? -1 :
+     0
+
+atrBoaCompra =
+     atrDirecao > 0 and atrForte
+
+atrBoaVenda =
+     atrDirecao < 0 and atrForte
+
+atrClassificacao =
+     atrBoaCompra ?
+     "BOA COMPRA" :
+     atrBoaVenda ?
+     "BOA VENDA" :
+     atrForte ?
+     "FORTE / NEUTRO" :
+     "FRACO"
+
+corAtr =
+     atrBoaCompra ?
+     corVerde :
+     atrBoaVenda ?
+     corVermelho :
+     corCinza
+
+
+// ============================================================================
+// ESTRUTURA
+// ============================================================================
+
+suporte20 = ta.lowest(
+     low[1],
+     estruturaLookback
+)
+
+resistencia20 = ta.highest(
+     high[1],
+     estruturaLookback
+)
+
+suporte5 = ta.lowest(
+     low[1],
+     confirmacaoLookback
+)
+
+resistencia5 = ta.highest(
+     high[1],
+     confirmacaoLookback
+)
+
+distResistencia =
+     (resistencia20 - close) /
+     atrSeguro
+
+distSuporte =
+     (close - suporte20) /
+     atrSeguro
+
+
+// ============================================================================
+// KVO
+// ============================================================================
+
+precoTipico =
+     (high + low + close) / 3.0
+
+tendenciaKvo =
+     precoTipico > precoTipico[1] ?
+     1 :
+     precoTipico < precoTipico[1] ?
+     -1 :
+     0
+
+dmKvo = high - low
+
+var float cmKvo = 0.0
+
+if bar_index == 0
+    cmKvo := dmKvo
+else
+    cmKvo :=
+         tendenciaKvo == tendenciaKvo[1] ?
+         cmKvo[1] + dmKvo :
+         dmKvo + dmKvo[1]
+
+cmSeguro = math.max(
+     cmKvo,
+     syminfo.mintick
+)
+
+vfKvo =
+     volume *
+     math.abs(
+         2.0 *
+         (dmKvo / cmSeguro) -
+         1.0
+     ) *
+     tendenciaKvo *
+     100.0
+
+kvo =
+     ta.ema(vfKvo, kvoFast) -
+     ta.ema(vfKvo, kvoSlow)
+
+kvoSignal =
+     ta.ema(
+         kvo,
+         kvoSignalPeriodo
+     )
+
+kvoHist =
+     kvo - kvoSignal
+
+kvoVariacao =
+     kvo - kvo[1]
+
+kvoDesvio =
+     ta.stdev(
+         kvo,
+         34
+     )
+
+kvoZscore =
+     not na(kvoDesvio) and kvoDesvio != 0 ?
+     kvo / kvoDesvio :
+     0.0
+
+kvoForcaBruta =
+     math.abs(kvoHist) /
+     (
+         math.abs(kvo) +
+         math.abs(kvoSignal) +
+         0.000000001
+     )
+
+kvoForca =
+     math.min(
+         math.max(
+             kvoForcaBruta,
+             0.0
+         ),
+         1.0
+     ) * 100.0
+
+kvoEstado =
+     kvo > kvoSignal and kvoVariacao > 0 ?
+     1 :
+     kvo < kvoSignal and kvoVariacao < 0 ?
+     -1 :
+     0
+
+kvoEstadoTexto =
+     kvoEstado > 0 ?
+     "ALTA" :
+     kvoEstado < 0 ?
+     "BAIXA" :
+     "NEUTRO"
+
+corKvo =
+     kvoEstado > 0 ?
+     corVerde :
+     kvoEstado < 0 ?
+     corVermelho :
+     corCinza
+
+
+// ============================================================================
+// CANDLE DE FORÇA
+// ============================================================================
+
+forcaCorpo =
+     math.min(
+         math.max(
+             corpoPct * 100.0,
+             0.0
+         ),
+         100.0
+     )
+
+candleForte =
+     corpoPct >= corpoMinimo
+
+
+// ============================================================================
+// MODELO DIRECIONAL
+// ============================================================================
+
+float pontosAltaModelo = 0.0
+float pontosBaixaModelo = 0.0
+
+if close > open
+    pontosAltaModelo += 2.0
+else if close < open
+    pontosBaixaModelo += 2.0
+
+if kvoEstado > 0
+    pontosAltaModelo += 2.0
+else if kvoEstado < 0
+    pontosBaixaModelo += 2.0
+
+if retorno1 > 0
+    pontosAltaModelo += 1.0
+else if retorno1 < 0
+    pontosBaixaModelo += 1.0
+
+if retorno3 > 0
+    pontosAltaModelo += 1.0
+else if retorno3 < 0
+    pontosBaixaModelo += 1.0
+
+if close > mm5
+    pontosAltaModelo += 1.0
+else if close < mm5
+    pontosBaixaModelo += 1.0
+
+if close > mm10
+    pontosAltaModelo += 1.0
+else if close < mm10
+    pontosBaixaModelo += 1.0
+
+if close > mm20
+    pontosAltaModelo += 1.0
+else if close < mm20
+    pontosBaixaModelo += 1.0
+
+if volumeRelativo >= 1.20
+    if close > open
+        pontosAltaModelo += 0.5
+    else if close < open
+        pontosBaixaModelo += 0.5
+
+
+// ============================================================================
+// NORMALIZAÇÃO
+// ============================================================================
+
+pontuacaoModeloTotal =
+     pontosAltaModelo +
+     pontosBaixaModelo
+
+probAlta =
+     pontuacaoModeloTotal > 0 ?
+     pontosAltaModelo /
+     pontuacaoModeloTotal :
+     0.5
+
+probBaixa =
+     pontuacaoModeloTotal > 0 ?
+     pontosBaixaModelo /
+     pontuacaoModeloTotal :
+     0.5
+
+forcaModelo =
+     math.max(
+         probAlta,
+         probBaixa
+     ) * 100.0
+
+direcaoModelo =
+     probAlta > probBaixa ?
+     1 :
+     probBaixa > probAlta ?
+     -1 :
+     0
+
+direcaoModeloTexto =
+     direcaoModelo > 0 ?
+     "ALTA" :
+     direcaoModelo < 0 ?
+     "BAIXA" :
+     "NEUTRA"
+
+
+// ============================================================================
+// INTENSIDADE BASE
+// ============================================================================
+
+intensidadeBase =
+     forcaCorpo * pesoCorpo +
+     forcaModelo * pesoModelo
+
+intensidadeBase :=
+     math.min(
+         math.max(
+             intensidadeBase,
+             0.0
+         ),
+         100.0
+     )
+
+
+// ============================================================================
+// CONFLUÊNCIA
+// ============================================================================
+
+int confirmacoes = 0
+int divergencias = 0
+
+if direcaoCandle != 0 and direcaoCandle == direcaoModelo
+    confirmacoes += 1
+else
+    divergencias += 1
+
+if direcaoCandle != 0 and kvoEstado == direcaoCandle
+    confirmacoes += 1
+else if direcaoCandle != 0 and kvoEstado != 0
+    divergencias += 1
+
+if direcaoCandle > 0 and retorno1 > 0
+    confirmacoes += 1
+else if direcaoCandle < 0 and retorno1 < 0
+    confirmacoes += 1
+else if retorno1 != 0
+    divergencias += 1
+
+if direcaoCandle > 0 and retorno3 > 0
+    confirmacoes += 1
+else if direcaoCandle < 0 and retorno3 < 0
+    confirmacoes += 1
+else if retorno3 != 0
+    divergencias += 1
+
+if direcaoCandle > 0 and close > mm5
+    confirmacoes += 1
+else if direcaoCandle < 0 and close < mm5
+    confirmacoes += 1
+else
+    divergencias += 1
+
+if direcaoCandle > 0 and close > mm10
+    confirmacoes += 1
+else if direcaoCandle < 0 and close < mm10
+    confirmacoes += 1
+else
+    divergencias += 1
+
+if direcaoCandle > 0 and close > mm20
+    confirmacoes += 1
+else if direcaoCandle < 0 and close < mm20
+    confirmacoes += 1
+else
+    divergencias += 1
+
+
+// ============================================================================
+// DIREÇÃO DA INTENSIDADE
+// ============================================================================
+
+float pontuacaoAlta = 0.0
+float pontuacaoBaixa = 0.0
+
+if direcaoCandle > 0
+    pontuacaoAlta += 2.0
+else if direcaoCandle < 0
+    pontuacaoBaixa += 2.0
+
+if probAlta > probBaixa
+    pontuacaoAlta += probAlta * 3.0
+else if probBaixa > probAlta
+    pontuacaoBaixa += probBaixa * 3.0
+
+if kvoEstado > 0
+    pontuacaoAlta += 2.0
+else if kvoEstado < 0
+    pontuacaoBaixa += 2.0
+
+if retorno1 > 0
+    pontuacaoAlta += 1.0
+else if retorno1 < 0
+    pontuacaoBaixa += 1.0
+
+if retorno3 > 0
+    pontuacaoAlta += 1.0
+else if retorno3 < 0
+    pontuacaoBaixa += 1.0
+
+if close > mm5
+    pontuacaoAlta += 1.0
+else if close < mm5
+    pontuacaoBaixa += 1.0
+
+if close > mm10
+    pontuacaoAlta += 1.0
+else if close < mm10
+    pontuacaoBaixa += 1.0
+
+if close > mm20
+    pontuacaoAlta += 1.0
+else if close < mm20
+    pontuacaoBaixa += 1.0
+
+
+// ============================================================================
+// DIREÇÃO PREDOMINANTE
+// ============================================================================
+
+direcaoIntensidade =
+     pontuacaoAlta > pontuacaoBaixa ?
+     1 :
+     pontuacaoBaixa > pontuacaoAlta ?
+     -1 :
+     0
+
+direcaoIntensidadeTexto =
+     direcaoIntensidade > 0 ?
+     "ALTA" :
+     direcaoIntensidade < 0 ?
+     "BAIXA" :
+     "NEUTRA"
+
+
+// ============================================================================
+// CONVICÇÃO DIRECIONAL
+// ============================================================================
+
+pontuacaoTotal =
+     pontuacaoAlta +
+     pontuacaoBaixa
+
+diferencaDirecional =
+     math.abs(
+         pontuacaoAlta -
+         pontuacaoBaixa
+     )
+
+confiancaDirecional =
+     pontuacaoTotal > 0 ?
+     diferencaDirecional /
+     pontuacaoTotal *
+     100.0 :
+     0.0
+
+
+// ============================================================================
+// BOOST CONFLUÊNCIA
+// ============================================================================
+
+float boostConfluenciaBruto = 0.0
+
+if confirmacoes == 0
+    boostConfluenciaBruto := 0.0
+else if confirmacoes == 1
+    boostConfluenciaBruto := 2.0
+else if confirmacoes == 2
+    boostConfluenciaBruto := 5.0
+else if confirmacoes == 3
+    boostConfluenciaBruto := 8.0
+else if confirmacoes == 4
+    boostConfluenciaBruto := 12.0
+else if confirmacoes == 5
+    boostConfluenciaBruto := 16.0
+else
+    boostConfluenciaBruto := boostMaximo
+
+
+// ============================================================================
+// FATOR MODELO
+// ============================================================================
+
+float fatorModeloBoost = 0.35
+
+if forcaModelo >= 70
+    fatorModeloBoost := 1.00
+else if forcaModelo >= 65
+    fatorModeloBoost := 0.90
+else if forcaModelo >= 60
+    fatorModeloBoost := 0.75
+else if forcaModelo >= 55
+    fatorModeloBoost := 0.55
+
+
+// ============================================================================
+// FATOR KVO
+// ============================================================================
+
+float fatorKvoBoost = 0.50
+
+if kvoForca >= 60
+    fatorKvoBoost := 1.00
+else if kvoForca >= 40
+    fatorKvoBoost := 0.90
+else if kvoForca >= 20
+    fatorKvoBoost := 0.75
+
+
+// ============================================================================
+// BOOST AJUSTADO
+// ============================================================================
+
+boostConfluenciaAjustado =
+     boostConfluenciaBruto *
+     fatorModeloBoost *
+     fatorKvoBoost
+
+boostConfluenciaAjustado :=
+     math.min(
+         boostConfluenciaAjustado,
+         boostMaximo
+     )
+
+
+// ============================================================================
+// BOOST VOLUME
+// ============================================================================
+
+float boostVolume = 0.0
+
+if volumeRelativo >= 1.20
+    boostVolume += 2.0
+
+if volumeRelativo >= 1.50
+    boostVolume += 2.0
+
+if volumeRelativo >= 2.00
+    boostVolume += 2.0
+
+boostVolume :=
+     math.min(
+         boostVolume,
+         6.0
+     )
+
+
+// ============================================================================
+// BOOST KVO
+// ============================================================================
+
+float boostKvo = 0.0
+
+if direcaoCandle != 0 and kvoEstado == direcaoCandle
+    if kvoForca >= 60
+        boostKvo := 5.0
+    else if kvoForca >= 40
+        boostKvo := 3.0
+    else if kvoForca >= 20
+        boostKvo := 1.0
+
+
+// ============================================================================
+// BOOST TOTAL
+// ============================================================================
+
+boostTotal =
+     boostConfluenciaAjustado +
+     boostVolume +
+     boostKvo
+
+boostTotal :=
+     math.min(
+         boostTotal,
+         boostMaximo
+     )
+
+
+// ============================================================================
+// QUALIDADE BOOST
+// ============================================================================
+
+string qualidadeBoost = "BAIXA"
+
+if fatorModeloBoost >= 0.90 and fatorKvoBoost >= 0.90
+    qualidadeBoost := "ALTA"
+else if fatorModeloBoost >= 0.75 and fatorKvoBoost >= 0.75
+    qualidadeBoost := "BOA"
+else if fatorModeloBoost >= 0.55 or fatorKvoBoost >= 0.75
+    qualidadeBoost := "MODERADA"
+
+
+corBoostResultado =
+     qualidadeBoost == "ALTA" ?
+     corVerde :
+     qualidadeBoost == "MODERADA" ?
+     corCiano :
+     corCinza
+
+
+// ============================================================================
+// PENALTY
+// ============================================================================
+
+float penalty = 0.0
+
+penalty += divergencias * 2.0
+
+if direcaoCandle != 0 and kvoEstado != 0 and kvoEstado != direcaoCandle
+    penalty += 5.0
+
+if direcaoCandle != 0 and direcaoModelo != 0 and direcaoModelo != direcaoCandle
+    penalty += 5.0
+
+penalty :=
+     math.min(
+         penalty,
+         penaltyMaximo
+     )
+
+
+// ============================================================================
+// PENALTY EXTRA
+// ============================================================================
+
+float penaltyConfluenciaExtra = 0.0
+
+if confirmacoes == 0
+    penaltyConfluenciaExtra := 8.0
+else if confirmacoes == 1 and divergencias >= 4
+    penaltyConfluenciaExtra := 7.0
+else if confirmacoes == 2 and divergencias >= 4
+    penaltyConfluenciaExtra := 5.0
+else if confirmacoes == 3 and divergencias >= 4
+    penaltyConfluenciaExtra := 3.0
+
+penalty += penaltyConfluenciaExtra
+
+penalty :=
+     math.min(
+         penalty,
+         penaltyMaximo
+     )
+
+
+// ============================================================================
+// INTENSIDADE FINAL
+// ============================================================================
+
+intensidadeFinal =
+     intensidadeBase +
+     boostTotal -
+     penalty
+
+intensidadeFinal :=
+     math.min(
+         math.max(
+             intensidadeFinal,
+             0.0
+         ),
+         100.0
+     )
+
+
+// ============================================================================
+// INTENSIDADE ASSINADA
+// ============================================================================
+
+intensidadeAssinada =
+     direcaoIntensidade > 0 ?
+     intensidadeFinal :
+     direcaoIntensidade < 0 ?
+     -intensidadeFinal :
+     0.0
+
+
+// ============================================================================
+// CLASSIFICAÇÃO
+// ============================================================================
+
+string classificacao = "M FRACA"
+
+if intensidadeFinal >= 90
+    classificacao := "EXTREMA"
+else if intensidadeFinal >= 80
+    classificacao := "M FORTE"
+else if intensidadeFinal >= 70
+    classificacao := "FORTE"
+else if intensidadeFinal >= 60
+    classificacao := "MODERADA"
+else if intensidadeFinal >= 40
+    classificacao := "FRACA"
+
+
+// ============================================================================
+// QUALIDADE CONFLUÊNCIA
+// ============================================================================
+
+string qualidadeConfluencia = "FRACA"
+
+if confirmacoes >= 7 and divergencias == 0
+    qualidadeConfluencia := "EXTREMA"
+else if confirmacoes >= 6 and divergencias <= 1
+    qualidadeConfluencia := "M ALTA"
+else if confirmacoes >= 5 and divergencias <= 2
+    qualidadeConfluencia := "ALTA"
+else if confirmacoes >= 4 and divergencias <= 3
+    qualidadeConfluencia := "BOA"
+else if confirmacoes >= 3 and divergencias <= 4
+    qualidadeConfluencia := "MODERADA"
+else if confirmacoes <= 1 and divergencias >= 4
+    qualidadeConfluencia := "M FRACA"
+
+
+// ============================================================================
+// NÍVEL MODELO
+// ============================================================================
+
+string nivelModelo = "FRACO"
+
+if forcaModelo >= 80
+    nivelModelo := "M FORTE"
+else if forcaModelo >= 70
+    nivelModelo := "FORTE"
+else if forcaModelo >= 60
+    nivelModelo := "MODERADO"
+
+
+// ============================================================================
+// BUY / SELL
+// ============================================================================
+
+string vencedor = "EMPATE"
+
+if probAlta > probBaixa
+    vencedor := "BUY"
+else if probBaixa > probAlta
+    vencedor := "SELL"
+
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corDirecao =
+     direcaoIntensidade > 0 ?
+     corVerde :
+     direcaoIntensidade < 0 ?
+     corVermelho :
+     corCinza
+
+corModelo =
+     direcaoModelo > 0 ?
+     corVerde :
+     direcaoModelo < 0 ?
+     corVermelho :
+     corCinza
+
+corVencedor =
+     vencedor == "BUY" ?
+     corVerde :
+     vencedor == "SELL" ?
+     corVermelho :
+     corCinza
+
+corClassificacao =
+     intensidadeFinal >= 90 ?
+     corVerdeForte :
+     intensidadeFinal >= 70 ?
+     corVerde :
+     intensidadeFinal >= 60 ?
+     corAmarelo :
+     intensidadeFinal >= 40 ?
+     corAmarelo :
+     corCinza
+
+
+// ============================================================================
+// COR CONFLUÊNCIA
+// ============================================================================
+
+corConfluencia =
+     qualidadeConfluencia == "EXTREMA" ?
+     corCinza :
+     qualidadeConfluencia == "M ALTA" ?
+     corVerde :
+     qualidadeConfluencia == "ALTA" ?
+     corVerde :
+     qualidadeConfluencia == "BOA" ?
+     corAmarelo :
+     qualidadeConfluencia == "MODERADA" ?
+     corAmarelo :
+     corVermelho
+
+
+corConfResultado =
+     qualidadeConfluencia == "ALTA" or
+     qualidadeConfluencia == "M ALTA" ?
+     corVerde :
+     corCinza
+
+
+// ============================================================================
+// VOLUME
+// ============================================================================
+
+corVolume =
+     volumeRelativo > 0.35 ?
+     corCiano :
+     corCinza
+
+
+// ============================================================================
+// CANDLE
+// ============================================================================
+
+corResultadoCandle =
+     candleForte ?
+     direcaoCandle > 0 ?
+     corVerde :
+     direcaoCandle < 0 ?
+     corVermelho :
+     corCinza :
+     corCinza
+
+
+// ============================================================================
+// MTF
+// ============================================================================
+
+f_direcaoMTF() =>
+    close > open ? 1 : close < open ? -1 : 0
+
+
+mtf1 = request.security(
+     syminfo.tickerid,
+     tf1,
+     f_direcaoMTF(),
+     lookahead=barmerge.lookahead_off
+)
+
+mtf2 = request.security(
+     syminfo.tickerid,
+     tf2,
+     f_direcaoMTF(),
+     lookahead=barmerge.lookahead_off
+)
+
+mtf3 = request.security(
+     syminfo.tickerid,
+     tf3,
+     f_direcaoMTF(),
+     lookahead=barmerge.lookahead_off
+)
+
+mtf4 = request.security(
+     syminfo.tickerid,
+     tf4,
+     f_direcaoMTF(),
+     lookahead=barmerge.lookahead_off
+)
+
+
+// ============================================================================
+// CONTAGEM MTF
+// ============================================================================
+
+int mtfAlta = 0
+int mtfBaixa = 0
+int mtfAtivos = 0
+
+if usarMTF1
+    mtfAtivos += 1
+    if mtf1 > 0
+        mtfAlta += 1
+    else if mtf1 < 0
+        mtfBaixa += 1
+
+if usarMTF2
+    mtfAtivos += 1
+    if mtf2 > 0
+        mtfAlta += 1
+    else if mtf2 < 0
+        mtfBaixa += 1
+
+if usarMTF3
+    mtfAtivos += 1
+    if mtf3 > 0
+        mtfAlta += 1
+    else if mtf3 < 0
+        mtfBaixa += 1
+
+if usarMTF4
+    mtfAtivos += 1
+    if mtf4 > 0
+        mtfAlta += 1
+    else if mtf4 < 0
+        mtfBaixa += 1
+
+
+// ============================================================================
+// DIREÇÃO MTF
+// ============================================================================
+
+direcaoMTF =
+     mtfAlta > mtfBaixa ?
+     1 :
+     mtfBaixa > mtfAlta ?
+     -1 :
+     0
+
+mtfConcordante =
+     direcaoIntensidade != 0 and
+     direcaoMTF == direcaoIntensidade
+
+mtfPercentual =
+     mtfAtivos > 0 ?
+     math.max(
+         mtfAlta,
+         mtfBaixa
+     ) /
+     mtfAtivos *
+     100.0 :
+     0.0
+
+mtfTexto =
+     direcaoMTF > 0 ?
+     "↑ COMPRA" :
+     direcaoMTF < 0 ?
+     "↓ VENDA" :
+     "→ NEUTRO"
+
+corMTF =
+     direcaoMTF > 0 ?
+     corVerde :
+     direcaoMTF < 0 ?
+     corVermelho :
+     corCinza
+
+
+// ============================================================================
+// CLASSIFICAÇÃO MTF
+// ============================================================================
+
+string classificacaoMTF = "NEUTRO"
+
+if mtfAtivos > 0
+    if mtfPercentual >= 75
+        classificacaoMTF := "FORTE"
+    else if mtfPercentual >= 50
+        classificacaoMTF := "MODERADO"
+    else
+        classificacaoMTF := "FRACO"
+
+
+// ============================================================================
+// PICO V3
+// ============================================================================
+
+groupPico = "KVO PRO - PICO V3"
+
+picoLookback = input.int(
+     10,
+     "Lookback do pico",
+     minval=3,
+     maxval=100,
+     group=groupPico
+)
+
+picoMinimoModerado = input.float(
+     65.0,
+     "Score mínimo PICO MODERADO",
+     minval=40.0,
+     maxval=100.0,
+     step=1.0,
+     group=groupPico
+)
+
+picoMinimoForte = input.float(
+     76.0,
+     "Score mínimo PICO FORTE",
+     minval=50.0,
+     maxval=100.0,
+     step=1.0,
+     group=groupPico
+)
+
+picoMinimoExtremo = input.float(
+     90.0,
+     "Score mínimo PICO EXTREMO",
+     minval=60.0,
+     maxval=100.0,
+     step=1.0,
+     group=groupPico
+)
+
+
+// ============================================================================
+// ACELERAÇÃO
+// ============================================================================
+
+aceleracaoIntensidade =
+     not na(intensidadeFinal[1]) ?
+     intensidadeFinal -
+     intensidadeFinal[1] :
+     0.0
+
+aceleracaoKvo =
+     not na(kvoForca[1]) ?
+     kvoForca -
+     kvoForca[1] :
+     0.0
+
+
+// ============================================================================
+// ESTRUTURA PICO
+// ============================================================================
+
+novoTopoPico =
+     not na(ta.highest(high[1], picoLookback)) and
+     high >= ta.highest(
+         high[1],
+         picoLookback
+     )
+
+novoFundoPico =
+     not na(ta.lowest(low[1], picoLookback)) and
+     low <= ta.lowest(
+         low[1],
+         picoLookback
+     )
+
+
+distTopoPico =
+     not na(ta.highest(high[1], picoLookback)) ?
+     math.max(
+         0.0,
+         (
+             high -
+             ta.highest(high[1], picoLookback)
+         ) /
+         atrSeguro
+     ) :
+     0.0
+
+distFundoPico =
+     not na(ta.lowest(low[1], picoLookback)) ?
+     math.max(
+         0.0,
+         (
+             ta.lowest(low[1], picoLookback) -
+             low
+         ) /
+         atrSeguro
+     ) :
+     0.0
+
+
+// ============================================================================
+// SCORE INTENSIDADE PICO
+// ============================================================================
+
+picoScoreIntensidadeAlta =
+     intensidadeFinal >= 95 ?
+     100.0 :
+     intensidadeFinal >= 90 ?
+     95.0 :
+     intensidadeFinal >= 80 ?
+     85.0 :
+     intensidadeFinal >= 70 ?
+     75.0 :
+     intensidadeFinal >= 60 ?
+     65.0 :
+     intensidadeFinal
+
+picoScoreIntensidadeVenda =
+     picoScoreIntensidadeAlta
+
+
+// ============================================================================
+// SCORE KVO
+// ============================================================================
+
+picoScoreKvoAlta =
+     kvoEstado > 0 ?
+     kvoForca :
+     kvoEstado == 0 ?
+     kvoForca * 0.35 :
+     0.0
+
+picoScoreKvoVenda =
+     kvoEstado < 0 ?
+     kvoForca :
+     kvoEstado == 0 ?
+     kvoForca * 0.35 :
+     0.0
+
+
+// ============================================================================
+// SCORE VOLUME
+// ============================================================================
+
+picoScoreVolume =
+     volumeRelativo >= 2.50 ?
+     100.0 :
+     volumeRelativo >= 2.00 ?
+     95.0 :
+     volumeRelativo >= 1.50 ?
+     85.0 :
+     volumeRelativo >= 1.20 ?
+     70.0 :
+     volumeRelativo >= 1.00 ?
+     55.0 :
+     35.0
+
+
+// ============================================================================
+// SCORE CANDLE
+// ============================================================================
+
+picoScoreCandleAlta =
+     direcaoCandle > 0 ?
+     forcaCorpo :
+     direcaoCandle == 0 ?
+     forcaCorpo * 0.35 :
+     0.0
+
+picoScoreCandleVenda =
+     direcaoCandle < 0 ?
+     forcaCorpo :
+     direcaoCandle == 0 ?
+     forcaCorpo * 0.35 :
+     0.0
+
+
+// ============================================================================
+// SCORE ATR
+// ============================================================================
+
+picoScoreAtr =
+     atrForte ?
+     100.0 :
+     60.0
+
+
+// ============================================================================
+// SCORE ACELERAÇÃO
+// ============================================================================
+
+picoScoreAceleracao =
+     math.min(
+         math.max(
+             50.0 +
+             aceleracaoIntensidade * 5.0 +
+             aceleracaoKvo * 0.50,
+             0.0
+         ),
+         100.0
+     )
+
+
+// ============================================================================
+// SCORE MTF
+// ============================================================================
+
+picoScoreMtfAlta =
+     mtfAtivos > 0 and direcaoMTF > 0 ?
+     mtfPercentual :
+     mtfAtivos > 0 and direcaoMTF == 0 ?
+     mtfPercentual * 0.35 :
+     35.0
+
+picoScoreMtfVenda =
+     mtfAtivos > 0 and direcaoMTF < 0 ?
+     mtfPercentual :
+     mtfAtivos > 0 and direcaoMTF == 0 ?
+     mtfPercentual * 0.35 :
+     35.0
+
+
+// ============================================================================
+// BÔNUS ROMPIMENTO
+// ============================================================================
+
+bonusTopoPico =
+     novoTopoPico ?
+     math.min(
+         10.0 +
+         distTopoPico * 5.0,
+         15.0
+     ) :
+     0.0
+
+bonusFundoPico =
+     novoFundoPico ?
+     math.min(
+         10.0 +
+         distFundoPico * 5.0,
+         15.0
+     ) :
+     0.0
+
+
+// ============================================================================
+// SCORE PICO ALTA
+// ============================================================================
+
+picoScoreAlta =
+     picoScoreIntensidadeAlta * 0.25 +
+     picoScoreKvoAlta * 0.20 +
+     picoScoreVolume * 0.15 +
+     picoScoreCandleAlta * 0.15 +
+     picoScoreAtr * 0.10 +
+     picoScoreAceleracao * 0.10 +
+     picoScoreMtfAlta * 0.05 +
+     bonusTopoPico
+
+picoScoreAlta :=
+     math.min(
+         math.max(
+             picoScoreAlta,
+             0.0
+         ),
+         100.0
+     )
+
+
+// ============================================================================
+// SCORE PICO VENDA
+// ============================================================================
+
+picoScoreVenda =
+     picoScoreIntensidadeVenda * 0.25 +
+     picoScoreKvoVenda * 0.20 +
+     picoScoreVolume * 0.15 +
+     picoScoreCandleVenda * 0.15 +
+     picoScoreAtr * 0.10 +
+     picoScoreAceleracao * 0.10 +
+     picoScoreMtfVenda * 0.05 +
+     bonusFundoPico
+
+picoScoreVenda :=
+     math.min(
+         math.max(
+             picoScoreVenda,
+             0.0
+         ),
+         100.0
+     )
+
+
+// ============================================================================
+// DIREÇÃO PICO
+// ============================================================================
+
+float forcaPicoDirecionalAlta = picoScoreAlta
+float forcaPicoDirecionalVenda = picoScoreVenda
+
+direcaoPico =
+     forcaPicoDirecionalAlta >
+     forcaPicoDirecionalVenda ?
+     1 :
+     forcaPicoDirecionalVenda >
+     forcaPicoDirecionalAlta ?
+     -1 :
+     direcaoIntensidade
+
+
+picoAltaValido =
+     direcaoPico > 0
+
+picoVendaValido =
+     direcaoPico < 0
+
+
+// ============================================================================
+// PICO EXTREMO
+// ============================================================================
+
+picoExtremoAlta =
+     picoAltaValido and
+     picoScoreAlta >= picoMinimoExtremo and
+     intensidadeFinal >= 85
+
+picoExtremoVenda =
+     picoVendaValido and
+     picoScoreVenda >= picoMinimoExtremo and
+     intensidadeFinal >= 85
+
+
+// ============================================================================
+// PICO FORTE
+// ============================================================================
+
+picoForteAlta =
+     picoAltaValido and
+     not picoExtremoAlta and
+     picoScoreAlta >= picoMinimoForte and
+     intensidadeFinal >= 70
+
+picoForteVenda =
+     picoVendaValido and
+     not picoExtremoVenda and
+     picoScoreVenda >= picoMinimoForte and
+     intensidadeFinal >= 70
+
+
+// ============================================================================
+// PICO MODERADO
+// ============================================================================
+
+picoModeradoAlta =
+     picoAltaValido and
+     not picoExtremoAlta and
+     not picoForteAlta and
+     picoScoreAlta >= picoMinimoModerado
+
+picoModeradoVenda =
+     picoVendaValido and
+     not picoExtremoVenda and
+     not picoForteVenda and
+     picoScoreVenda >= picoMinimoModerado
+
+
+// ============================================================================
+// PICO FORMAÇÃO
+// ============================================================================
+
+picoFormacaoAlta =
+     picoAltaValido and
+     not picoExtremoAlta and
+     not picoForteAlta and
+     not picoModeradoAlta
+
+picoFormacaoVenda =
+     picoVendaValido and
+     not picoExtremoVenda and
+     not picoForteVenda and
+     not picoModeradoVenda
+
+
+// ============================================================================
+// EXAUSTÃO
+// ============================================================================
+
+exaustaoAlta =
+     (
+         picoExtremoAlta or
+         picoForteAlta or
+         picoModeradoAlta
+     ) and
+     (
+         pavioSuperiorPct >= 0.25 or
+         aceleracaoIntensidade <
+         aceleracaoIntensidade[1] or
+         aceleracaoKvo < 0
+     )
+
+exaustaoVenda =
+     (
+         picoExtremoVenda or
+         picoForteVenda or
+         picoModeradoVenda
+     ) and
+     (
+         pavioInferiorPct >= 0.25 or
+         aceleracaoIntensidade <
+         aceleracaoIntensidade[1] or
+         aceleracaoKvo < 0
+     )
+
+
+// ============================================================================
+// CLASSIFICAÇÃO PICO
+// ============================================================================
+
+string classificacaoPico = "PICO FORMAÇÃO ALTA"
+
+if picoExtremoAlta
+    classificacaoPico :=
+         exaustaoAlta ?
+         "PICO EXTREMO ALTA | EXAUSTÃO" :
+         "PICO EXTREMO ALTA"
+else if picoExtremoVenda
+    classificacaoPico :=
+         exaustaoVenda ?
+         "PICO EXTREMO VENDA | EXAUSTÃO" :
+         "PICO EXTREMO VENDA"
+else if picoForteAlta
+    classificacaoPico :=
+         exaustaoAlta ?
+         "PICO FORTE ALTA | EXAUSTÃO" :
+         "PICO FORTE ALTA"
+else if picoForteVenda
+    classificacaoPico :=
+         exaustaoVenda ?
+         "PICO FORTE VENDA | EXAUSTÃO" :
+         "PICO FORTE VENDA"
+else if picoModeradoAlta
+    classificacaoPico :=
+         exaustaoAlta ?
+         "PICO MODERADO ALTA | EXAUSTÃO" :
+         "PICO MODERADO ALTA"
+else if picoModeradoVenda
+    classificacaoPico :=
+         exaustaoVenda ?
+         "PICO MODERADO VENDA | EXAUSTÃO" :
+         "PICO MODERADO VENDA"
+else if picoFormacaoAlta
+    classificacaoPico := "PICO FORMAÇÃO ALTA"
+else
+    classificacaoPico := "PICO FORMAÇÃO VENDA"
+
+
+// ============================================================================
+// COR PICO
+// ============================================================================
+
+corPico =
+     picoExtremoAlta ?
+     corVerdeForte :
+     picoForteAlta ?
+     corVerde :
+     picoModeradoAlta ?
+     corCiano :
+     picoFormacaoAlta ?
+     corCinza :
+     picoExtremoVenda ?
+     corVermelho :
+     picoForteVenda ?
+     corVermelho :
+     picoModeradoVenda ?
+     corAmarelo :
+     corCinza
+
+
+// ============================================================================
+// QUADRADO ORIGINAL
+// ============================================================================
+
+criterioCandleCompra =
+     candleForte and
+     direcaoCandle > 0
+
+criterioCandleVenda =
+     candleForte and
+     direcaoCandle < 0
+
+criterioIntensidadeCompra =
+     intensidadeFinal >= 70 and
+     direcaoIntensidade > 0
+
+criterioIntensidadeVenda =
+     intensidadeFinal >= 70 and
+     direcaoIntensidade < 0
+
+criterioMTFCompra =
+     mtfAtivos > 0 and
+     direcaoMTF > 0 and
+     mtfConcordante
+
+criterioMTFVenda =
+     mtfAtivos > 0 and
+     direcaoMTF < 0 and
+     mtfConcordante
+
+criterioATRCompra =
+     atrBoaCompra
+
+criterioATRVenda =
+     atrBoaVenda
+
+criterioConfCompra =
+     qualidadeConfluencia == "ALTA" or
+     qualidadeConfluencia == "M ALTA" or
+     qualidadeConfluencia == "EXTREMA"
+
+criterioConfVenda =
+     qualidadeConfluencia == "ALTA" or
+     qualidadeConfluencia == "M ALTA" or
+     qualidadeConfluencia == "EXTREMA"
+
+criterioBoostCompra =
+     qualidadeBoost == "ALTA" or
+     qualidadeBoost == "MODERADA"
+
+criterioBoostVenda =
+     qualidadeBoost == "ALTA" or
+     qualidadeBoost == "MODERADA"
+
+criterioBuy =
+     vencedor == "BUY"
+
+criterioSell =
+     vencedor == "SELL"
+
+
+sinalCompra =
+     criterioCandleCompra and
+     criterioIntensidadeCompra and
+     criterioMTFCompra and
+     criterioATRCompra and
+     criterioConfCompra and
+     criterioBoostCompra and
+     criterioBuy
+
+sinalVenda =
+     criterioCandleVenda and
+     criterioIntensidadeVenda and
+     criterioMTFVenda and
+     criterioATRVenda and
+     criterioConfVenda and
+     criterioBoostVenda and
+     criterioSell
+
+
+// ============================================================================
+// LONG TARGET
+// ============================================================================
+//
+// O sistema calcula uma força específica para projeção LONG.
+// Quanto maior a confluência, força, KVO, MTF e PICO,
+// maior o multiplicador de ATR.
+//
+// A resistência é usada como referência para evitar um alvo
+// principal excessivamente próximo de uma barreira estrutural.
+// ============================================================================
+
+
+// -----------------------------------------------------------------------------
+// SCORE LONG
+// -----------------------------------------------------------------------------
+
+float scoreLong = 0.0
+
+if direcaoIntensidade > 0
+    scoreLong += 20.0
+
+if direcaoModelo > 0
+    scoreLong += 15.0
+
+if kvoEstado > 0
+    scoreLong += 15.0
+
+if mtfAtivos > 0 and direcaoMTF > 0
+    scoreLong += mtfPercentual * 0.10
+
+if candleForte and direcaoCandle > 0
+    scoreLong += 10.0
+
+if atrBoaCompra
+    scoreLong += 10.0
+
+if qualidadeConfluencia == "EXTREMA"
+    scoreLong += 10.0
+else if qualidadeConfluencia == "M ALTA"
+    scoreLong += 9.0
+else if qualidadeConfluencia == "ALTA"
+    scoreLong += 8.0
+else if qualidadeConfluencia == "BOA"
+    scoreLong += 5.0
+else if qualidadeConfluencia == "MODERADA"
+    scoreLong += 3.0
+
+if picoScoreAlta >= 90
+    scoreLong += 10.0
+else if picoScoreAlta >= 76
+    scoreLong += 8.0
+else if picoScoreAlta >= 65
+    scoreLong += 5.0
+else if picoScoreAlta >= 60
+    scoreLong += 3.0
+
+if volumeRelativo >= 2.0 and direcaoCandle > 0
+    scoreLong += 5.0
+else if volumeRelativo >= 1.20 and direcaoCandle > 0
+    scoreLong += 3.0
+
+if exaustaoAlta
+    scoreLong -= 8.0
+
+scoreLong :=
+     math.min(
+         math.max(
+             scoreLong,
+             0.0
+         ),
+         100.0
+     )
+
+
+// -----------------------------------------------------------------------------
+// FILTRO DE RESISTÊNCIA
+// -----------------------------------------------------------------------------
+
+resistenciaDisponivel =
+     not na(resistencia20) and
+     resistencia20 > close
+
+distanciaResistenciaAtual =
+     resistenciaDisponivel ?
+     (resistencia20 - close) /
+     atrSeguro :
+     999.0
+
+resistenciaProxima =
+     resistenciaDisponivel and
+     distanciaResistenciaAtual <
+     distanciaMinimaResistenciaATR
+
+filtroResistenciaLong =
+     not usarFiltroResistencia or
+     not resistenciaProxima
+
+
+// -----------------------------------------------------------------------------
+// CONDIÇÃO LONG
+// -----------------------------------------------------------------------------
+
+longDirecional =
+     direcaoIntensidade > 0 and
+     direcaoModelo > 0 and
+     kvoEstado > 0
+
+longForca =
+     intensidadeFinal >=
+     longMinimoIntensidade
+
+longConfianca =
+     confiancaDirecional >=
+     longMinimoConfianca
+
+longMTF =
+     mtfAtivos > 0 and
+     direcaoMTF > 0 and
+     mtfPercentual >=
+     longMinimoMTF
+
+longKvo =
+     kvoEstado > 0 and
+     kvoForca >=
+     longMinimoKvo
+
+longPico =
+     picoScoreAlta >=
+     longMinimoPico
+
+longCandle =
+     candleForte and
+     direcaoCandle > 0
+
+
+// -----------------------------------------------------------------------------
+// LONG BASE
+// -----------------------------------------------------------------------------
+
+longBase =
+     ativarLong and
+     longDirecional and
+     longForca and
+     longConfianca and
+     longMTF and
+     longKvo and
+     longPico and
+     filtroResistenciaLong
+
+
+// -----------------------------------------------------------------------------
+// LONG FORTE
+// -----------------------------------------------------------------------------
+
+longForte =
+     longBase and
+     scoreLong >= 75
+
+
+// -----------------------------------------------------------------------------
+// LONG EXTREMO
+// -----------------------------------------------------------------------------
+
+longExtremo =
+     longBase and
+     scoreLong >= 90 and
+     intensidadeFinal >= 85 and
+     picoScoreAlta >= 90
+
+
+// ============================================================================
+// POTENCIAL LONG
+// ============================================================================
+
+string potencialLong = "BAIXO"
+
+if scoreLong >= 90
+    potencialLong := "EXTREMO"
+else if scoreLong >= 75
+    potencialLong := "ALTO"
+else if scoreLong >= 60
+    potencialLong := "BOM"
+else if scoreLong >= 40
+    potencialLong := "MODERADO"
+
+
+corPotencialLong =
+     potencialLong == "EXTREMO" ?
+     corVerdeForte :
+     potencialLong == "ALTO" ?
+     corVerde :
+     potencialLong == "BOM" ?
+     corCiano :
+     potencialLong == "MODERADO" ?
+     corAmarelo :
+     corCinza
+
+
+// ============================================================================
+// MULTIPLICADOR ADAPTATIVO DOS ALVOS
+// ============================================================================
+//
+// Base:
+// ALVO 1 = 1 ATR
+// ALVO 2 = 2 ATR
+// ALVO 3 = 3 ATR
+// ESTENDIDO = 4 ATR
+//
+// A força do LONG pode ampliar os alvos.
+// ============================================================================
+
+float multiplicadorAlvoBase = 1.0
+
+if scoreLong >= 90
+    multiplicadorAlvoBase := 1.25
+else if scoreLong >= 80
+    multiplicadorAlvoBase := 1.15
+else if scoreLong >= 70
+    multiplicadorAlvoBase := 1.05
+else
+    multiplicadorAlvoBase := 1.00
+
+
+// -----------------------------------------------------------------------------
+// AJUSTE PELO ATR
+// -----------------------------------------------------------------------------
+
+float fatorAlvoATR = 1.0
+
+if atrForte
+    fatorAlvoATR := 1.10
+else if atrFraco
+    fatorAlvoATR := 0.90
+
+
+// -----------------------------------------------------------------------------
+// AJUSTE PICO
+// -----------------------------------------------------------------------------
+
+float fatorAlvoPico = 1.0
+
+if picoExtremoAlta
+    fatorAlvoPico := 1.15
+else if picoForteAlta
+    fatorAlvoPico := 1.08
+else if picoModeradoAlta
+    fatorAlvoPico := 1.03
+
+
+// -----------------------------------------------------------------------------
+// MULTIPLICADOR FINAL
+// -----------------------------------------------------------------------------
+
+multiplicadorAlvo =
+     multiplicadorAlvoBase *
+     fatorAlvoATR *
+     fatorAlvoPico
+
+multiplicadorAlvo :=
+     math.min(
+         math.max(
+             multiplicadorAlvo,
+             0.75
+         ),
+         1.50
+     )
+
+
+// ============================================================================
+// ALVOS LONG
+// ============================================================================
+
+entradaLong =
+     close
+
+alvo1Long =
+     entradaLong +
+     atrSeguro *
+     1.0 *
+     multiplicadorAlvo
+
+alvo2Long =
+     entradaLong +
+     atrSeguro *
+     2.0 *
+     multiplicadorAlvo
+
+alvo3Long =
+     entradaLong +
+     atrSeguro *
+     3.0 *
+     multiplicadorAlvo
+
+alvoEstendidoLong =
+     entradaLong +
+     atrSeguro *
+     4.0 *
+     multiplicadorAlvo
+
+
+// ============================================================================
+// DISTÂNCIAS DOS ALVOS
+// ============================================================================
+
+distAlvo1Pct =
+     entradaLong != 0 ?
+     (alvo1Long / entradaLong - 1.0) *
+     100.0 :
+     0.0
+
+distAlvo2Pct =
+     entradaLong != 0 ?
+     (alvo2Long / entradaLong - 1.0) *
+     100.0 :
+     0.0
+
+distAlvo3Pct =
+     entradaLong != 0 ?
+     (alvo3Long / entradaLong - 1.0) *
+     100.0 :
+     0.0
+
+distAlvoEstendidoPct =
+     entradaLong != 0 ?
+     (alvoEstendidoLong / entradaLong - 1.0) *
+     100.0 :
+     0.0
+
+
+// ============================================================================
+// DISTÂNCIA EM ATR
+// ============================================================================
+
+distAlvo1ATR =
+     (alvo1Long - entradaLong) /
+     atrSeguro
+
+distAlvo2ATR =
+     (alvo2Long - entradaLong) /
+     atrSeguro
+
+distAlvo3ATR =
+     (alvo3Long - entradaLong) /
+     atrSeguro
+
+distAlvoEstendidoATR =
+     (alvoEstendidoLong - entradaLong) /
+     atrSeguro
+
+
+// ============================================================================
+// ALVO PRINCIPAL
+// ============================================================================
+//
+// Regra:
+//
+// Score >= 90 -> ALVO 3
+// Score >= 75 -> ALVO 2
+// Caso contrário -> ALVO 1
+//
+// Se o alvo escolhido estiver muito próximo de resistência,
+// o alvo anterior torna-se o principal.
+// ============================================================================
+
+float alvoPrincipal = alvo1Long
+string alvoPrincipalNome = "ALVO 1"
+
+if scoreLong >= 90
+    alvoPrincipal := alvo3Long
+    alvoPrincipalNome := "ALVO 3"
+else if scoreLong >= 75
+    alvoPrincipal := alvo2Long
+    alvoPrincipalNome := "ALVO 2"
+else
+    alvoPrincipal := alvo1Long
+    alvoPrincipalNome := "ALVO 1"
+
+
+// -----------------------------------------------------------------------------
+// PROTEÇÃO CONTRA RESISTÊNCIA
+// -----------------------------------------------------------------------------
+
+if usarFiltroResistencia and resistenciaDisponivel
+
+    if alvoPrincipal > resistencia20
+        alvoPrincipal := resistencia20
+        alvoPrincipalNome := "RESISTÊNCIA"
+
+
+// ============================================================================
+// DISTÂNCIA ALVO PRINCIPAL
+// ============================================================================
+
+distAlvoPrincipalPct =
+     entradaLong != 0 ?
+     (alvoPrincipal / entradaLong - 1.0) *
+     100.0 :
+     0.0
+
+distAlvoPrincipalATR =
+     (alvoPrincipal - entradaLong) /
+     atrSeguro
+
+
+// ============================================================================
+// RESISTÊNCIA ATÉ O ALVO PRINCIPAL
+// ============================================================================
+
+espacoResistenciaAlvoPrincipal =
+     resistenciaDisponivel ?
+     (resistencia20 - entradaLong) /
+     atrSeguro :
+     999.0
+
+
+// ============================================================================
+// STATUS LONG
+// ============================================================================
+
+string statusLong = "SEM LONG"
+
+if longExtremo
+    statusLong := "LONG EXTREMO"
+else if longForte
+    statusLong := "LONG FORTE"
+else if longBase
+    statusLong := "LONG"
+else if direcaoIntensidade > 0 and scoreLong >= 50
+    statusLong := "LONG EM FORMAÇÃO"
+
+
+corStatusLong =
+     longExtremo ?
+     corVerdeForte :
+     longForte ?
+     corVerde :
+     longBase ?
+     corCiano :
+     corCinza
+
+
+// ============================================================================
+// BARRAS BUY / SELL
+// ============================================================================
+
+f_barra(valor) =>
+    tamanho = 8
+    v = math.min(
+         math.max(
+             valor,
+             0.0
+         ),
+         100.0
+    )
+
+    preenchido =
+         int(
+             math.round(
+                 v /
+                 100.0 *
+                 tamanho
+             )
+         )
+
+    resultado = ""
+
+    for i = 0 to tamanho - 1
+        resultado +=
+             i < preenchido ?
+             "█" :
+             "░"
+
+    resultado
+
+
+barraBuy =
+     f_barra(
+         probAlta * 100.0
+     )
+
+barraSell =
+     f_barra(
+         probBaixa * 100.0
+     )
+
+
+// ============================================================================
+// COLORAÇÃO CANDLE
+// ============================================================================
+
+corCandle =
+     candleForte ?
+     direcaoCandle > 0 ?
+     corVerde :
+     direcaoCandle < 0 ?
+     corVermelho :
+     color.gray :
+     na
+
+barcolor(
+     mostrarCandleForca and candleForte ?
+     corCandle :
+     na
+)
+
+
+// ============================================================================
+// TABELA
+// ============================================================================
+
+var table painel = table.new(
+     position.top_right,
+     5,
+     23,
+     bgcolor=corFundo,
+     border_width=1,
+     border_color=corBorda
+)
+
+
+// ============================================================================
+// FUNÇÃO CÉLULA
+// ============================================================================
+
+f_celula(
+     coluna,
+     linha,
+     texto,
+     corTexto,
+     alinhamento
+     ) =>
+
+    table.cell(
+         painel,
+         coluna,
+         linha,
+         texto,
+         text_color=corTexto,
+         bgcolor=corFundo,
+         text_size=size.small,
+         text_halign=alinhamento
+    )
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+if barstate.islast and mostrarTabela
+
+    // ------------------------------------------------------------------------
+    // CABEÇALHO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         0,
+         0,
+         "DIREÇÃO DO CANDLE",
+         corBranco,
+         text.align_center
+    )
+
+    f_celula(
+         1,
+         0,
+         "BUY VS SELL",
+         corBranco,
+         text.align_center
+    )
+
+    f_celula(
+         2,
+         0,
+         "ROBO",
+         corBranco,
+         text.align_center
+    )
+
+    f_celula(
+         3,
+         0,
+         "CONFLUÊNCIA",
+         corBranco,
+         text.align_center
+    )
+
+    f_celula(
+         4,
+         0,
+         "RESULTADO",
+         corAmarelo,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // DIREÇÃO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         0,
+         1,
+         direcaoIntensidadeTexto,
+         corDirecao,
+         text.align_center
+    )
+
+    f_celula(
+         0,
+         2,
+         "Conv. " +
+         str.tostring(
+             confiancaDirecional,
+             "#.##"
+         ) +
+         "%",
+         corBranco,
+         text.align_center
+    )
+
+    f_celula(
+         0,
+         3,
+         "Assin. " +
+         (
+             intensidadeAssinada >= 0 ?
+             "+" :
+             "-"
+         ) +
+         str.tostring(
+             math.abs(
+                 intensidadeAssinada
+             ),
+             "#.##"
+         ) +
+         "%",
+         corDirecao,
+         text.align_center
+    )
+
+    f_celula(
+         0,
+         4,
+         "Candle " +
+         (
+             candleForte ?
+             "FORTE" :
+             "NORMAL"
+         ),
+         corResultadoCandle,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // BUY SELL
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         1,
+         1,
+         "BUY  " + barraBuy,
+         corVerde,
+         text.align_left
+    )
+
+    f_celula(
+         1,
+         2,
+         "SELL " + barraSell,
+         corVermelho,
+         text.align_left
+    )
+
+    f_celula(
+         1,
+         3,
+         "Alta " +
+         str.tostring(
+             probAlta * 100.0,
+             "#.##"
+         ) +
+         "%",
+         corVerde,
+         text.align_center
+    )
+
+    f_celula(
+         1,
+         4,
+         "Baixa " +
+         str.tostring(
+             probBaixa * 100.0,
+             "#.##"
+         ) +
+         "%",
+         corVermelho,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ROBÔ
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         2,
+         1,
+         "Base " +
+         str.tostring(
+             intensidadeBase,
+             "#.##"
+         ) +
+         "%",
+         corBranco,
+         text.align_center
+    )
+
+    f_celula(
+         2,
+         2,
+         "Modelo " +
+         str.tostring(
+             forcaModelo,
+             "#.##"
+         ) +
+         "%",
+         corModelo,
+         text.align_center
+    )
+
+    f_celula(
+         2,
+         3,
+         "Boost " +
+         qualidadeBoost,
+         corBoostResultado,
+         text.align_center
+    )
+
+    f_celula(
+         2,
+         4,
+         "Boost+ " +
+         str.tostring(
+             boostTotal,
+             "#.##"
+         ) +
+         "%",
+         corVerde,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // CONFLUÊNCIA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         3,
+         1,
+         "Confirmações " +
+         str.tostring(
+             confirmacoes
+         ),
+         corVerde,
+         text.align_center
+    )
+
+    f_celula(
+         3,
+         2,
+         "Divergências " +
+         str.tostring(
+             divergencias
+         ),
+         corVermelho,
+         text.align_center
+    )
+
+    f_celula(
+         3,
+         3,
+         qualidadeConfluencia,
+         corConfluencia,
+         text.align_center
+    )
+
+    f_celula(
+         3,
+         4,
+         "Penalty " +
+         str.tostring(
+             penalty,
+             "#.##"
+         ) +
+         "%",
+         corVermelho,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // RESULTADO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         1,
+         "RESULTADO",
+         corAmarelo,
+         text.align_center
+    )
+
+    f_celula(
+         4,
+         2,
+         classificacao,
+         corClassificacao,
+         text.align_center
+    )
+
+    f_celula(
+         4,
+         3,
+         vencedor,
+         corVencedor,
+         text.align_center
+    )
+
+    f_celula(
+         4,
+         4,
+         str.tostring(
+             intensidadeFinal,
+             "#.##"
+         ) +
+         "%",
+         corClassificacao,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // RESULTADO CANDLE
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         5,
+         "CANDLE " +
+         (
+             candleForte ?
+             "FORTE" :
+             "NORMAL"
+         ),
+         corResultadoCandle,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // RESULTADO KVO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         6,
+         "KVO " +
+         kvoEstadoTexto +
+         " " +
+         str.tostring(
+             kvoForca,
+             "#.##"
+         ) +
+         "%",
+         corKvo,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // VOLUME
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         7,
+         "VOL " +
+         str.tostring(
+             volumeRelativo,
+             "#.##"
+         ) +
+         "x",
+         corVolume,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // CONFLUÊNCIA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         8,
+         "CONF " +
+         qualidadeConfluencia,
+         corConfResultado,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // BOOST
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         9,
+         "BOOST " +
+         qualidadeBoost,
+         corBoostResultado,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // MTF
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         10,
+         "MTF " +
+         mtfTexto +
+         " " +
+         str.tostring(
+             mtfPercentual,
+             "#.##"
+         ) +
+         "%",
+         corMTF,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ATR
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         11,
+         "ATR " +
+         atrClassificacao +
+         " " +
+         str.tostring(
+             atrRelativo,
+             "#.##"
+         ) +
+         "%",
+         corAtr,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // PICO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         12,
+         classificacaoPico,
+         corPico,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // LONG
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         13,
+         statusLong,
+         corStatusLong,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // SCORE LONG
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         14,
+         "LONG SCORE " +
+         str.tostring(
+             scoreLong,
+             "#.##"
+         ) +
+         "%",
+         corPotencialLong,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // POTENCIAL
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         15,
+         "POTENCIAL " +
+         potencialLong,
+         corPotencialLong,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ENTRADA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         16,
+         "ENTRADA " +
+         str.tostring(
+             entradaLong,
+             format.mintick
+         ),
+         corBranco,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ALVO 1
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         17,
+         "ALVO 1 " +
+         str.tostring(
+             alvo1Long,
+             format.mintick
+         ) +
+         " | +" +
+         str.tostring(
+             distAlvo1Pct,
+             "#.##"
+         ) +
+         "%",
+         corCiano,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ALVO 2
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         18,
+         "ALVO 2 " +
+         str.tostring(
+             alvo2Long,
+             format.mintick
+         ) +
+         " | +" +
+         str.tostring(
+             distAlvo2Pct,
+             "#.##"
+         ) +
+         "%",
+         corVerde,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ALVO 3
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         19,
+         "ALVO 3 " +
+         str.tostring(
+             alvo3Long,
+             format.mintick
+         ) +
+         " | +" +
+         str.tostring(
+             distAlvo3Pct,
+             "#.##"
+         ) +
+         "%",
+         corVerdeForte,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ALVO ESTENDIDO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         20,
+         "ESTENDIDO " +
+         str.tostring(
+             alvoEstendidoLong,
+             format.mintick
+         ) +
+         " | +" +
+         str.tostring(
+             distAlvoEstendidoPct,
+             "#.##"
+         ) +
+         "%",
+         corAmarelo,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // ALVO PRINCIPAL
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         21,
+         "ALVO PRINCIPAL " +
+         alvoPrincipalNome +
+         " " +
+         str.tostring(
+             alvoPrincipal,
+             format.mintick
+         ),
+         corVerdeForte,
+         text.align_center
+    )
+
+
+    // ------------------------------------------------------------------------
+    // DISTÂNCIA ALVO PRINCIPAL
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         4,
+         22,
+         "DIST. " +
+         str.tostring(
+             distAlvoPrincipalPct,
+             "#.##"
+         ) +
+         "% | " +
+         str.tostring(
+             distAlvoPrincipalATR,
+             "#.##"
+         ) +
+         " ATR",
+         corCiano,
+         text.align_center
+    )
+
+
+// ============================================================================
+// QUADRADO ORIGINAL
+// ============================================================================
+
+plotshape(
+     sinalCompra,
+     title="Sinal Completo Compra",
+     style=shape.square,
+     location=location.belowbar,
+     size=size.tiny,
+     color=corVerde
+)
+
+plotshape(
+     sinalVenda,
+     title="Sinal Completo Venda",
+     style=shape.square,
+     location=location.abovebar,
+     size=size.tiny,
+     color=corVermelho
+)
+
+
+// ============================================================================
+// MARCADOR LONG
+// ============================================================================
+
+plotshape(
+     longBase,
+     title="LONG KVO PRO",
+     style=shape.triangleup,
+     location=location.belowbar,
+     size=size.small,
+     color=corVerde
+)
+
+
+// ============================================================================
+// ALERTA WEBHOOK
+// ============================================================================
+
+condicaoWebhook =
+     usarWebhook and
+     (
+         not somenteCandleForca or
+         candleForte
+     ) and
+     (
+         not alertaSomenteFechamento or
+         barstate.isconfirmed
+     )
+
+
+// ============================================================================
+// JSON WEBHOOK
+// ============================================================================
+
+mensagemWebhook =
+     "{\"sistema\":\"KVO PRO\"," +
+     "\"versao\":\"V10.0 LONG TARGET PICO V3\"," +
+     "\"ticker\":\"" +
+     syminfo.ticker +
+     "\"," +
+     "\"exchange\":\"" +
+     syminfo.prefix +
+     "\"," +
+     "\"timeframe\":\"" +
+     timeframe.period +
+     "\"," +
+     "\"timestamp\":\"" +
+     str.tostring(time) +
+     "\"," +
+
+     "\"open\":" +
+     str.tostring(open) +
+     "," +
+
+     "\"high\":" +
+     str.tostring(high) +
+     "," +
+
+     "\"low\":" +
+     str.tostring(low) +
+     "," +
+
+     "\"close\":" +
+     str.tostring(close) +
+     "," +
+
+     "\"volume\":" +
+     str.tostring(volume) +
+     "," +
+
+     "\"direcao_candle\":\"" +
+     direcaoTexto +
+     "\"," +
+
+     "\"candle_forca\":" +
+     str.tostring(
+         forcaCorpo,
+         "#.##"
+     ) +
+     "," +
+
+     "\"candle_forte\":" +
+     str.tostring(candleForte) +
+     "," +
+
+     "\"prob_buy\":" +
+     str.tostring(
+         probAlta * 100.0,
+         "#.##"
+     ) +
+     "," +
+
+     "\"prob_sell\":" +
+     str.tostring(
+         probBaixa * 100.0,
+         "#.##"
+     ) +
+     "," +
+
+     "\"modelo\":\"" +
+     direcaoModeloTexto +
+     "\"," +
+
+     "\"forca_modelo\":" +
+     str.tostring(
+         forcaModelo,
+         "#.##"
+     ) +
+     "," +
+
+     "\"kvo_estado\":" +
+     str.tostring(kvoEstado) +
+     "," +
+
+     "\"kvo_forca\":" +
+     str.tostring(
+         kvoForca,
+         "#.##"
+     ) +
+     "," +
+
+     "\"volume_relativo\":" +
+     str.tostring(
+         volumeRelativo,
+         "#.##"
+     ) +
+     "," +
+
+     "\"confirmacoes\":" +
+     str.tostring(confirmacoes) +
+     "," +
+
+     "\"divergencias\":" +
+     str.tostring(divergencias) +
+     "," +
+
+     "\"confluencia\":\"" +
+     qualidadeConfluencia +
+     "\"," +
+
+     "\"boost\":\"" +
+     qualidadeBoost +
+     "\"," +
+
+     "\"boost_valor\":" +
+     str.tostring(
+         boostTotal,
+         "#.##"
+     ) +
+     "," +
+
+     "\"penalty\":" +
+     str.tostring(
+         penalty,
+         "#.##"
+     ) +
+     "," +
+
+     "\"atr_classificacao\":\"" +
+     atrClassificacao +
+     "\"," +
+
+     "\"atr_percentual\":" +
+     str.tostring(
+         atrRelativo,
+         "#.##"
+     ) +
+     "," +
+
+     "\"mtf\":\"" +
+     mtfTexto +
+     "\"," +
+
+     "\"mtf_percentual\":" +
+     str.tostring(
+         mtfPercentual,
+         "#.##"
+     ) +
+     "," +
+
+     "\"intensidade\":" +
+     str.tostring(
+         intensidadeFinal,
+         "#.##"
+     ) +
+     "," +
+
+     "\"intensidade_assinada\":" +
+     str.tostring(
+         intensidadeAssinada,
+         "#.##"
+     ) +
+     "," +
+
+     "\"direcao_intensidade\":\"" +
+     direcaoIntensidadeTexto +
+     "\"," +
+
+     "\"classificacao\":\"" +
+     classificacao +
+     "\"," +
+
+     "\"vencedor\":\"" +
+     vencedor +
+     "\"," +
+
+     "\"pico\":\"" +
+     classificacaoPico +
+     "\"," +
+
+     "\"pico_score_alta\":" +
+     str.tostring(
+         picoScoreAlta,
+         "#.##"
+     ) +
+     "," +
+
+     "\"pico_score_venda\":" +
+     str.tostring(
+         picoScoreVenda,
+         "#.##"
+     ) +
+     "," +
+
+     "\"direcao_pico\":" +
+     str.tostring(direcaoPico) +
+     "," +
+
+     "\"novo_topo_pico\":" +
+     str.tostring(novoTopoPico) +
+     "," +
+
+     "\"novo_fundo_pico\":" +
+     str.tostring(novoFundoPico) +
+     "," +
+
+     "\"exaustao_alta\":" +
+     str.tostring(exaustaoAlta) +
+     "," +
+
+     "\"exaustao_venda\":" +
+     str.tostring(exaustaoVenda) +
+     "," +
+
+     "\"long_ativo\":" +
+     str.tostring(ativarLong) +
+     "," +
+
+     "\"long_base\":" +
+     str.tostring(longBase) +
+     "," +
+
+     "\"long_forte\":" +
+     str.tostring(longForte) +
+     "," +
+
+     "\"long_extremo\":" +
+     str.tostring(longExtremo) +
+     "," +
+
+     "\"status_long\":\"" +
+     statusLong +
+     "\"," +
+
+     "\"score_long\":" +
+     str.tostring(
+         scoreLong,
+         "#.##"
+     ) +
+     "," +
+
+     "\"potencial_long\":\"" +
+     potencialLong +
+     "\"," +
+
+     "\"entrada_long\":" +
+     str.tostring(
+         entradaLong,
+         format.mintick
+     ) +
+     "," +
+
+     "\"atr\":" +
+     str.tostring(
+         atrSeguro,
+         format.mintick
+     ) +
+     "," +
+
+     "\"multiplicador_alvo\":" +
+     str.tostring(
+         multiplicadorAlvo,
+         "#.####"
+     ) +
+     "," +
+
+     "\"alvo_1\":" +
+     str.tostring(
+         alvo1Long,
+         format.mintick
+     ) +
+     "," +
+
+     "\"alvo_2\":" +
+     str.tostring(
+         alvo2Long,
+         format.mintick
+     ) +
+     "," +
+
+     "\"alvo_3\":" +
+     str.tostring(
+         alvo3Long,
+         format.mintick
+     ) +
+     "," +
+
+     "\"alvo_estendido\":" +
+     str.tostring(
+         alvoEstendidoLong,
+         format.mintick
+     ) +
+     "," +
+
+     "\"alvo_principal_nome\":\"" +
+     alvoPrincipalNome +
+     "\"," +
+
+     "\"alvo_principal\":" +
+     str.tostring(
+         alvoPrincipal,
+         format.mintick
+     ) +
+     "," +
+
+     "\"dist_alvo_1_pct\":" +
+     str.tostring(
+         distAlvo1Pct,
+         "#.##"
+     ) +
+     "," +
+
+     "\"dist_alvo_2_pct\":" +
+     str.tostring(
+         distAlvo2Pct,
+         "#.##"
+     ) +
+     "," +
+
+     "\"dist_alvo_3_pct\":" +
+     str.tostring(
+         distAlvo3Pct,
+         "#.##"
+     ) +
+     "," +
+
+     "\"dist_alvo_estendido_pct\":" +
+     str.tostring(
+         distAlvoEstendidoPct,
+         "#.##"
+     ) +
+     "," +
+
+     "\"dist_alvo_principal_pct\":" +
+     str.tostring(
+         distAlvoPrincipalPct,
+         "#.##"
+     ) +
+     "," +
+
+     "\"dist_alvo_principal_atr\":" +
+     str.tostring(
+         distAlvoPrincipalATR,
+         "#.##"
+     ) +
+     "," +
+
+     "\"resistencia_20\":" +
+     str.tostring(
+         resistencia20,
+         format.mintick
+     ) +
+     "," +
+
+     "\"dist_resistencia_atr\":" +
+     str.tostring(
+         distanciaResistenciaAtual,
+         "#.##"
+     ) +
+     "," +
+
+     "\"resistencia_proxima\":" +
+     str.tostring(resistenciaProxima) +
+     "," +
+
+     "\"filtro_resistencia\":" +
+     str.tostring(filtroResistenciaLong) +
+     "," +
+
+     "\"sinal_compra\":" +
+     str.tostring(sinalCompra) +
+     "," +
+
+     "\"sinal_venda\":" +
+     str.tostring(sinalVenda) +
+     "}"
+
+
+// ============================================================================
+// DISPARO WEBHOOK
+// ============================================================================
+
+if condicaoWebhook
+    alert(
+         mensagemWebhook,
+         alert.freq_once_per_bar_close
+    )
+
+
+// ============================================================================
+// ALERTAS ORIGINAIS
+// ============================================================================
+
+alertcondition(
+     candleForte and direcaoCandle > 0,
+     "KVO PRO - Candle Forte Alta",
+     "KVO PRO: candle de força de ALTA."
+)
+
+alertcondition(
+     candleForte and direcaoCandle < 0,
+     "KVO PRO - Candle Forte Baixa",
+     "KVO PRO: candle de força de BAIXA."
+)
+
+alertcondition(
+     intensidadeFinal >= 70 and
+     direcaoIntensidade > 0,
+     "KVO PRO - Intensidade Alta",
+     "KVO PRO: intensidade direcional de ALTA >= 70."
+)
+
+alertcondition(
+     intensidadeFinal >= 70 and
+     direcaoIntensidade < 0,
+     "KVO PRO - Intensidade Baixa",
+     "KVO PRO: intensidade direcional de BAIXA >= 70."
+)
+
+alertcondition(
+     sinalCompra,
+     "KVO PRO - SINAL COMPLETO COMPRA",
+     "KVO PRO: todos os critérios de COMPRA foram confirmados."
+)
+
+alertcondition(
+     sinalVenda,
+     "KVO PRO - SINAL COMPLETO VENDA",
+     "KVO PRO: todos os critérios de VENDA foram confirmados."
+)
+
+
+// ============================================================================
+// ALERTAS PICO
+// ============================================================================
+
+alertcondition(
+     picoModeradoAlta,
+     "KVO PRO - PICO MODERADO ALTA",
+     "KVO PRO: PICO MODERADO DE ALTA detectado."
+)
+
+alertcondition(
+     picoForteAlta,
+     "KVO PRO - PICO FORTE ALTA",
+     "KVO PRO: PICO FORTE DE ALTA detectado."
+)
+
+alertcondition(
+     picoExtremoAlta,
+     "KVO PRO - PICO EXTREMO ALTA",
+     "KVO PRO: PICO EXTREMO DE ALTA detectado."
+)
+
+alertcondition(
+     picoModeradoVenda,
+     "KVO PRO - PICO MODERADO VENDA",
+     "KVO PRO: PICO MODERADO DE VENDA detectado."
+)
+
+alertcondition(
+     picoForteVenda,
+     "KVO PRO - PICO FORTE VENDA",
+     "KVO PRO: PICO FORTE DE VENDA detectado."
+)
+
+alertcondition(
+     picoExtremoVenda,
+     "KVO PRO - PICO EXTREMO VENDA",
+     "KVO PRO: PICO EXTREMO DE VENDA detectado."
+)
+
+
+// ============================================================================
+// ALERTAS LONG
+// ============================================================================
+
+alertcondition(
+     longBase,
+     "KVO PRO - LONG",
+     "KVO PRO: LONG confirmado."
+)
+
+alertcondition(
+     longForte,
+     "KVO PRO - LONG FORTE",
+     "KVO PRO: LONG FORTE confirmado."
+)
+
+alertcondition(
+     longExtremo,
+     "KVO PRO - LONG EXTREMO",
+     "KVO PRO: LONG EXTREMO confirmado."
+)
+
+
+// ============================================================================
+// MARCADORES CANDLE FORTE
+// ============================================================================
+
+plotshape(
+     candleForte and direcaoCandle > 0,
+     title="Candle Forte Alta",
+     style=shape.triangleup,
+     location=location.belowbar,
+     size=size.tiny,
+     color=corVerde
+)
+
+plotshape(
+     candleForte and direcaoCandle < 0,
+     title="Candle Forte Baixa",
+     style=shape.triangledown,
+     location=location.abovebar,
+     size=size.tiny,
+     color=corVermelho
+)
