@@ -1,0 +1,846 @@
+//@version=6
+indicator("KVO PRO V12.5 - COMPRA/VENDA + MTF FORCA UNICA + ALVOS 1-8 ATR + PAINEL", overlay=true, max_labels_count=500, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO V12.5
+// COMPRA + VENDA
+// MTF COMPLETO
+// FORCA MTF UNICA
+// ALVOS LONGOS 1-8 ATR
+// PAINEL
+// ============================================================================
+
+
+// ============================================================================
+// CONFIGURACOES
+// ============================================================================
+
+ativarLong = input.bool(true, "Ativar COMPRA")
+ativarShort = input.bool(true, "Ativar VENDA")
+
+scoreMinLong = input.float(55.0, "Score minimo COMPRA", minval=0, maxval=100)
+scoreMinShort = input.float(55.0, "Score minimo VENDA", minval=0, maxval=100)
+
+intensidadeMinLong = input.float(45.0, "Intensidade minima COMPRA", minval=0, maxval=100)
+intensidadeMinShort = input.float(45.0, "Intensidade minima VENDA", minval=0, maxval=100)
+
+confluenciaMinLong = input.float(45.0, "Confluencia minima COMPRA", minval=0, maxval=100)
+confluenciaMinShort = input.float(45.0, "Confluencia minima VENDA", minval=0, maxval=100)
+
+vantagemMinima = input.float(5.0, "Vantagem minima", minval=0, maxval=50)
+
+
+// ============================================================================
+// PESOS MTF
+// ============================================================================
+
+p1 = input.float(10.0, "Peso MTF 1M", minval=0)
+p5 = input.float(15.0, "Peso MTF 5M", minval=0)
+p15 = input.float(20.0, "Peso MTF 15M", minval=0)
+p30 = input.float(20.0, "Peso MTF 30M", minval=0)
+p1H = input.float(15.0, "Peso MTF 1H", minval=0)
+p4H = input.float(10.0, "Peso MTF 4H", minval=0)
+pD = input.float(10.0, "Peso MTF Diario", minval=0)
+
+mtfMinLong = input.float(45.0, "MTF minimo COMPRA", minval=0, maxval=100)
+mtfMinShort = input.float(45.0, "MTF minimo VENDA", minval=0, maxval=100)
+
+
+// ============================================================================
+// ESTRUTURA
+// ============================================================================
+
+lookbackEstrutura = input.int(20, "Lookback estrutura", minval=5)
+
+espacoMinLong = input.float(1.0, "Espaco minimo COMPRA em ATR", minval=0)
+espacoMinShort = input.float(1.0, "Espaco minimo VENDA em ATR", minval=0)
+
+usarRompimento = input.bool(true, "Usar rompimento")
+
+
+atrLength = input.int(14, "ATR", minval=1)
+
+pesoATR15 = input.float(35.0, "Peso ATR 15M", minval=0)
+pesoATR1H = input.float(35.0, "Peso ATR 1H", minval=0)
+pesoATR4H = input.float(30.0, "Peso ATR 4H", minval=0)
+
+
+// ============================================================================
+// INDICADORES
+// ============================================================================
+
+rsiLength = input.int(14, "RSI", minval=1)
+
+emaFastLength = input.int(9, "EMA rapida", minval=1)
+emaMidLength = input.int(21, "EMA media", minval=1)
+emaSlowLength = input.int(50, "EMA lenta", minval=1)
+
+volumeLength = input.int(20, "Media volume", minval=1)
+
+
+// ============================================================================
+// MICROESTRUTURA
+// ============================================================================
+
+microLookback = input.int(5, "Micro lookback", minval=2)
+confirmacaoMicroMin = input.float(45.0, "Confirmacao micro minima", minval=0, maxval=100)
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+posicaoPainel = input.string("Superior Esquerdo", "Posicao do painel", options=["Superior Esquerdo", "Superior Direito", "Inferior Esquerdo", "Inferior Direito"])
+
+posicaoTabela = posicaoPainel == "Superior Esquerdo" ? position.top_left : posicaoPainel == "Superior Direito" ? position.top_right : posicaoPainel == "Inferior Esquerdo" ? position.bottom_left : position.bottom_right
+
+
+// ============================================================================
+// FUNCOES
+// ============================================================================
+
+f_limitar(valor, minimo, maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+
+f_arredondarPreco(valor) =>
+    syminfo.mintick > 0 ? math.round(valor / syminfo.mintick) * syminfo.mintick : valor
+
+
+f_preco(valor) =>
+    na(valor) ? "-" : str.tostring(valor, format.mintick)
+
+
+f_pct(valor) =>
+    str.tostring(f_limitar(valor, 0, 100), "#.0") + "%"
+
+
+// ============================================================================
+// FUNCAO MTF
+// modo = 1 LONG
+// modo = -1 SHORT
+// modo = 0 ATR
+// ============================================================================
+
+f_mtfScore(modo) =>
+
+    atrLocal = ta.atr(atrLength)
+
+    emaFast = ta.ema(close, emaFastLength)
+    emaMid = ta.ema(close, emaMidLength)
+    emaSlow = ta.ema(close, emaSlowLength)
+
+    rsiLocal = ta.rsi(close, rsiLength)
+
+    volumeMedio = ta.sma(volume, volumeLength)
+    volumeRelativo = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+    rangeCandle = high - low
+    corpoCandle = math.abs(close - open)
+
+    forcaCandle = rangeCandle > 0 ? corpoCandle / rangeCandle * 100.0 : 0.0
+
+    retorno1 = close[1] != 0 ? (close / close[1] - 1.0) * 100.0 : 0.0
+    retorno3 = close[3] != 0 ? (close / close[3] - 1.0) * 100.0 : 0.0
+
+    tendenciaAlta = emaFast > emaMid and emaMid > emaSlow
+    tendenciaBaixa = emaFast < emaMid and emaMid < emaSlow
+
+    distanciaEMA = atrLocal > 0 ? math.abs(emaFast - emaSlow) / atrLocal : 0.0
+    forcaTendencia = f_limitar(distanciaEMA * 25.0, 0, 100)
+
+    volumeScore = f_limitar(volumeRelativo * 50.0, 0, 100)
+
+    candleLong = close > open ? forcaCandle : 0.0
+    candleShort = close < open ? forcaCandle : 0.0
+
+    trendLong = tendenciaAlta ? 100.0 : emaFast > emaMid ? 65.0 : 35.0
+    trendShort = tendenciaBaixa ? 100.0 : emaFast < emaMid ? 65.0 : 35.0
+
+    rsiLong = f_limitar(rsiLocal, 0, 100)
+    rsiShort = f_limitar(100.0 - rsiLocal, 0, 100)
+
+    retornoLong = retorno1 > 0 ? 60.0 + f_limitar(retorno1 * 20.0, 0, 40) : f_limitar(50.0 + retorno1 * 20.0, 0, 100)
+    retornoShort = retorno1 < 0 ? 60.0 + f_limitar(math.abs(retorno1) * 20.0, 0, 40) : f_limitar(50.0 - retorno1 * 20.0, 0, 100)
+
+    retorno3Long = retorno3 > 0 ? 60.0 + f_limitar(retorno3 * 10.0, 0, 40) : f_limitar(50.0 + retorno3 * 10.0, 0, 100)
+    retorno3Short = retorno3 < 0 ? 60.0 + f_limitar(math.abs(retorno3) * 10.0, 0, 40) : f_limitar(50.0 - retorno3 * 10.0, 0, 100)
+
+    // ------------------------------------------------------------------------
+    // KVO
+    // ------------------------------------------------------------------------
+
+    tendenciaVolume = close > close[1] ? 1.0 : close < close[1] ? -1.0 : 0.0
+
+    kvoVolume = volume * tendenciaVolume
+
+    kvoFast = ta.ema(kvoVolume, 34)
+    kvoSlow = ta.ema(kvoVolume, 55)
+
+    kvoRaw = kvoFast - kvoSlow
+    kvoSignal = ta.ema(kvoRaw, 13)
+
+    kvoHist = kvoRaw - kvoSignal
+
+    kvoLong = kvoRaw > kvoSignal ? 100.0 : kvoHist > 0 ? 70.0 : 30.0
+    kvoShort = kvoRaw < kvoSignal ? 100.0 : kvoHist < 0 ? 70.0 : 30.0
+
+    kvoLong := kvoHist > kvoHist[1] ? f_limitar(kvoLong + 10.0, 0, 100) : kvoLong
+    kvoShort := kvoHist < kvoHist[1] ? f_limitar(kvoShort + 10.0, 0, 100) : kvoShort
+
+    // ------------------------------------------------------------------------
+    // SCORE LONG
+    // ------------------------------------------------------------------------
+
+    scoreLong = candleLong * 0.15 + trendLong * 0.20 + rsiLong * 0.15 + kvoLong * 0.15 + volumeScore * 0.10 + retornoLong * 0.10 + retorno3Long * 0.05 + forcaTendencia * 0.10
+
+    // ------------------------------------------------------------------------
+    // SCORE SHORT
+    // ------------------------------------------------------------------------
+
+    scoreShort = candleShort * 0.15 + trendShort * 0.20 + rsiShort * 0.15 + kvoShort * 0.15 + volumeScore * 0.10 + retornoShort * 0.10 + retorno3Short * 0.05 + forcaTendencia * 0.10
+
+    scoreLong := f_limitar(scoreLong, 0, 100)
+    scoreShort := f_limitar(scoreShort, 0, 100)
+
+    resultado = modo == 1 ? scoreLong : modo == -1 ? scoreShort : atrLocal
+
+    resultado
+
+
+// ============================================================================
+// MTF 1 MINUTO
+// ============================================================================
+
+mtf1Long = request.security(syminfo.tickerid, "1", f_mtfScore(1))
+mtf1Short = request.security(syminfo.tickerid, "1", f_mtfScore(-1))
+
+
+// ============================================================================
+// MTF 5 MINUTOS
+// ============================================================================
+
+mtf5Long = request.security(syminfo.tickerid, "5", f_mtfScore(1))
+mtf5Short = request.security(syminfo.tickerid, "5", f_mtfScore(-1))
+
+
+// ============================================================================
+// MTF 15 MINUTOS
+// ============================================================================
+
+mtf15Long = request.security(syminfo.tickerid, "15", f_mtfScore(1))
+mtf15Short = request.security(syminfo.tickerid, "15", f_mtfScore(-1))
+
+
+// ============================================================================
+// MTF 30 MINUTOS
+// ============================================================================
+
+mtf30Long = request.security(syminfo.tickerid, "30", f_mtfScore(1))
+mtf30Short = request.security(syminfo.tickerid, "30", f_mtfScore(-1))
+
+
+// ============================================================================
+// MTF 1 HORA
+// ============================================================================
+
+mtf1HLong = request.security(syminfo.tickerid, "60", f_mtfScore(1))
+mtf1HShort = request.security(syminfo.tickerid, "60", f_mtfScore(-1))
+
+
+// ============================================================================
+// MTF 4 HORAS
+// ============================================================================
+
+mtf4HLong = request.security(syminfo.tickerid, "240", f_mtfScore(1))
+mtf4HShort = request.security(syminfo.tickerid, "240", f_mtfScore(-1))
+
+
+// ============================================================================
+// MTF DIARIO
+// ============================================================================
+
+mtfDLong = request.security(syminfo.tickerid, "1D", f_mtfScore(1))
+mtfDShort = request.security(syminfo.tickerid, "1D", f_mtfScore(-1))
+
+
+// ============================================================================
+// ATR MTF
+// ============================================================================
+
+atr15 = request.security(syminfo.tickerid, "15", f_mtfScore(0))
+atr1H = request.security(syminfo.tickerid, "60", f_mtfScore(0))
+atr4H = request.security(syminfo.tickerid, "240", f_mtfScore(0))
+
+
+// ============================================================================
+// SEGURANCA MTF
+// ============================================================================
+
+mtf1LongSafe = nz(mtf1Long, 50.0)
+mtf1ShortSafe = nz(mtf1Short, 50.0)
+
+mtf5LongSafe = nz(mtf5Long, 50.0)
+mtf5ShortSafe = nz(mtf5Short, 50.0)
+
+mtf15LongSafe = nz(mtf15Long, 50.0)
+mtf15ShortSafe = nz(mtf15Short, 50.0)
+
+mtf30LongSafe = nz(mtf30Long, 50.0)
+mtf30ShortSafe = nz(mtf30Short, 50.0)
+
+mtf1HLongSafe = nz(mtf1HLong, 50.0)
+mtf1HShortSafe = nz(mtf1HShort, 50.0)
+
+mtf4HLongSafe = nz(mtf4HLong, 50.0)
+mtf4HShortSafe = nz(mtf4HShort, 50.0)
+
+mtfDLongSafe = nz(mtfDLong, 50.0)
+mtfDShortSafe = nz(mtfDShort, 50.0)
+
+
+// ============================================================================
+// FORCA MTF AGREGADA
+// ============================================================================
+
+pesoTotalMTF = p1 + p5 + p15 + p30 + p1H + p4H + pD
+
+scoreMTFLongBruto = mtf1LongSafe * p1 + mtf5LongSafe * p5 + mtf15LongSafe * p15 + mtf30LongSafe * p30 + mtf1HLongSafe * p1H + mtf4HLongSafe * p4H + mtfDLongSafe * pD
+
+scoreMTFShortBruto = mtf1ShortSafe * p1 + mtf5ShortSafe * p5 + mtf15ShortSafe * p15 + mtf30ShortSafe * p30 + mtf1HShortSafe * p1H + mtf4HShortSafe * p4H + mtfDShortSafe * pD
+
+scoreMTFLong = pesoTotalMTF > 0 ? scoreMTFLongBruto / pesoTotalMTF : 50.0
+scoreMTFShort = pesoTotalMTF > 0 ? scoreMTFShortBruto / pesoTotalMTF : 50.0
+
+scoreMTFLong := f_limitar(scoreMTFLong, 0, 100)
+scoreMTFShort := f_limitar(scoreMTFShort, 0, 100)
+
+
+// ============================================================================
+// CABO DE FORCA MTF
+// ============================================================================
+
+mtfVencedor = scoreMTFLong > scoreMTFShort ? 1 : scoreMTFShort > scoreMTFLong ? -1 : 0
+
+forcaMTF = mtfVencedor == 1 ? scoreMTFLong : mtfVencedor == -1 ? scoreMTFShort : math.max(scoreMTFLong, scoreMTFShort)
+
+direcaoMTF = mtfVencedor == 1 ? "COMPRA" : mtfVencedor == -1 ? "VENDA" : "NEUTRO"
+
+vantagemMTF = math.abs(scoreMTFLong - scoreMTFShort)
+
+
+// ============================================================================
+// ATR COMBINADO
+// ============================================================================
+
+pesoTotalATR = pesoATR15 + pesoATR1H + pesoATR4H
+
+atr15Safe = nz(atr15, ta.atr(atrLength))
+atr1HSafe = nz(atr1H, ta.atr(atrLength))
+atr4HSafe = nz(atr4H, ta.atr(atrLength))
+
+atrCombinado = pesoTotalATR > 0 ? (atr15Safe * pesoATR15 + atr1HSafe * pesoATR1H + atr4HSafe * pesoATR4H) / pesoTotalATR : ta.atr(atrLength)
+
+atrLocal = ta.atr(atrLength)
+
+atrLongoSeguro = math.max(nz(atrCombinado, atrLocal), syminfo.mintick)
+
+
+// ============================================================================
+// INDICADORES LOCAIS
+// ============================================================================
+
+emaFastLocal = ta.ema(close, emaFastLength)
+emaMidLocal = ta.ema(close, emaMidLength)
+emaSlowLocal = ta.ema(close, emaSlowLength)
+
+rsiLocal = ta.rsi(close, rsiLength)
+
+volumeMedioLocal = ta.sma(volume, volumeLength)
+
+volumeRelativoLocal = volumeMedioLocal > 0 ? volume / volumeMedioLocal : 1.0
+
+rangeLocal = high - low
+corpoLocal = math.abs(close - open)
+
+forcaCandleLocal = rangeLocal > 0 ? corpoLocal / rangeLocal * 100.0 : 0.0
+
+retorno1Local = close[1] != 0 ? (close / close[1] - 1.0) * 100.0 : 0.0
+retorno3Local = close[3] != 0 ? (close / close[3] - 1.0) * 100.0 : 0.0
+
+
+// ============================================================================
+// TENDENCIA
+// ============================================================================
+
+tendenciaLong = emaFastLocal > emaMidLocal and emaMidLocal > emaSlowLocal
+
+tendenciaShort = emaFastLocal < emaMidLocal and emaMidLocal < emaSlowLocal
+
+distanciaEMALocal = atrLocal > 0 ? math.abs(emaFastLocal - emaSlowLocal) / atrLocal : 0.0
+
+forcaTendenciaLocal = f_limitar(distanciaEMALocal * 25.0, 0, 100)
+
+
+// ============================================================================
+// RSI
+// ============================================================================
+
+rsiLong = f_limitar(rsiLocal, 0, 100)
+rsiShort = f_limitar(100.0 - rsiLocal, 0, 100)
+
+
+// ============================================================================
+// KVO LOCAL
+// ============================================================================
+
+direcaoVolumeLocal = close > close[1] ? 1.0 : close < close[1] ? -1.0 : 0.0
+
+volumeFluxoLocal = volume * direcaoVolumeLocal
+
+kvoFastLocal = ta.ema(volumeFluxoLocal, 34)
+kvoSlowLocal = ta.ema(volumeFluxoLocal, 55)
+
+kvoRawLocal = kvoFastLocal - kvoSlowLocal
+
+kvoSignalLocal = ta.ema(kvoRawLocal, 13)
+
+kvoHistLocal = kvoRawLocal - kvoSignalLocal
+
+kvoLongLocal = kvoRawLocal > kvoSignalLocal ? 100.0 : kvoHistLocal > 0 ? 70.0 : 30.0
+
+kvoShortLocal = kvoRawLocal < kvoSignalLocal ? 100.0 : kvoHistLocal < 0 ? 70.0 : 30.0
+
+kvoLongLocal := kvoHistLocal > kvoHistLocal[1] ? f_limitar(kvoLongLocal + 10.0, 0, 100) : kvoLongLocal
+
+kvoShortLocal := kvoHistLocal < kvoHistLocal[1] ? f_limitar(kvoShortLocal + 10.0, 0, 100) : kvoShortLocal
+
+
+// ============================================================================
+// SCORE LOCAL LONG
+// ============================================================================
+
+candleLongLocal = close > open ? forcaCandleLocal : 0.0
+
+trendLongLocal = tendenciaLong ? 100.0 : emaFastLocal > emaMidLocal ? 65.0 : 35.0
+
+volumeScoreLocal = f_limitar(volumeRelativoLocal * 50.0, 0, 100)
+
+retornoLongLocal = retorno1Local > 0 ? 60.0 + f_limitar(retorno1Local * 20.0, 0, 40) : f_limitar(50.0 + retorno1Local * 20.0, 0, 100)
+
+retorno3LongLocal = retorno3Local > 0 ? 60.0 + f_limitar(retorno3Local * 10.0, 0, 40) : f_limitar(50.0 + retorno3Local * 10.0, 0, 100)
+
+
+// ============================================================================
+// SCORE LOCAL SHORT
+// ============================================================================
+
+candleShortLocal = close < open ? forcaCandleLocal : 0.0
+
+trendShortLocal = tendenciaShort ? 100.0 : emaFastLocal < emaMidLocal ? 65.0 : 35.0
+
+retornoShortLocal = retorno1Local < 0 ? 60.0 + f_limitar(math.abs(retorno1Local) * 20.0, 0, 40) : f_limitar(50.0 - retorno1Local * 20.0, 0, 100)
+
+retorno3ShortLocal = retorno3Local < 0 ? 60.0 + f_limitar(math.abs(retorno3Local) * 10.0, 0, 40) : f_limitar(50.0 - retorno3Local * 10.0, 0, 100)
+
+
+// ============================================================================
+// SCORE LOCAL FINAL
+// ============================================================================
+
+scoreLocalLong = candleLongLocal * 0.15 + trendLongLocal * 0.20 + rsiLong * 0.15 + kvoLongLocal * 0.15 + volumeScoreLocal * 0.10 + retornoLongLocal * 0.10 + retorno3LongLocal * 0.05 + forcaTendenciaLocal * 0.10
+
+scoreLocalShort = candleShortLocal * 0.15 + trendShortLocal * 0.20 + rsiShort * 0.15 + kvoShortLocal * 0.15 + volumeScoreLocal * 0.10 + retornoShortLocal * 0.10 + retorno3ShortLocal * 0.05 + forcaTendenciaLocal * 0.10
+
+scoreLocalLong := f_limitar(scoreLocalLong, 0, 100)
+
+scoreLocalShort := f_limitar(scoreLocalShort, 0, 100)
+
+
+// ============================================================================
+// SCORE FINAL
+// 50% LOCAL
+// 50% MTF
+// ============================================================================
+
+scoreLong = scoreLocalLong * 0.50 + scoreMTFLong * 0.50
+
+scoreShort = scoreLocalShort * 0.50 + scoreMTFShort * 0.50
+
+scoreLongSeguro = f_limitar(nz(scoreLong, 50), 0, 100)
+
+scoreShortSeguro = f_limitar(nz(scoreShort, 50), 0, 100)
+
+
+// ============================================================================
+// INTENSIDADE
+// ============================================================================
+
+intensidadeLong = scoreLongSeguro * 0.60 + forcaTendenciaLocal * 0.20 + candleLongLocal * 0.10 + volumeScoreLocal * 0.10
+
+intensidadeShort = scoreShortSeguro * 0.60 + forcaTendenciaLocal * 0.20 + candleShortLocal * 0.10 + volumeScoreLocal * 0.10
+
+intensidadeLong := f_limitar(intensidadeLong, 0, 100)
+
+intensidadeShort := f_limitar(intensidadeShort, 0, 100)
+
+
+// ============================================================================
+// CONFLUENCIA
+// ============================================================================
+
+confluenciaLong = candleLongLocal * 0.15 + trendLongLocal * 0.20 + kvoLongLocal * 0.15 + rsiLong * 0.10 + retornoLongLocal * 0.10 + retorno3LongLocal * 0.10 + (mtfVencedor == 1 ? 100.0 : 0.0) * 0.10 + volumeScoreLocal * 0.10
+
+confluenciaShort = candleShortLocal * 0.15 + trendShortLocal * 0.20 + kvoShortLocal * 0.15 + rsiShort * 0.10 + retornoShortLocal * 0.10 + retorno3ShortLocal * 0.10 + (mtfVencedor == -1 ? 100.0 : 0.0) * 0.10 + volumeScoreLocal * 0.10
+
+confluenciaLong := f_limitar(confluenciaLong, 0, 100)
+
+confluenciaShort := f_limitar(confluenciaShort, 0, 100)
+
+
+// ============================================================================
+// VANTAGEM
+// ============================================================================
+
+vantagemLongFinal = scoreLongSeguro - scoreShortSeguro
+
+vantagemShortFinal = scoreShortSeguro - scoreLongSeguro
+
+vantagemLongFinal := math.max(vantagemLongFinal, 0)
+
+vantagemShortFinal := math.max(vantagemShortFinal, 0)
+
+
+// ============================================================================
+// MICRO-ROMPIMENTO
+// ============================================================================
+
+microMaxAnterior = ta.highest(high[1], microLookback)
+
+microMinAnterior = ta.lowest(low[1], microLookback)
+
+rompimentoLong = close > microMaxAnterior
+
+rompimentoShort = close < microMinAnterior
+
+microTendenciaLong = ta.ema(close, microLookback) > ta.ema(close, microLookback * 2)
+
+microTendenciaShort = ta.ema(close, microLookback) < ta.ema(close, microLookback * 2)
+
+microScoreLong = (rompimentoLong ? 100.0 : 0.0) * 0.60 + (microTendenciaLong ? 100.0 : 0.0) * 0.40
+
+microScoreShort = (rompimentoShort ? 100.0 : 0.0) * 0.60 + (microTendenciaShort ? 100.0 : 0.0) * 0.40
+
+microScoreLong := f_limitar(microScoreLong, 0, 100)
+
+microScoreShort := f_limitar(microScoreShort, 0, 100)
+
+confirmacaoMicroLong = microScoreLong >= confirmacaoMicroMin
+
+confirmacaoMicroShort = microScoreShort >= confirmacaoMicroMin
+
+
+// ============================================================================
+// ESTRUTURA
+// ============================================================================
+
+resistencia30 = request.security(syminfo.tickerid, "30", ta.highest(high, lookbackEstrutura))
+
+resistencia1H = request.security(syminfo.tickerid, "60", ta.highest(high, lookbackEstrutura))
+
+resistencia4H = request.security(syminfo.tickerid, "240", ta.highest(high, lookbackEstrutura))
+
+resistenciaD = request.security(syminfo.tickerid, "1D", ta.highest(high, lookbackEstrutura))
+
+suporte30 = request.security(syminfo.tickerid, "30", ta.lowest(low, lookbackEstrutura))
+
+suporte1H = request.security(syminfo.tickerid, "60", ta.lowest(low, lookbackEstrutura))
+
+suporte4H = request.security(syminfo.tickerid, "240", ta.lowest(low, lookbackEstrutura))
+
+suporteD = request.security(syminfo.tickerid, "1D", ta.lowest(low, lookbackEstrutura))
+
+resistenciaMaior = math.min(resistencia30, math.min(resistencia1H, math.min(resistencia4H, resistenciaD)))
+
+suporteMaior = math.max(suporte30, math.max(suporte1H, math.max(suporte4H, suporteD)))
+
+espacoLong = resistenciaMaior > close ? (resistenciaMaior - close) >= atrLongoSeguro * espacoMinLong : true
+
+espacoShort = suporteMaior < close ? (close - suporteMaior) >= atrLongoSeguro * espacoMinShort : true
+
+entradaValidaLong = usarRompimento ? close >= microMaxAnterior or tendenciaLong : tendenciaLong
+
+entradaValidaShort = usarRompimento ? close <= microMinAnterior or tendenciaShort : tendenciaShort
+
+
+// ============================================================================
+// DIRECAO
+// ============================================================================
+
+direcaoLong = scoreLongSeguro > scoreShortSeguro
+
+direcaoShort = scoreShortSeguro > scoreLongSeguro
+
+filtroMTFLong = scoreMTFLong >= mtfMinLong and mtfVencedor == 1
+
+filtroMTFShort = scoreMTFShort >= mtfMinShort and mtfVencedor == -1
+
+
+// ============================================================================
+// CONDICOES
+// ============================================================================
+
+condicaoLong = ativarLong and scoreLongSeguro >= scoreMinLong and intensidadeLong >= intensidadeMinLong and confluenciaLong >= confluenciaMinLong and vantagemLongFinal >= vantagemMinima and direcaoLong and filtroMTFLong and espacoLong and confirmacaoMicroLong and entradaValidaLong
+
+condicaoShort = ativarShort and scoreShortSeguro >= scoreMinShort and intensidadeShort >= intensidadeMinShort and confluenciaShort >= confluenciaMinShort and vantagemShortFinal >= vantagemMinima and direcaoShort and filtroMTFShort and espacoShort and confirmacaoMicroShort and entradaValidaShort
+
+
+// ============================================================================
+// MAQUINA DE ESTADO
+// ============================================================================
+
+var int direcaoAnterior = 0
+
+var int direcaoAtual = 0
+
+if condicaoLong and not condicaoShort
+    direcaoAtual := 1
+else if condicaoShort and not condicaoLong
+    direcaoAtual := -1
+else
+    direcaoAtual := 0
+
+mudouParaCompra = direcaoAtual == 1 and direcaoAnterior != 1
+
+mudouParaVenda = direcaoAtual == -1 and direcaoAnterior != -1
+
+entrouAguardar = direcaoAtual == 0 and direcaoAnterior != 0
+
+
+// ============================================================================
+// ENTRADA PROJETADA
+// ============================================================================
+
+fatorEntradaLong = f_limitar(scoreLongSeguro / 100.0, 0, 1)
+
+fatorEntradaShort = f_limitar(scoreShortSeguro / 100.0, 0, 1)
+
+distanciaEntradaLong = 0.10 - fatorEntradaLong * 0.10
+
+distanciaEntradaShort = 0.10 - fatorEntradaShort * 0.10
+
+entradaProjetadaLong = close + atrLongoSeguro * distanciaEntradaLong
+
+entradaProjetadaShort = close - atrLongoSeguro * distanciaEntradaShort
+
+entradaLongFinal = f_arredondarPreco(entradaProjetadaLong)
+
+entradaShortFinal = f_arredondarPreco(entradaProjetadaShort)
+
+
+// ============================================================================
+// ESTADO FIXADO
+// ============================================================================
+
+var float entradaFixada = na
+
+var float atrFixado = na
+
+var float alvo1Fixado = na
+var float alvo2Fixado = na
+var float alvo3Fixado = na
+var float alvo4Fixado = na
+var float alvo5Fixado = na
+var float alvo6Fixado = na
+var float alvo7Fixado = na
+var float alvo8Fixado = na
+
+var float scoreFixado = na
+
+var float vantagemFixada = na
+
+var int direcaoFixada = 0
+
+
+// ============================================================================
+// NOVA COMPRA
+// ============================================================================
+
+if mudouParaCompra
+    entradaFixada := entradaLongFinal
+    atrFixado := atrLongoSeguro
+    alvo1Fixado := f_arredondarPreco(entradaFixada + atrFixado * 1.0)
+    alvo2Fixado := f_arredondarPreco(entradaFixada + atrFixado * 2.0)
+    alvo3Fixado := f_arredondarPreco(entradaFixada + atrFixado * 3.0)
+    alvo4Fixado := f_arredondarPreco(entradaFixada + atrFixado * 4.0)
+    alvo5Fixado := f_arredondarPreco(entradaFixada + atrFixado * 5.0)
+    alvo6Fixado := f_arredondarPreco(entradaFixada + atrFixado * 6.0)
+    alvo7Fixado := f_arredondarPreco(entradaFixada + atrFixado * 7.0)
+    alvo8Fixado := f_arredondarPreco(entradaFixada + atrFixado * 8.0)
+    scoreFixado := scoreLongSeguro
+    vantagemFixada := vantagemLongFinal
+    direcaoFixada := 1
+
+
+// ============================================================================
+// NOVA VENDA
+// ============================================================================
+
+if mudouParaVenda
+    entradaFixada := entradaShortFinal
+    atrFixado := atrLongoSeguro
+    alvo1Fixado := f_arredondarPreco(entradaFixada - atrFixado * 1.0)
+    alvo2Fixado := f_arredondarPreco(entradaFixada - atrFixado * 2.0)
+    alvo3Fixado := f_arredondarPreco(entradaFixada - atrFixado * 3.0)
+    alvo4Fixado := f_arredondarPreco(entradaFixada - atrFixado * 4.0)
+    alvo5Fixado := f_arredondarPreco(entradaFixada - atrFixado * 5.0)
+    alvo6Fixado := f_arredondarPreco(entradaFixada - atrFixado * 6.0)
+    alvo7Fixado := f_arredondarPreco(entradaFixada - atrFixado * 7.0)
+    alvo8Fixado := f_arredondarPreco(entradaFixada - atrFixado * 8.0)
+    scoreFixado := scoreShortSeguro
+    vantagemFixada := vantagemShortFinal
+    direcaoFixada := -1
+
+
+// ============================================================================
+// STATUS ALVO 8
+// ============================================================================
+
+alvo8AtingidoLong = direcaoFixada == 1 and not na(alvo8Fixado) and high >= alvo8Fixado
+
+alvo8AtingidoShort = direcaoFixada == -1 and not na(alvo8Fixado) and low <= alvo8Fixado
+
+alvo8Atingido = alvo8AtingidoLong or alvo8AtingidoShort
+
+
+// ============================================================================
+// DIRECAO ANTERIOR
+// ============================================================================
+
+direcaoAnterior := direcaoAtual
+
+
+// ============================================================================
+// TEXTOS DO PAINEL
+// ============================================================================
+
+textoDirecao = direcaoAtual == 1 ? "COMPRA" : direcaoAtual == -1 ? "VENDA" : "AGUARDAR"
+
+textoMTF = mtfVencedor == 1 ? "COMPRA " + f_pct(forcaMTF) : mtfVencedor == -1 ? "VENDA " + f_pct(forcaMTF) : "NEUTRO " + f_pct(forcaMTF)
+
+textoAlvo8 = alvo8Atingido ? "ATINGIDO" : direcaoFixada == 1 ? "PENDENTE" : direcaoFixada == -1 ? "PENDENTE" : "-"
+
+textoEntrada = direcaoAtual == 1 ? f_preco(entradaLongFinal) : direcaoAtual == -1 ? f_preco(entradaShortFinal) : not na(entradaFixada) ? f_preco(entradaFixada) : "-"
+
+textoATR = f_preco(atrLongoSeguro)
+
+textoScore = direcaoAtual == 1 ? f_pct(scoreLongSeguro) : direcaoAtual == -1 ? f_pct(scoreShortSeguro) : f_pct(math.max(scoreLongSeguro, scoreShortSeguro))
+
+textoIntensidade = direcaoAtual == 1 ? f_pct(intensidadeLong) : direcaoAtual == -1 ? f_pct(intensidadeShort) : f_pct(math.max(intensidadeLong, intensidadeShort))
+
+textoConfluencia = direcaoAtual == 1 ? f_pct(confluenciaLong) : direcaoAtual == -1 ? f_pct(confluenciaShort) : f_pct(math.max(confluenciaLong, confluenciaShort))
+
+textoVantagem = direcaoAtual == 1 ? f_pct(vantagemLongFinal) : direcaoAtual == -1 ? f_pct(vantagemShortFinal) : f_pct(math.max(vantagemLongFinal, vantagemShortFinal))
+
+textoMicro = direcaoAtual == 1 ? f_pct(microScoreLong) : direcaoAtual == -1 ? f_pct(microScoreShort) : f_pct(math.max(microScoreLong, microScoreShort))
+
+
+// ============================================================================
+// CORES DO PAINEL
+// ============================================================================
+
+corCompra = color.new(color.green, 0)
+
+corVenda = color.new(color.red, 0)
+
+corNeutro = color.new(color.gray, 0)
+
+corFundo = color.new(color.black, 0)
+
+corTexto = color.white
+
+corDirecao = direcaoAtual == 1 ? corCompra : direcaoAtual == -1 ? corVenda : corNeutro
+
+corMTF = mtfVencedor == 1 ? corCompra : mtfVencedor == -1 ? corVenda : corNeutro
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+var table painel = table.new(posicaoTabela, 3, 18, border_width=1)
+
+
+if barstate.islast
+
+    table.cell(painel, 0, 0, "KVO PRO V12.5", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 0, "SINAL", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 0, "VALOR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 1, "DIRECAO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 1, textoDirecao, text_color=corTexto, bgcolor=corDirecao)
+    table.cell(painel, 2, 1, textoDirecao, text_color=corTexto, bgcolor=corDirecao)
+
+    table.cell(painel, 0, 2, "TODOS MTF", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 2, direcaoMTF, text_color=corTexto, bgcolor=corMTF)
+    table.cell(painel, 2, 2, f_pct(forcaMTF), text_color=corTexto, bgcolor=corMTF)
+
+    table.cell(painel, 0, 3, "SCORE", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 3, textoScore, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 3, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 4, "INTENSIDADE", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 4, textoIntensidade, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 4, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 5, "CONFLUENCIA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 5, textoConfluencia, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 5, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 6, "VANTAGEM", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 6, textoVantagem, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 6, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 7, "MICRO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 7, textoMicro, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 7, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 8, "ENTRADA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 8, textoEntrada, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 8, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 9, "ATR", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 9, textoATR, text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 9, "", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 10, "T1", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 10, f_preco(alvo1Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 10, "1 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 11, "T2", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 11, f_preco(alvo2Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 11, "2 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 12, "T3", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 12, f_preco(alvo3Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 12, "3 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 13, "T4", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 13, f_preco(alvo4Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 13, "4 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 14, "T5", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 14, f_preco(alvo5Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 14, "5 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 15, "T6", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 15, f_preco(alvo6Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 15, "6 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 16, "T7", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 16, f_preco(alvo7Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 16, "7 ATR", text_color=corTexto, bgcolor=corFundo)
+
+    table.cell(painel, 0, 17, "T8", text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 1, 17, f_preco(alvo8Fixado), text_color=corTexto, bgcolor=corFundo)
+    table.cell(painel, 2, 17, textoAlvo8, text_color=corTexto, bgcolor=alvo8Atingido ? corCompra : corFundo)
