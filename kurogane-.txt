@@ -1,0 +1,1427 @@
+//@version=6
+indicator("KVO PRO V13.0 - BINARIAS + FUNDO/TOPO + MUDANCA DE VIES + FOREX", overlay=true, max_labels_count=500, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO V13.0
+// ============================================================================
+// COMPRA NO FUNDO
+// VENDA NO TOPO
+// PREVISAO DE MUDANCA DE VIES
+// ATR NORMALIZADO
+// MTF 1M | 5M | 15M | 30M | 1H | 4H | DIARIO
+// EURUSD | USDJPY | EURJPY
+// PAINEL COMO SAIDA PRINCIPAL
+// ============================================================================
+
+
+// ============================================================================
+// 01 - CONFIGURACOES GERAIS
+// ============================================================================
+
+grupoGeral = "01 - CONFIGURACOES GERAIS"
+
+ativarLong = input.bool(true, "Ativar COMPRA", group=grupoGeral)
+ativarShort = input.bool(true, "Ativar VENDA", group=grupoGeral)
+
+scoreMinLong = input.float(58.0, "Score minimo COMPRA", minval=0, maxval=100, step=0.5, group=grupoGeral)
+scoreMinShort = input.float(58.0, "Score minimo VENDA", minval=0, maxval=100, step=0.5, group=grupoGeral)
+
+intensidadeMinLong = input.float(48.0, "Intensidade minima COMPRA", minval=0, maxval=100, step=0.5, group=grupoGeral)
+intensidadeMinShort = input.float(48.0, "Intensidade minima VENDA", minval=0, maxval=100, step=0.5, group=grupoGeral)
+
+confluenciaMinLong = input.float(45.0, "Confluencia minima COMPRA", minval=0, maxval=100, step=0.5, group=grupoGeral)
+confluenciaMinShort = input.float(45.0, "Confluencia minima VENDA", minval=0, maxval=100, step=0.5, group=grupoGeral)
+
+vantagemMinima = input.float(5.0, "Vantagem minima", minval=0, maxval=100, step=0.5, group=grupoGeral)
+
+sensibilidade = input.float(1.15, "Sensibilidade", minval=0.50, maxval=2.00, step=0.05, group=grupoGeral)
+
+bloquearSinalAtivo = input.bool(true, "Bloquear novo sinal durante operacao", group=grupoGeral)
+
+usarFiltroRegime = input.bool(false, "Filtrar contra tendencia maior", group=grupoGeral)
+
+
+// ============================================================================
+// 02 - OPCOES BINARIAS
+// ============================================================================
+
+grupoExp = "02 - EXPIRACAO"
+
+barrasExpiracao = input.int(3, "Barras ate vencimento", minval=1, maxval=100, group=grupoExp)
+
+usarFiltroMovimento = input.bool(true, "Usar movimento minimo", group=grupoExp)
+
+minMovimentoATR = input.float(0.03, "Movimento minimo ATR", minval=0.0, maxval=2.0, step=0.01, group=grupoExp)
+
+
+// ============================================================================
+// 03 - FUNDO E TOPO
+// ============================================================================
+
+grupoFundoTopo = "03 - FUNDO / TOPO"
+
+lookbackFundo = input.int(30, "Lookback FUNDO", minval=5, maxval=200, group=grupoFundoTopo)
+
+lookbackTopo = input.int(30, "Lookback TOPO", minval=5, maxval=200, group=grupoFundoTopo)
+
+distanciaFundoATRMax = input.float(1.50, "Distancia maxima do FUNDO em ATR", minval=0.10, maxval=5.0, step=0.05, group=grupoFundoTopo)
+
+distanciaTopoATRMax = input.float(1.50, "Distancia maxima do TOPO em ATR", minval=0.10, maxval=5.0, step=0.05, group=grupoFundoTopo)
+
+forcaFundoMin = input.float(50.0, "Forca minima do FUNDO", minval=0, maxval=100, step=0.5, group=grupoFundoTopo)
+
+forcaTopoMin = input.float(50.0, "Forca minima do TOPO", minval=0, maxval=100, step=0.5, group=grupoFundoTopo)
+
+
+// ============================================================================
+// 04 - MTF
+// ============================================================================
+
+grupoMTF = "04 - MTF"
+
+peso1M = input.float(10.0, "Peso 1M", minval=0, maxval=100, step=1, group=grupoMTF)
+peso5M = input.float(15.0, "Peso 5M", minval=0, maxval=100, step=1, group=grupoMTF)
+peso15M = input.float(20.0, "Peso 15M", minval=0, maxval=100, step=1, group=grupoMTF)
+peso30M = input.float(20.0, "Peso 30M", minval=0, maxval=100, step=1, group=grupoMTF)
+peso1H = input.float(15.0, "Peso 1H", minval=0, maxval=100, step=1, group=grupoMTF)
+peso4H = input.float(10.0, "Peso 4H", minval=0, maxval=100, step=1, group=grupoMTF)
+pesoD = input.float(10.0, "Peso Diario", minval=0, maxval=100, step=1, group=grupoMTF)
+
+mtfMinLong = input.float(45.0, "MTF minimo COMPRA", minval=0, maxval=100, step=0.5, group=grupoMTF)
+
+mtfMinShort = input.float(45.0, "MTF minimo VENDA", minval=0, maxval=100, step=0.5, group=grupoMTF)
+
+
+// ============================================================================
+// 05 - ATR
+// ============================================================================
+
+grupoATR = "05 - ATR"
+
+atrLength = input.int(14, "Periodo ATR", minval=2, maxval=100, group=grupoATR)
+
+atrMediaLength = input.int(50, "Media ATR", minval=5, maxval=300, group=grupoATR)
+
+pesoATR15M = input.float(40.0, "Peso ATR 15M", minval=0, maxval=100, step=1, group=grupoATR)
+
+pesoATR1H = input.float(35.0, "Peso ATR 1H", minval=0, maxval=100, step=1, group=grupoATR)
+
+pesoATR4H = input.float(25.0, "Peso ATR 4H", minval=0, maxval=100, step=1, group=grupoATR)
+
+usarATRAdaptativo = input.bool(true, "ATR adaptativo", group=grupoATR)
+
+
+// ============================================================================
+// 06 - INDICADORES
+// ============================================================================
+
+grupoModelo = "06 - INDICADORES"
+
+rsiLength = input.int(10, "RSI", minval=2, maxval=100, group=grupoModelo)
+
+rsiSobrevendido = input.float(35.0, "RSI sobrevendido", minval=5, maxval=50, step=1, group=grupoModelo)
+
+rsiSobrecomprado = input.float(65.0, "RSI sobrecomprado", minval=50, maxval=95, step=1, group=grupoModelo)
+
+emaFastLength = input.int(8, "EMA rapida", minval=2, maxval=100, group=grupoModelo)
+
+emaMidLength = input.int(21, "EMA media", minval=2, maxval=200, group=grupoModelo)
+
+emaSlowLength = input.int(55, "EMA lenta", minval=2, maxval=300, group=grupoModelo)
+
+volumeLength = input.int(20, "Media volume", minval=2, maxval=200, group=grupoModelo)
+
+
+// ============================================================================
+// 07 - KVO
+// ============================================================================
+
+grupoKVO = "07 - KVO"
+
+kvoFast = input.int(34, "KVO rapido", minval=2, maxval=100, group=grupoKVO)
+
+kvoSlow = input.int(55, "KVO lento", minval=3, maxval=150, group=grupoKVO)
+
+kvoSignalLength = input.int(13, "KVO sinal", minval=2, maxval=50, group=grupoKVO)
+
+
+// ============================================================================
+// 08 - PESOS
+// ============================================================================
+
+grupoPesos = "08 - PESOS"
+
+pesoFundoTopo = input.float(25.0, "Peso FUNDO/TOPO", minval=0, maxval=100, step=1, group=grupoPesos)
+
+pesoRSI = input.float(15.0, "Peso RSI", minval=0, maxval=100, step=1, group=grupoPesos)
+
+pesoKVO = input.float(15.0, "Peso KVO", minval=0, maxval=100, step=1, group=grupoPesos)
+
+pesoTendencia = input.float(15.0, "Peso Tendencia", minval=0, maxval=100, step=1, group=grupoPesos)
+
+pesoMicro = input.float(15.0, "Peso Microestrutura", minval=0, maxval=100, step=1, group=grupoPesos)
+
+pesoMTF = input.float(15.0, "Peso MTF", minval=0, maxval=100, step=1, group=grupoPesos)
+
+
+// ============================================================================
+// 09 - ATIVOS FOREX
+// ============================================================================
+
+grupoForex = "09 - ATIVOS FOREX"
+
+ativoEURUSD = input.symbol("OANDA:EURUSD", "EURUSD", group=grupoForex)
+
+ativoUSDJPY = input.symbol("OANDA:USDJPY", "USDJPY", group=grupoForex)
+
+ativoEURJPY = input.symbol("OANDA:EURJPY", "EURJPY", group=grupoForex)
+
+timeframePrevisao = input.timeframe("5", "Timeframe da previsao", group=grupoForex)
+
+usarPrevisaoForex = input.bool(true, "Mostrar previsao dos 3 pares", group=grupoForex)
+
+
+// ============================================================================
+// 10 - PAINEL
+// ============================================================================
+
+grupoPainel = "10 - PAINEL"
+
+posicaoPainelInput = input.string("Superior Direito", "Posicao", options=["Superior Esquerdo", "Superior Direito", "Inferior Esquerdo", "Inferior Direito"], group=grupoPainel)
+
+mostrarMTF = input.bool(true, "Mostrar MTF", group=grupoPainel)
+
+mostrarHistorico = input.bool(true, "Mostrar historico", group=grupoPainel)
+
+
+// ============================================================================
+// 11 - FUNCOES BASICAS
+// ============================================================================
+
+f_limitar(valor, minimo, maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+
+f_pct(valor) =>
+    str.tostring(f_limitar(valor, 0, 100), "#.0") + "%"
+
+
+f_preco(valor) =>
+    na(valor) ? "-" : str.tostring(valor, format.mintick)
+
+
+// ============================================================================
+// 12 - SCORE LONG MTF
+// ============================================================================
+
+f_scoreLong() =>
+    atr = ta.atr(atrLength)
+
+    emaFast = ta.ema(close, emaFastLength)
+
+    emaMid = ta.ema(close, emaMidLength)
+
+    emaSlow = ta.ema(close, emaSlowLength)
+
+    rsi = ta.rsi(close, rsiLength)
+
+    volumeMedio = ta.sma(volume, volumeLength)
+
+    volumeRel = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+    corpo = math.abs(close - open)
+
+    rangeCandle = math.max(high - low, syminfo.mintick)
+
+    forcaCandle = f_limitar(corpo / rangeCandle * 100.0, 0, 100)
+
+    retorno1 = close[1] != 0 ? (close - close[1]) / close[1] * 100.0 : 0.0
+
+    retorno3 = close[3] != 0 ? (close - close[3]) / close[3] * 100.0 : 0.0
+
+    tendencia = emaFast > emaMid and emaMid > emaSlow
+
+    distanciaEMA = atr > 0 ? math.abs(emaFast - emaSlow) / atr : 0.0
+
+    tendenciaScore = tendencia ? f_limitar(55.0 + distanciaEMA * 30.0, 0, 100) : f_limitar(25.0 + distanciaEMA * 15.0, 0, 100)
+
+    rsiScore = rsi >= 50 ? f_limitar((rsi - 50.0) * 2.0, 0, 100) : 0.0
+
+    retornoScore = retorno1 > 0 ? f_limitar(50.0 + math.abs(retorno1) * 10.0, 0, 100) : 0.0
+
+    retorno3Score = retorno3 > 0 ? f_limitar(50.0 + math.abs(retorno3) * 5.0, 0, 100) : 0.0
+
+    volumeScore = f_limitar(volumeRel * 50.0, 0, 100)
+
+    direcao = close > close[1] ? 1.0 : close < close[1] ? -1.0 : 0.0
+
+    kvo = ta.ema(volume * direcao, kvoFast) - ta.ema(volume * direcao, kvoSlow)
+
+    kvoSignal = ta.ema(kvo, kvoSignalLength)
+
+    kvoScore = kvo > kvoSignal ? 100.0 : 0.0
+
+    candleScore = close > open ? forcaCandle : 0.0
+
+    score = candleScore * 0.15 + tendenciaScore * 0.20 + rsiScore * 0.15 + kvoScore * 0.15 + volumeScore * 0.10 + retornoScore * 0.10 + retorno3Score * 0.05 + forcaCandle * 0.10
+
+    f_limitar(score, 0, 100)
+
+
+// ============================================================================
+// 13 - SCORE SHORT MTF
+// ============================================================================
+
+f_scoreShort() =>
+    atr = ta.atr(atrLength)
+
+    emaFast = ta.ema(close, emaFastLength)
+
+    emaMid = ta.ema(close, emaMidLength)
+
+    emaSlow = ta.ema(close, emaSlowLength)
+
+    rsi = ta.rsi(close, rsiLength)
+
+    volumeMedio = ta.sma(volume, volumeLength)
+
+    volumeRel = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+    corpo = math.abs(close - open)
+
+    rangeCandle = math.max(high - low, syminfo.mintick)
+
+    forcaCandle = f_limitar(corpo / rangeCandle * 100.0, 0, 100)
+
+    retorno1 = close[1] != 0 ? (close - close[1]) / close[1] * 100.0 : 0.0
+
+    retorno3 = close[3] != 0 ? (close - close[3]) / close[3] * 100.0 : 0.0
+
+    tendencia = emaFast < emaMid and emaMid < emaSlow
+
+    distanciaEMA = atr > 0 ? math.abs(emaFast - emaSlow) / atr : 0.0
+
+    tendenciaScore = tendencia ? f_limitar(55.0 + distanciaEMA * 30.0, 0, 100) : f_limitar(25.0 + distanciaEMA * 15.0, 0, 100)
+
+    rsiScore = rsi <= 50 ? f_limitar((50.0 - rsi) * 2.0, 0, 100) : 0.0
+
+    retornoScore = retorno1 < 0 ? f_limitar(50.0 + math.abs(retorno1) * 10.0, 0, 100) : 0.0
+
+    retorno3Score = retorno3 < 0 ? f_limitar(50.0 + math.abs(retorno3) * 5.0, 0, 100) : 0.0
+
+    volumeScore = f_limitar(volumeRel * 50.0, 0, 100)
+
+    direcao = close > close[1] ? 1.0 : close < close[1] ? -1.0 : 0.0
+
+    kvo = ta.ema(volume * direcao, kvoFast) - ta.ema(volume * direcao, kvoSlow)
+
+    kvoSignal = ta.ema(kvo, kvoSignalLength)
+
+    kvoScore = kvo < kvoSignal ? 100.0 : 0.0
+
+    candleScore = close < open ? forcaCandle : 0.0
+
+    score = candleScore * 0.15 + tendenciaScore * 0.20 + rsiScore * 0.15 + kvoScore * 0.15 + volumeScore * 0.10 + retornoScore * 0.10 + retorno3Score * 0.05 + forcaCandle * 0.10
+
+    f_limitar(score, 0, 100)
+
+
+// ============================================================================
+// 14 - MTF ATUAL
+// ============================================================================
+
+mtf1Long = request.security(syminfo.tickerid, "1", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf5Long = request.security(syminfo.tickerid, "5", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf15Long = request.security(syminfo.tickerid, "15", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf30Long = request.security(syminfo.tickerid, "30", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf1HLong = request.security(syminfo.tickerid, "60", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf4HLong = request.security(syminfo.tickerid, "240", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtfDLong = request.security(syminfo.tickerid, "1D", f_scoreLong(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+mtf1Short = request.security(syminfo.tickerid, "1", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf5Short = request.security(syminfo.tickerid, "5", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf15Short = request.security(syminfo.tickerid, "15", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf30Short = request.security(syminfo.tickerid, "30", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf1HShort = request.security(syminfo.tickerid, "60", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtf4HShort = request.security(syminfo.tickerid, "240", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+mtfDShort = request.security(syminfo.tickerid, "1D", f_scoreShort(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// 15 - MTF PONDERADO
+// ============================================================================
+
+somaPesosMTF = peso1M + peso5M + peso15M + peso30M + peso1H + peso4H + pesoD
+
+scoreMTFLong = somaPesosMTF > 0 ? (mtf1Long * peso1M + mtf5Long * peso5M + mtf15Long * peso15M + mtf30Long * peso30M + mtf1HLong * peso1H + mtf4HLong * peso4H + mtfDLong * pesoD) / somaPesosMTF : 0.0
+
+scoreMTFShort = somaPesosMTF > 0 ? (mtf1Short * peso1M + mtf5Short * peso5M + mtf15Short * peso15M + mtf30Short * peso30M + mtf1HShort * peso1H + mtf4HShort * peso4H + mtfDShort * pesoD) / somaPesosMTF : 0.0
+
+
+// ============================================================================
+// 16 - ATR
+// ============================================================================
+
+atrLocal = ta.atr(atrLength)
+
+atrMedia = ta.sma(atrLocal, atrMediaLength)
+
+atr15M = request.security(syminfo.tickerid, "15", ta.atr(atrLength), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+atr1H = request.security(syminfo.tickerid, "60", ta.atr(atrLength), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+atr4H = request.security(syminfo.tickerid, "240", ta.atr(atrLength), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+somaPesoATR = pesoATR15M + pesoATR1H + pesoATR4H
+
+atrBase = somaPesoATR > 0 ? (atr15M * pesoATR15M + atr1H * pesoATR1H + atr4H * pesoATR4H) / somaPesoATR : atrLocal
+
+atrSeguro = math.max(nz(atrBase, atrLocal), syminfo.mintick)
+
+atrRatio = atrMedia > 0 ? atrLocal / atrMedia : 1.0
+
+fatorVolatilidade = usarATRAdaptativo ? f_limitar(atrRatio, 0.60, 1.80) : 1.0
+
+
+// ============================================================================
+// 17 - ATR EM PIPS
+// ============================================================================
+
+pipSize = syminfo.type == "forex" ? syminfo.mintick * 10.0 : syminfo.mintick
+
+atrPips = atrSeguro / pipSize
+
+atrPercentual = close != 0 ? atrSeguro / close * 100.0 : 0.0
+
+atrNormalizado = close != 0 ? atrSeguro / close * 10000.0 : 0.0
+
+
+// ============================================================================
+// 18 - MODELO LOCAL
+// ============================================================================
+
+emaFast = ta.ema(close, emaFastLength)
+
+emaMid = ta.ema(close, emaMidLength)
+
+emaSlow = ta.ema(close, emaSlowLength)
+
+rsi = ta.rsi(close, rsiLength)
+
+volumeMedio = ta.sma(volume, volumeLength)
+
+volumeRelativo = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+corpo = math.abs(close - open)
+
+rangeCandle = math.max(high - low, syminfo.mintick)
+
+forcaCandle = f_limitar(corpo / rangeCandle * 100.0, 0, 100)
+
+retorno1 = close[1] != 0 ? (close - close[1]) / close[1] * 100.0 : 0.0
+
+retorno3 = close[3] != 0 ? (close - close[3]) / close[3] * 100.0 : 0.0
+
+tendenciaLong = emaFast > emaMid and emaMid > emaSlow
+
+tendenciaShort = emaFast < emaMid and emaMid < emaSlow
+
+forcaTendencia = atrSeguro > 0 ? math.abs(emaFast - emaSlow) / atrSeguro * 100.0 : 0.0
+
+forcaTendencia := f_limitar(forcaTendencia, 0, 100)
+
+
+// ============================================================================
+// 19 - KVO
+// ============================================================================
+
+direcaoVolume = close > close[1] ? 1.0 : close < close[1] ? -1.0 : 0.0
+
+kvo = ta.ema(volume * direcaoVolume, kvoFast) - ta.ema(volume * direcaoVolume, kvoSlow)
+
+kvoSignal = ta.ema(kvo, kvoSignalLength)
+
+kvoHist = kvo - kvoSignal
+
+kvoLong = kvo > kvoSignal
+
+kvoShort = kvo < kvoSignal
+
+kvoVirandoAlta = kvo > kvo[1] and kvo[1] <= kvo[2]
+
+kvoVirandoBaixa = kvo < kvo[1] and kvo[1] >= kvo[2]
+
+
+// ============================================================================
+// 20 - FUNDO E TOPO
+// ============================================================================
+
+fundo = ta.lowest(low, lookbackFundo)
+
+topo = ta.highest(high, lookbackTopo)
+
+distanciaFundo = close - fundo
+
+distanciaTopo = topo - close
+
+distanciaFundoATR = atrSeguro > 0 ? distanciaFundo / atrSeguro : 999.0
+
+distanciaTopoATR = atrSeguro > 0 ? distanciaTopo / atrSeguro : 999.0
+
+
+// ============================================================================
+// 21 - FORCA DO FUNDO
+// ============================================================================
+
+fundoBase = distanciaFundoATR <= distanciaFundoATRMax ? f_limitar(100.0 - distanciaFundoATR / distanciaFundoATRMax * 60.0, 0, 100) : 0.0
+
+rsiFundo = rsi <= 50 ? f_limitar((50.0 - rsi) * 2.0, 0, 100) : 0.0
+
+recuperacaoFundo = close > open and close > close[1] ? 100.0 : close > close[1] ? 65.0 : 25.0
+
+kvoFundo = kvoVirandoAlta ? 100.0 : kvoLong ? 65.0 : 20.0
+
+fundoScore = f_limitar(fundoBase * 0.40 + rsiFundo * 0.20 + recuperacaoFundo * 0.20 + kvoFundo * 0.20, 0, 100)
+
+
+// ============================================================================
+// 22 - FORCA DO TOPO
+// ============================================================================
+
+topoBase = distanciaTopoATR <= distanciaTopoATRMax ? f_limitar(100.0 - distanciaTopoATR / distanciaTopoATRMax * 60.0, 0, 100) : 0.0
+
+rsiTopo = rsi >= 50 ? f_limitar((rsi - 50.0) * 2.0, 0, 100) : 0.0
+
+rejeicaoTopo = close < open and close < close[1] ? 100.0 : close < close[1] ? 65.0 : 25.0
+
+kvoTopo = kvoVirandoBaixa ? 100.0 : kvoShort ? 65.0 : 20.0
+
+topoScore = f_limitar(topoBase * 0.40 + rsiTopo * 0.20 + rejeicaoTopo * 0.20 + kvoTopo * 0.20, 0, 100)
+
+
+// ============================================================================
+// 23 - MICROESTRUTURA
+// ============================================================================
+
+microHigh = ta.highest(high[1], 5)
+
+microLow = ta.lowest(low[1], 5)
+
+microBreakAlta = close > microHigh
+
+microBreakBaixa = close < microLow
+
+microRecuperacao = close > open and close > close[1]
+
+microRejeicao = close < open and close < close[1]
+
+microLongScore = f_limitar((microBreakAlta ? 65.0 : 30.0) + (microRecuperacao ? 35.0 : 0.0), 0, 100)
+
+microShortScore = f_limitar((microBreakBaixa ? 65.0 : 30.0) + (microRejeicao ? 35.0 : 0.0), 0, 100)
+
+
+// ============================================================================
+// 24 - RSI ADAPTATIVO
+// ============================================================================
+
+rsiLongScore = rsi <= rsiSobrevendido ? 100.0 : rsi < 50 ? f_limitar((50.0 - rsi) * 2.0, 0, 100) : f_limitar((rsi - 50.0) * 0.50, 0, 25)
+
+rsiShortScore = rsi >= rsiSobrecomprado ? 100.0 : rsi > 50 ? f_limitar((rsi - 50.0) * 2.0, 0, 100) : f_limitar((50.0 - rsi) * 0.50, 0, 25)
+
+
+// ============================================================================
+// 25 - TENDENCIA
+// ============================================================================
+
+tendenciaLongScore = tendenciaLong ? f_limitar(65.0 + forcaTendencia * 0.35, 0, 100) : f_limitar(30.0 + forcaTendencia * 0.20, 0, 100)
+
+tendenciaShortScore = tendenciaShort ? f_limitar(65.0 + forcaTendencia * 0.35, 0, 100) : f_limitar(30.0 + forcaTendencia * 0.20, 0, 100)
+
+
+// ============================================================================
+// 26 - CONFLUENCIA
+// ============================================================================
+
+confluenciaLong = 0.0
+
+confluenciaLong += fundoScore >= forcaFundoMin ? 20.0 : 0.0
+
+confluenciaLong += rsiLongScore >= 50 ? 15.0 : 0.0
+
+confluenciaLong += kvoLong ? 15.0 : 0.0
+
+confluenciaLong += tendenciaLong ? 15.0 : 0.0
+
+confluenciaLong += microLongScore >= 50 ? 15.0 : 0.0
+
+confluenciaLong += scoreMTFLong > scoreMTFShort ? 20.0 : 0.0
+
+confluenciaLong := f_limitar(confluenciaLong, 0, 100)
+
+
+confluenciaShort = 0.0
+
+confluenciaShort += topoScore >= forcaTopoMin ? 20.0 : 0.0
+
+confluenciaShort += rsiShortScore >= 50 ? 15.0 : 0.0
+
+confluenciaShort += kvoShort ? 15.0 : 0.0
+
+confluenciaShort += tendenciaShort ? 15.0 : 0.0
+
+confluenciaShort += microShortScore >= 50 ? 15.0 : 0.0
+
+confluenciaShort += scoreMTFShort > scoreMTFLong ? 20.0 : 0.0
+
+confluenciaShort := f_limitar(confluenciaShort, 0, 100)
+
+
+// ============================================================================
+// 27 - SCORE FINAL
+// ============================================================================
+
+scoreLocalLong = fundoScore * pesoFundoTopo / 100.0 + rsiLongScore * pesoRSI / 100.0 + (kvoLong ? 100.0 : 0.0) * pesoKVO / 100.0 + tendenciaLongScore * pesoTendencia / 100.0 + microLongScore * pesoMicro / 100.0
+
+scoreLocalShort = topoScore * pesoFundoTopo / 100.0 + rsiShortScore * pesoRSI / 100.0 + (kvoShort ? 100.0 : 0.0) * pesoKVO / 100.0 + tendenciaShortScore * pesoTendencia / 100.0 + microShortScore * pesoMicro / 100.0
+
+somaPesosLocal = pesoFundoTopo + pesoRSI + pesoKVO + pesoTendencia + pesoMicro
+
+scoreLocalLongNormalizado = somaPesosLocal > 0 ? scoreLocalLong / somaPesosLocal * 100.0 : 0.0
+
+scoreLocalShortNormalizado = somaPesosLocal > 0 ? scoreLocalShort / somaPesosLocal * 100.0 : 0.0
+
+scoreLong = f_limitar(scoreLocalLongNormalizado * 0.55 + scoreMTFLong * 0.45, 0, 100)
+
+scoreShort = f_limitar(scoreLocalShortNormalizado * 0.55 + scoreMTFShort * 0.45, 0, 100)
+
+
+// ============================================================================
+// 28 - SENSIBILIDADE
+// ============================================================================
+
+scoreLongAjustado = f_limitar(50.0 + (scoreLong - 50.0) * sensibilidade, 0, 100)
+
+scoreShortAjustado = f_limitar(50.0 + (scoreShort - 50.0) * sensibilidade, 0, 100)
+
+vantagemLong = scoreLongAjustado - scoreShortAjustado
+
+vantagemShort = scoreShortAjustado - scoreLongAjustado
+
+
+// ============================================================================
+// 29 - INTENSIDADE
+// ============================================================================
+
+intensidadeLong = f_limitar(scoreLongAjustado * 0.55 + fundoScore * 0.20 + microLongScore * 0.10 + forcaTendencia * 0.10 + f_limitar(volumeRelativo * 50.0, 0, 100) * 0.05, 0, 100)
+
+intensidadeShort = f_limitar(scoreShortAjustado * 0.55 + topoScore * 0.20 + microShortScore * 0.10 + forcaTendencia * 0.10 + f_limitar(volumeRelativo * 50.0, 0, 100) * 0.05, 0, 100)
+
+
+// ============================================================================
+// 30 - PREVISAO DE MUDANCA DE VIES
+// ============================================================================
+
+pressaoMudancaAlta = 0.0
+
+pressaoMudancaAlta += fundoScore * 0.30
+
+pressaoMudancaAlta += rsiLongScore * 0.15
+
+pressaoMudancaAlta += (kvoVirandoAlta ? 100.0 : kvoLong ? 65.0 : 20.0) * 0.20
+
+pressaoMudancaAlta += microLongScore * 0.15
+
+pressaoMudancaAlta += (scoreMTFLong > scoreMTFShort ? 100.0 : 30.0) * 0.10
+
+pressaoMudancaAlta += (close > emaFast ? 100.0 : 20.0) * 0.10
+
+pressaoMudancaAlta := f_limitar(pressaoMudancaAlta, 0, 100)
+
+
+pressaoMudancaBaixa = 0.0
+
+pressaoMudancaBaixa += topoScore * 0.30
+
+pressaoMudancaBaixa += rsiShortScore * 0.15
+
+pressaoMudancaBaixa += (kvoVirandoBaixa ? 100.0 : kvoShort ? 65.0 : 20.0) * 0.20
+
+pressaoMudancaBaixa += microShortScore * 0.15
+
+pressaoMudancaBaixa += (scoreMTFShort > scoreMTFLong ? 100.0 : 30.0) * 0.10
+
+pressaoMudancaBaixa += (close < emaFast ? 100.0 : 20.0) * 0.10
+
+pressaoMudancaBaixa := f_limitar(pressaoMudancaBaixa, 0, 100)
+
+
+// ============================================================================
+// 31 - DISTANCIA PARA MUDANCA DE VIES
+// ============================================================================
+
+distanciaMudancaAltaATR = distanciaFundoATR
+
+distanciaMudancaBaixaATR = distanciaTopoATR
+
+proximidadeAlta = pressaoMudancaAlta >= 80 ? "MUITO PERTO" : pressaoMudancaAlta >= 65 ? "PERTO" : pressaoMudancaAlta >= 45 ? "MEDIA" : "LONGE"
+
+proximidadeBaixa = pressaoMudancaBaixa >= 80 ? "MUITO PERTO" : pressaoMudancaBaixa >= 65 ? "PERTO" : pressaoMudancaBaixa >= 45 ? "MEDIA" : "LONGE"
+
+
+// ============================================================================
+// 32 - ENTRADA NO FUNDO
+// ============================================================================
+
+zonaFundo = distanciaFundoATR <= distanciaFundoATRMax and fundoScore >= forcaFundoMin
+
+zonaTopo = distanciaTopoATR <= distanciaTopoATRMax and topoScore >= forcaTopoMin
+
+confirmacaoLong = kvoLong or kvoVirandoAlta or microRecuperacao
+
+confirmacaoShort = kvoShort or kvoVirandoBaixa or microRejeicao
+
+regimeLongOK = not usarFiltroRegime or tendenciaLong or scoreMTFLong >= scoreMTFShort
+
+regimeShortOK = not usarFiltroRegime or tendenciaShort or scoreMTFShort >= scoreMTFLong
+
+filtroMTFLong = scoreMTFLong >= mtfMinLong
+
+filtroMTFShort = scoreMTFShort >= mtfMinShort
+
+direcaoLong = scoreLongAjustado > scoreShortAjustado and vantagemLong >= vantagemMinima
+
+direcaoShort = scoreShortAjustado > scoreLongAjustado and vantagemShort >= vantagemMinima
+
+
+// ============================================================================
+// 33 - MOVIMENTO ESPERADO
+// ============================================================================
+
+fatorTempo = math.sqrt(barrasExpiracao)
+
+movimentoEsperadoLong = atrLocal * (scoreLongAjustado / 100.0) * fatorTempo
+
+movimentoEsperadoShort = atrLocal * (scoreShortAjustado / 100.0) * fatorTempo
+
+movimentoMinimo = atrLocal * minMovimentoATR
+
+filtroMovimentoLong = not usarFiltroMovimento or movimentoEsperadoLong >= movimentoMinimo
+
+filtroMovimentoShort = not usarFiltroMovimento or movimentoEsperadoShort >= movimentoMinimo
+
+
+// ============================================================================
+// 34 - CONDICOES FINAIS
+// ============================================================================
+
+condicaoLong = ativarLong and zonaFundo and scoreLongAjustado >= scoreMinLong and intensidadeLong >= intensidadeMinLong and confluenciaLong >= confluenciaMinLong and direcaoLong and filtroMTFLong and confirmacaoLong and regimeLongOK and filtroMovimentoLong
+
+condicaoShort = ativarShort and zonaTopo and scoreShortAjustado >= scoreMinShort and intensidadeShort >= intensidadeMinShort and confluenciaShort >= confluenciaMinShort and direcaoShort and filtroMTFShort and confirmacaoShort and regimeShortOK and filtroMovimentoShort
+
+
+// ============================================================================
+// 35 - MAQUINA DE ESTADOS
+// ============================================================================
+
+var bool operacaoAtiva = false
+
+var int direcaoOperacao = 0
+
+var int barraEntrada = na
+
+var float precoEntrada = na
+
+var float scoreEntrada = na
+
+var float intensidadeEntrada = na
+
+var float confluenciaEntrada = na
+
+var float mtfEntrada = na
+
+var int totalOperacoes = 0
+
+var int totalWins = 0
+
+var int totalLosses = 0
+
+var int totalDoji = 0
+
+var string ultimoResultado = "NENHUM"
+
+var int ultimaDuracao = na
+
+
+// ============================================================================
+// 36 - EXPIRACAO
+// ============================================================================
+
+if operacaoAtiva and barstate.isconfirmed
+
+    barrasDecorridas = bar_index - barraEntrada
+
+    if barrasDecorridas >= barrasExpiracao
+
+        precoVencimento = close
+
+        if direcaoOperacao == 1
+
+            if precoVencimento > precoEntrada
+
+                ultimoResultado := "WIN COMPRA"
+
+                totalWins += 1
+
+            else if precoVencimento < precoEntrada
+
+                ultimoResultado := "LOSS COMPRA"
+
+                totalLosses += 1
+
+            else
+
+                ultimoResultado := "DOJI COMPRA"
+
+                totalDoji += 1
+
+        else if direcaoOperacao == -1
+
+            if precoVencimento < precoEntrada
+
+                ultimoResultado := "WIN VENDA"
+
+                totalWins += 1
+
+            else if precoVencimento > precoEntrada
+
+                ultimoResultado := "LOSS VENDA"
+
+                totalLosses += 1
+
+            else
+
+                ultimoResultado := "DOJI VENDA"
+
+                totalDoji += 1
+
+        totalOperacoes += 1
+
+        ultimaDuracao := barrasDecorridas
+
+        operacaoAtiva := false
+
+        direcaoOperacao := 0
+
+        barraEntrada := na
+
+        precoEntrada := na
+
+        scoreEntrada := na
+
+        intensidadeEntrada := na
+
+        confluenciaEntrada := na
+
+        mtfEntrada := na
+
+
+// ============================================================================
+// 37 - NOVA ENTRADA
+// ============================================================================
+
+podeEntrar = not bloquearSinalAtivo or not operacaoAtiva
+
+novaCompra = podeEntrar and not operacaoAtiva and condicaoLong and not condicaoShort
+
+novaVenda = podeEntrar and not operacaoAtiva and condicaoShort and not condicaoLong
+
+
+if barstate.isconfirmed and novaCompra
+
+    operacaoAtiva := true
+
+    direcaoOperacao := 1
+
+    barraEntrada := bar_index
+
+    precoEntrada := close
+
+    scoreEntrada := scoreLongAjustado
+
+    intensidadeEntrada := intensidadeLong
+
+    confluenciaEntrada := confluenciaLong
+
+    mtfEntrada := scoreMTFLong
+
+
+if barstate.isconfirmed and novaVenda
+
+    operacaoAtiva := true
+
+    direcaoOperacao := -1
+
+    barraEntrada := bar_index
+
+    precoEntrada := close
+
+    scoreEntrada := scoreShortAjustado
+
+    intensidadeEntrada := intensidadeShort
+
+    confluenciaEntrada := confluenciaShort
+
+    mtfEntrada := scoreMTFShort
+
+
+// ============================================================================
+// 38 - STATUS
+// ============================================================================
+
+sinalAtual = operacaoAtiva ? direcaoOperacao : novaCompra ? 1 : novaVenda ? -1 : 0
+
+textoSinal = sinalAtual == 1 ? "COMPRA" : sinalAtual == -1 ? "VENDA" : "AGUARDAR"
+
+scorePainel = sinalAtual == 1 ? (operacaoAtiva ? scoreEntrada : scoreLongAjustado) : sinalAtual == -1 ? (operacaoAtiva ? scoreEntrada : scoreShortAjustado) : math.max(scoreLongAjustado, scoreShortAjustado)
+
+intensidadePainel = sinalAtual == 1 ? (operacaoAtiva ? intensidadeEntrada : intensidadeLong) : sinalAtual == -1 ? (operacaoAtiva ? intensidadeEntrada : intensidadeShort) : math.max(intensidadeLong, intensidadeShort)
+
+confluenciaPainel = sinalAtual == 1 ? (operacaoAtiva ? confluenciaEntrada : confluenciaLong) : sinalAtual == -1 ? (operacaoAtiva ? confluenciaEntrada : confluenciaShort) : math.max(confluenciaLong, confluenciaShort)
+
+mtfPainel = sinalAtual == 1 ? (operacaoAtiva ? mtfEntrada : scoreMTFLong) : sinalAtual == -1 ? (operacaoAtiva ? mtfEntrada : scoreMTFShort) : math.max(scoreMTFLong, scoreMTFShort)
+
+vantagemPainel = sinalAtual == 1 ? vantagemLong : sinalAtual == -1 ? vantagemShort : math.abs(vantagemLong)
+
+barrasRestantes = operacaoAtiva ? math.max(0, barrasExpiracao - (bar_index - barraEntrada)) : 0
+
+taxaAcerto = totalOperacoes > 0 ? totalWins / totalOperacoes * 100.0 : 0.0
+
+
+// ============================================================================
+// 39 - PREVISAO FOREX
+// ============================================================================
+
+f_previsaoLongSymbol() =>
+    f_scoreLong()
+
+
+f_previsaoShortSymbol() =>
+    f_scoreShort()
+
+
+eurusdLong = request.security(ativoEURUSD, timeframePrevisao, f_previsaoLongSymbol(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+eurusdShort = request.security(ativoEURUSD, timeframePrevisao, f_previsaoShortSymbol(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+usdjpyLong = request.security(ativoUSDJPY, timeframePrevisao, f_previsaoLongSymbol(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+usdjpyShort = request.security(ativoUSDJPY, timeframePrevisao, f_previsaoShortSymbol(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+eurjpyLong = request.security(ativoEURJPY, timeframePrevisao, f_previsaoLongSymbol(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+eurjpyShort = request.security(ativoEURJPY, timeframePrevisao, f_previsaoShortSymbol(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// 40 - PREVISAO FOREX FINAL
+// ============================================================================
+
+eurusdVantagem = eurusdLong - eurusdShort
+
+usdjpyVantagem = usdjpyLong - usdjpyShort
+
+eurjpyVantagem = eurjpyLong - eurjpyShort
+
+eurusdTexto = eurusdVantagem >= 8 ? "COMPRA" : eurusdVantagem <= -8 ? "VENDA" : "AGUARDAR"
+
+usdjpyTexto = usdjpyVantagem >= 8 ? "COMPRA" : usdjpyVantagem <= -8 ? "VENDA" : "AGUARDAR"
+
+eurjpyTexto = eurjpyVantagem >= 8 ? "COMPRA" : eurjpyVantagem <= -8 ? "VENDA" : "AGUARDAR"
+
+eurusdScore = math.max(eurusdLong, eurusdShort)
+
+usdjpyScore = math.max(usdjpyLong, usdjpyShort)
+
+eurjpyScore = math.max(eurjpyLong, eurjpyShort)
+
+
+// ============================================================================
+// 41 - WEBHOOK
+// ============================================================================
+
+if novaCompra
+
+    mensagemCompra = "{\"ticker\":\"" + syminfo.ticker + "\",\"sinal\":\"COMPRA\",\"entrada\":\"" + f_preco(close) + "\",\"score\":\"" + str.tostring(scoreLongAjustado, "#.0") + "\",\"expiracao\":\"" + str.tostring(barrasExpiracao) + "\"}"
+
+    alert(mensagemCompra, alert.freq_once_per_bar_close)
+
+
+if novaVenda
+
+    mensagemVenda = "{\"ticker\":\"" + syminfo.ticker + "\",\"sinal\":\"VENDA\",\"entrada\":\"" + f_preco(close) + "\",\"score\":\"" + str.tostring(scoreShortAjustado, "#.0") + "\",\"expiracao\":\"" + str.tostring(barrasExpiracao) + "\"}"
+
+    alert(mensagemVenda, alert.freq_once_per_bar_close)
+
+
+alertcondition(novaCompra, title="KVO PRO V13 - COMPRA", message="KVO PRO V13 - COMPRA")
+
+alertcondition(novaVenda, title="KVO PRO V13 - VENDA", message="KVO PRO V13 - VENDA")
+
+
+// ============================================================================
+// 42 - POSICAO DO PAINEL
+// ============================================================================
+
+posicaoTabela = posicaoPainelInput == "Superior Esquerdo" ? position.top_left : posicaoPainelInput == "Superior Direito" ? position.top_right : posicaoPainelInput == "Inferior Esquerdo" ? position.bottom_left : position.bottom_right
+
+
+// ============================================================================
+// 43 - PAINEL
+// ============================================================================
+
+var table painel = table.new(posicaoTabela, 5, 45, border_width=1)
+
+
+if barstate.islast
+
+    corSinal = sinalAtual == 1 ? color.green : sinalAtual == -1 ? color.red : color.gray
+
+    corTendencia = tendenciaLong ? color.green : tendenciaShort ? color.red : color.gray
+
+    corKVO = kvoLong ? color.green : kvoShort ? color.red : color.gray
+
+    corResultado = str.contains(ultimoResultado, "WIN") ? color.green : str.contains(ultimoResultado, "LOSS") ? color.red : color.gray
+
+    tendenciaTexto = tendenciaLong ? "ALTA" : tendenciaShort ? "BAIXA" : "NEUTRA"
+
+    kvoTexto = kvoLong ? "ALTA" : kvoShort ? "BAIXA" : "NEUTRO"
+
+
+    // -------------------------------------------------------------------------
+    // CABECALHO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 0, "KVO PRO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 0, "V13.0", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 2, 0, "BINARIAS", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 0, "SINAL", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 0, textoSinal, text_color=color.white, bgcolor=corSinal)
+
+
+    // -------------------------------------------------------------------------
+    // SCORE
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 1, "SCORE", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 1, f_pct(scorePainel), text_color=color.white, bgcolor=corSinal)
+
+    table.cell(painel, 2, 1, "MTF", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 1, f_pct(mtfPainel), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 1, "VANT " + str.tostring(vantagemPainel, "#.0") + "%", text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // INTENSIDADE
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 2, "INTENSIDADE", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 2, f_pct(intensidadePainel), text_color=color.white, bgcolor=corSinal)
+
+    table.cell(painel, 2, 2, "CONFLUENCIA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 2, f_pct(confluenciaPainel), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 2, "SENS " + str.tostring(sensibilidade, "#.00"), text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // FUNDO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 3, "FUNDO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 3, f_preco(fundo), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 2, 3, "DISTANCIA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 3, str.tostring(distanciaFundoATR, "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 3, f_pct(fundoScore), text_color=color.white, bgcolor=color.green)
+
+
+    // -------------------------------------------------------------------------
+    // TOPO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 4, "TOPO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 4, f_preco(topo), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 2, 4, "DISTANCIA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 4, str.tostring(distanciaTopoATR, "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 4, f_pct(topoScore), text_color=color.white, bgcolor=color.red)
+
+
+    // -------------------------------------------------------------------------
+    // MUDANCA DE VIES
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 5, "VIES ALTA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 5, f_pct(pressaoMudancaAlta), text_color=color.white, bgcolor=color.green)
+
+    table.cell(painel, 2, 5, proximidadeAlta, text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 5, str.tostring(distanciaMudancaAltaATR, "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 5, "FUNDO", text_color=color.white, bgcolor=color.black)
+
+
+    table.cell(painel, 0, 6, "VIES BAIXA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 6, f_pct(pressaoMudancaBaixa), text_color=color.white, bgcolor=color.red)
+
+    table.cell(painel, 2, 6, proximidadeBaixa, text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 6, str.tostring(distanciaMudancaBaixaATR, "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 6, "TOPO", text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // ATR
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 7, "ATR PRECO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 7, f_preco(atrSeguro), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 2, 7, "ATR PIPS", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 7, str.tostring(atrPips, "#.0"), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 7, str.tostring(atrPercentual, "#.000") + "%", text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // VOLATILIDADE
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 8, "ATR RATIO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 8, str.tostring(atrRatio, "#.00") + "x", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 2, 8, "ATR NORMAL", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 8, str.tostring(atrNormalizado, "#.00"), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 8, usarATRAdaptativo ? "ADAPTATIVO" : "FIXO", text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // TENDENCIA
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 9, "TENDENCIA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 9, tendenciaTexto, text_color=color.white, bgcolor=corTendencia)
+
+    table.cell(painel, 2, 9, "FORCA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 9, f_pct(forcaTendencia), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 9, "RSI " + str.tostring(rsi, "#.0"), text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // KVO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 10, "KVO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 10, kvoTexto, text_color=color.white, bgcolor=corKVO)
+
+    table.cell(painel, 2, 10, "HIST", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 10, str.tostring(kvoHist, "#.00"), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 10, kvoVirandoAlta ? "VIRANDO ALTA" : kvoVirandoBaixa ? "VIRANDO BAIXA" : "NORMAL", text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // EXPIRACAO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 11, "EXPIRACAO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 11, str.tostring(barrasExpiracao) + " BARRAS", text_color=color.white, bgcolor=corSinal)
+
+    table.cell(painel, 2, 11, "RESTANTES", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 11, str.tostring(barrasRestantes), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 11, operacaoAtiva ? "ATIVA" : "LIVRE", text_color=color.white, bgcolor=operacaoAtiva ? corSinal : color.gray)
+
+
+    // -------------------------------------------------------------------------
+    // ENTRADA
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 12, "ENTRADA", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 12, operacaoAtiva ? f_preco(precoEntrada) : f_preco(close), text_color=color.white, bgcolor=corSinal)
+
+    table.cell(painel, 2, 12, "MOV ESP.", text_color=color.white, bgcolor=color.black)
+
+    movimentoPainel = sinalAtual == 1 ? movimentoEsperadoLong : movimentoEsperadoShort
+
+    table.cell(painel, 3, 12, str.tostring(movimentoPainel / math.max(atrLocal, syminfo.mintick), "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 12, "HORIZ " + str.tostring(barrasExpiracao), text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // RESULTADOS
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 13, "RESULTADO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 13, mostrarHistorico ? ultimoResultado : "-", text_color=color.white, bgcolor=corResultado)
+
+    table.cell(painel, 2, 13, "ACERTO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 13, f_pct(taxaAcerto), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 13, "W " + str.tostring(totalWins) + " / L " + str.tostring(totalLosses), text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // MTF
+    // -------------------------------------------------------------------------
+
+    if mostrarMTF
+
+        table.cell(painel, 0, 15, "MTF", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 15, "COMPRA", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 15, "VENDA", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 15, "VIES", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 4, 15, "FORCA", text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 16, "1M", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 16, f_pct(mtf1Long), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 16, f_pct(mtf1Short), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 16, mtf1Long > mtf1Short ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtf1Long > mtf1Short ? color.green : color.red)
+
+        table.cell(painel, 4, 16, f_pct(math.max(mtf1Long, mtf1Short)), text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 17, "5M", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 17, f_pct(mtf5Long), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 17, f_pct(mtf5Short), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 17, mtf5Long > mtf5Short ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtf5Long > mtf5Short ? color.green : color.red)
+
+        table.cell(painel, 4, 17, f_pct(math.max(mtf5Long, mtf5Short)), text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 18, "15M", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 18, f_pct(mtf15Long), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 18, f_pct(mtf15Short), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 18, mtf15Long > mtf15Short ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtf15Long > mtf15Short ? color.green : color.red)
+
+        table.cell(painel, 4, 18, f_pct(math.max(mtf15Long, mtf15Short)), text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 19, "30M", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 19, f_pct(mtf30Long), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 19, f_pct(mtf30Short), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 19, mtf30Long > mtf30Short ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtf30Long > mtf30Short ? color.green : color.red)
+
+        table.cell(painel, 4, 19, f_pct(math.max(mtf30Long, mtf30Short)), text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 20, "1H", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 20, f_pct(mtf1HLong), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 20, f_pct(mtf1HShort), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 20, mtf1HLong > mtf1HShort ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtf1HLong > mtf1HShort ? color.green : color.red)
+
+        table.cell(painel, 4, 20, f_pct(math.max(mtf1HLong, mtf1HShort)), text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 21, "4H", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 21, f_pct(mtf4HLong), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 21, f_pct(mtf4HShort), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 21, mtf4HLong > mtf4HShort ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtf4HLong > mtf4HShort ? color.green : color.red)
+
+        table.cell(painel, 4, 21, f_pct(math.max(mtf4HLong, mtf4HShort)), text_color=color.white, bgcolor=color.black)
+
+
+        table.cell(painel, 0, 22, "DIARIO", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 22, f_pct(mtfDLong), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 22, f_pct(mtfDShort), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 22, mtfDLong > mtfDShort ? "ALTA" : "BAIXA", text_color=color.white, bgcolor=mtfDLong > mtfDShort ? color.green : color.red)
+
+        table.cell(painel, 4, 22, f_pct(math.max(mtfDLong, mtfDShort)), text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // FOREX
+    // -------------------------------------------------------------------------
+
+    if usarPrevisaoForex
+
+        table.cell(painel, 0, 25, "FOREX", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 25, "SINAL", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 2, 25, "SCORE", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 25, "VANT.", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 4, 25, "STATUS", text_color=color.white, bgcolor=color.black)
+
+
+        corEURUSD = eurusdTexto == "COMPRA" ? color.green : eurusdTexto == "VENDA" ? color.red : color.gray
+
+        corUSDJPY = usdjpyTexto == "COMPRA" ? color.green : usdjpyTexto == "VENDA" ? color.red : color.gray
+
+        corEURJPY = eurjpyTexto == "COMPRA" ? color.green : eurjpyTexto == "VENDA" ? color.red : color.gray
+
+
+        table.cell(painel, 0, 26, "EURUSD", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 26, eurusdTexto, text_color=color.white, bgcolor=corEURUSD)
+
+        table.cell(painel, 2, 26, f_pct(eurusdScore), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 26, str.tostring(eurusdVantagem, "#.0") + "%", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 4, 26, eurusdVantagem >= 15 ? "FORTE" : math.abs(eurusdVantagem) >= 8 ? "ATIVO" : "NEUTRO", text_color=color.white, bgcolor=corEURUSD)
+
+
+        table.cell(painel, 0, 27, "USDJPY", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 27, usdjpyTexto, text_color=color.white, bgcolor=corUSDJPY)
+
+        table.cell(painel, 2, 27, f_pct(usdjpyScore), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 27, str.tostring(usdjpyVantagem, "#.0") + "%", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 4, 27, usdjpyVantagem >= 15 or usdjpyVantagem <= -15 ? "FORTE" : math.abs(usdjpyVantagem) >= 8 ? "ATIVO" : "NEUTRO", text_color=color.white, bgcolor=corUSDJPY)
+
+
+        table.cell(painel, 0, 28, "EURJPY", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 1, 28, eurjpyTexto, text_color=color.white, bgcolor=corEURJPY)
+
+        table.cell(painel, 2, 28, f_pct(eurjpyScore), text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 3, 28, str.tostring(eurjpyVantagem, "#.0") + "%", text_color=color.white, bgcolor=color.black)
+
+        table.cell(painel, 4, 28, eurjpyVantagem >= 15 or eurjpyVantagem <= -15 ? "FORTE" : math.abs(eurjpyVantagem) >= 8 ? "ATIVO" : "NEUTRO", text_color=color.white, bgcolor=corEURJPY)
+
+
+    // -------------------------------------------------------------------------
+    // RESUMO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 31, "RESUMO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 31, "ALTA", text_color=color.white, bgcolor=color.green)
+
+    table.cell(painel, 2, 31, f_pct(pressaoMudancaAlta), text_color=color.white, bgcolor=color.green)
+
+    table.cell(painel, 3, 31, proximidadeAlta, text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 31, str.tostring(distanciaMudancaAltaATR, "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+
+    table.cell(painel, 0, 32, "RESUMO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 32, "BAIXA", text_color=color.white, bgcolor=color.red)
+
+    table.cell(painel, 2, 32, f_pct(pressaoMudancaBaixa), text_color=color.white, bgcolor=color.red)
+
+    table.cell(painel, 3, 32, proximidadeBaixa, text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 32, str.tostring(distanciaMudancaBaixaATR, "#.00") + " ATR", text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // ESTADO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 35, "ESTADO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 35, operacaoAtiva ? "OPERACAO ATIVA" : "AGUARDANDO", text_color=color.white, bgcolor=operacaoAtiva ? corSinal : color.gray)
+
+    table.cell(painel, 2, 35, "OPERACOES", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 35, str.tostring(totalOperacoes), text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 35, "W " + str.tostring(totalWins) + " / L " + str.tostring(totalLosses), text_color=color.white, bgcolor=color.black)
+
+
+    // -------------------------------------------------------------------------
+    // AVISO
+    // -------------------------------------------------------------------------
+
+    table.cell(painel, 0, 38, "KVO PRO V13", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 1, 38, "FUNDO/TOPO", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 2, 38, "MTF", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 3, 38, "ATR ADAPT.", text_color=color.white, bgcolor=color.black)
+
+    table.cell(painel, 4, 38, "SINAL TECNICO", text_color=color.white, bgcolor=color.black)
