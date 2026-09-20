@@ -1,0 +1,880 @@
+//@version=6
+indicator("KVO PRO V13.0 - SCANNER CRYPTO + VOLATILIDADE + LONG/SHORT", overlay=true, max_labels_count=500, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO V13.0
+// SCANNER AUTOMATICO DE CRIPTOMOEDAS
+//
+// 5 ATIVOS
+// 7 TIMEFRAMES
+// 35 REQUESTS
+//
+// BTCUSDT
+// ETHUSDT
+// SOLUSDT
+// AVAXUSDT
+// ADAUSDT
+//
+// SAIDA:
+// VOLATILIDADE
+// ATR %
+// SCORE LONG
+// SCORE SHORT
+// DISTANCIA PARA SINAL
+// COMPRA
+// VENDA
+// AGUARDAR
+//
+// VERDE = COMPRA
+// VERMELHO = VENDA
+// CINZA = AGUARDAR
+//
+// SEM PLOTS NO GRAFICO
+// ============================================================================
+
+
+// ============================================================================
+// CORES
+// ============================================================================
+
+corVerde = color.rgb(0, 180, 0)
+corVermelho = color.rgb(220, 0, 0)
+corCinza = color.rgb(120, 120, 120)
+corPreto = color.black
+corBranco = color.white
+
+
+// ============================================================================
+// ATIVOS
+// ============================================================================
+
+ativo1 = input.string("BINANCE:BTCUSDT", "Ativo 1")
+ativo2 = input.string("BINANCE:ETHUSDT", "Ativo 2")
+ativo3 = input.string("BINANCE:SOLUSDT", "Ativo 3")
+ativo4 = input.string("BINANCE:AVAXUSDT", "Ativo 4")
+ativo5 = input.string("BINANCE:ADAUSDT", "Ativo 5")
+
+
+// ============================================================================
+// CONFIGURACOES
+// ============================================================================
+
+scoreMin = input.float(55.0, "Score minimo", minval=0, maxval=100)
+
+intensidadeMin = input.float(45.0, "Intensidade minima", minval=0, maxval=100)
+
+confluenciaMin = input.float(45.0, "Confluencia minima", minval=0, maxval=100)
+
+vantagemMinima = input.float(5.0, "Vantagem minima", minval=0, maxval=50)
+
+mtfMin = input.float(45.0, "MTF minimo", minval=0, maxval=100)
+
+atrLen = input.int(14, "ATR periodo", minval=2)
+
+rsiLen = input.int(14, "RSI periodo", minval=2)
+
+emaRapida = input.int(9, "EMA rapida", minval=2)
+
+emaMedia = input.int(21, "EMA media", minval=2)
+
+emaLenta = input.int(50, "EMA lenta", minval=2)
+
+volumeLen = input.int(20, "Volume periodo", minval=2)
+
+lookbackVol = input.int(50, "Lookback volatilidade", minval=10)
+
+microLookback = input.int(5, "Micro lookback", minval=2)
+
+mostrarSomenteOportunidades = input.bool(false, "Mostrar somente oportunidades")
+
+mostrarPainel = input.bool(true, "Mostrar painel")
+
+
+// ============================================================================
+// FUNCOES
+// ============================================================================
+
+f_limitar(valor, minimo, maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+
+f_scoreRetorno(retorno, escala) =>
+    math.max(0.0, math.min(100.0, 50.0 + retorno / escala * 50.0))
+
+
+f_status(direcao) =>
+    direcao == 1 ? "COMPRA" : direcao == -1 ? "VENDA" : "AGUARDAR"
+
+
+f_corStatus(direcao) =>
+    direcao == 1 ? corVerde : direcao == -1 ? corVermelho : corCinza
+
+
+f_classVol(vol) =>
+    vol >= 8.0 ? "MUITO ALTA" :
+     vol >= 5.0 ? "ALTA" :
+     vol >= 3.0 ? "MEDIA" :
+     vol >= 1.5 ? "BAIXA" :
+     "MUITO BAIXA"
+
+
+f_corVol(vol) =>
+    vol >= 5.0 ? corVermelho :
+     vol >= 3.0 ? color.orange :
+     corCinza
+
+
+// ============================================================================
+// PACOTE DO ATIVO
+// ============================================================================
+
+f_pacote() =>
+    atr = ta.atr(atrLen)
+
+    atrPct = close != 0 ? atr / close * 100.0 : 0.0
+
+    atrMedia = ta.sma(atrPct, lookbackVol)
+
+    volatilidadeRelativa = atrMedia > 0 ? atrPct / atrMedia * 100.0 : 100.0
+
+    ema9 = ta.ema(close, emaRapida)
+
+    ema21 = ta.ema(close, emaMedia)
+
+    ema50 = ta.ema(close, emaLenta)
+
+    rsi = ta.rsi(close, rsiLen)
+
+    volumeMedia = ta.sma(volume, volumeLen)
+
+    volumeRel = volumeMedia > 0 ? volume / volumeMedia : 1.0
+
+    corpo = math.abs(close - open)
+
+    rangeCandle = math.max(high - low, syminfo.mintick)
+
+    forcaCandle = corpo / rangeCandle * 100.0
+
+    retorno1 = close / close[1] - 1.0
+
+    retorno3 = close / close[3] - 1.0
+
+    tendenciaLong = ema9 > ema21 and ema21 > ema50
+
+    tendenciaShort = ema9 < ema21 and ema21 < ema50
+
+    tendenciaLongScore = tendenciaLong ? 100.0 : ema9 > ema21 ? 65.0 : 30.0
+
+    tendenciaShortScore = tendenciaShort ? 100.0 : ema9 < ema21 ? 65.0 : 30.0
+
+    rsiLong = rsi > 50.0 ? f_limitar((rsi - 50.0) * 2.0, 0.0, 100.0) : 0.0
+
+    rsiShort = rsi < 50.0 ? f_limitar((50.0 - rsi) * 2.0, 0.0, 100.0) : 0.0
+
+    kvo = ta.ema(volume * (close - close[1]), 34)
+
+    kvoSignal = ta.ema(kvo, 55)
+
+    kvoLong = kvo > kvoSignal ? 100.0 : 25.0
+
+    kvoShort = kvo < kvoSignal ? 100.0 : 25.0
+
+    volumeScore = volumeRel > 1.0 ? f_limitar(volumeRel * 50.0, 0.0, 100.0) : 35.0
+
+    retornoLong1 = f_scoreRetorno(retorno1, 0.01)
+
+    retornoShort1 = f_scoreRetorno(-retorno1, 0.01)
+
+    retornoLong3 = f_scoreRetorno(retorno3, 0.02)
+
+    retornoShort3 = f_scoreRetorno(-retorno3, 0.02)
+
+    scoreLong = (
+         forcaCandle * 0.15 +
+         tendenciaLongScore * 0.20 +
+         rsiLong * 0.15 +
+         kvoLong * 0.15 +
+         volumeScore * 0.10 +
+         retornoLong1 * 0.10 +
+         retornoLong3 * 0.05 +
+         (tendenciaLong ? 100.0 : 40.0) * 0.10)
+
+    scoreShort = (
+         forcaCandle * 0.15 +
+         tendenciaShortScore * 0.20 +
+         rsiShort * 0.15 +
+         kvoShort * 0.15 +
+         volumeScore * 0.10 +
+         retornoShort1 * 0.10 +
+         retornoShort3 * 0.05 +
+         (tendenciaShort ? 100.0 : 40.0) * 0.10)
+
+    microMax = ta.highest(high[1], microLookback)
+
+    microMin = ta.lowest(low[1], microLookback)
+
+    rompLong = close > microMax
+
+    rompShort = close < microMin
+
+    microEma3 = ta.ema(close, 3)
+
+    microEma8 = ta.ema(close, 8)
+
+    microLong = rompLong ? 100.0 : microEma3 > microEma8 ? 65.0 : 25.0
+
+    microShort = rompShort ? 100.0 : microEma3 < microEma8 ? 65.0 : 25.0
+
+    confluenciaLong = (
+         forcaCandle +
+         tendenciaLongScore +
+         kvoLong +
+         rsiLong +
+         retornoLong1 +
+         retornoLong3) / 6.0
+
+    confluenciaShort = (
+         forcaCandle +
+         tendenciaShortScore +
+         kvoShort +
+         rsiShort +
+         retornoShort1 +
+         retornoShort3) / 6.0
+
+    vantagemLong = scoreLong - scoreShort
+
+    vantagemShort = scoreShort - scoreLong
+
+    [scoreLong[1], scoreShort[1], atrPct[1], volatilidadeRelativa[1], tendenciaLongScore[1], tendenciaShortScore[1], confluenciaLong[1], confluenciaShort[1], microLong[1], microShort[1], volumeScore[1], vantagemLong[1], vantagemShort[1]]
+
+
+// ============================================================================
+// ATIVO 1 - BTC
+// ============================================================================
+
+[b1L1, b1S1, b1A1, b1V1, b1TL1, b1TS1, b1CL1, b1CS1, b1ML1, b1MS1, b1VOL1, b1VL1, b1VS1] = request.security(ativo1, "1", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b1L5, b1S5, b1A5, b1V5, b1TL5, b1TS5, b1CL5, b1CS5, b1ML5, b1MS5, b1VOL5, b1VL5, b1VS5] = request.security(ativo1, "5", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b1L15, b1S15, b1A15, b1V15, b1TL15, b1TS15, b1CL15, b1CS15, b1ML15, b1MS15, b1VOL15, b1VL15, b1VS15] = request.security(ativo1, "15", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b1L30, b1S30, b1A30, b1V30, b1TL30, b1TS30, b1CL30, b1CS30, b1ML30, b1MS30, b1VOL30, b1VL30, b1VS30] = request.security(ativo1, "30", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b1L60, b1S60, b1A60, b1V60, b1TL60, b1TS60, b1CL60, b1CS60, b1ML60, b1MS60, b1VOL60, b1VL60, b1VS60] = request.security(ativo1, "60", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b1L240, b1S240, b1A240, b1V240, b1TL240, b1TS240, b1CL240, b1CS240, b1ML240, b1MS240, b1VOL240, b1VL240, b1VS240] = request.security(ativo1, "240", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b1LD, b1SD, b1AD, b1VD, b1TLD, b1TSD, b1CLD, b1CSD, b1MLD, b1MSD, b1VOLD, b1VLD, b1VSD] = request.security(ativo1, "D", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// ATIVO 2 - ETH
+// ============================================================================
+
+[b2L1, b2S1, b2A1, b2V1, b2TL1, b2TS1, b2CL1, b2CS1, b2ML1, b2MS1, b2VOL1, b2VL1, b2VS1] = request.security(ativo2, "1", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b2L5, b2S5, b2A5, b2V5, b2TL5, b2TS5, b2CL5, b2CS5, b2ML5, b2MS5, b2VOL5, b2VL5, b2VS5] = request.security(ativo2, "5", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b2L15, b2S15, b2A15, b2V15, b2TL15, b2TS15, b2CL15, b2CS15, b2ML15, b2MS15, b2VOL15, b2VL15, b2VS15] = request.security(ativo2, "15", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b2L30, b2S30, b2A30, b2V30, b2TL30, b2TS30, b2CL30, b2CS30, b2ML30, b2MS30, b2VOL30, b2VL30, b2VS30] = request.security(ativo2, "30", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b2L60, b2S60, b2A60, b2V60, b2TL60, b2TS60, b2CL60, b2CS60, b2ML60, b2MS60, b2VOL60, b2VL60, b2VS60] = request.security(ativo2, "60", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b2L240, b2S240, b2A240, b2V240, b2TL240, b2TS240, b2CL240, b2CS240, b2ML240, b2MS240, b2VOL240, b2VL240, b2VS240] = request.security(ativo2, "240", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b2LD, b2SD, b2AD, b2VD, b2TLD, b2TSD, b2CLD, b2CSD, b2MLD, b2MSD, b2VOLD, b2VLD, b2VSD] = request.security(ativo2, "D", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// ATIVO 3 - SOL
+// ============================================================================
+
+[b3L1, b3S1, b3A1, b3V1, b3TL1, b3TS1, b3CL1, b3CS1, b3ML1, b3MS1, b3VOL1, b3VL1, b3VS1] = request.security(ativo3, "1", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b3L5, b3S5, b3A5, b3V5, b3TL5, b3TS5, b3CL5, b3CS5, b3ML5, b3MS5, b3VOL5, b3VL5, b3VS5] = request.security(ativo3, "5", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b3L15, b3S15, b3A15, b3V15, b3TL15, b3TS15, b3CL15, b3CS15, b3ML15, b3MS15, b3VOL15, b3VL15, b3VS15] = request.security(ativo3, "15", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b3L30, b3S30, b3A30, b3V30, b3TL30, b3TS30, b3CL30, b3CS30, b3ML30, b3MS30, b3VOL30, b3VL30, b3VS30] = request.security(ativo3, "30", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b3L60, b3S60, b3A60, b3V60, b3TL60, b3TS60, b3CL60, b3CS60, b3ML60, b3MS60, b3VOL60, b3VL60, b3VS60] = request.security(ativo3, "60", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b3L240, b3S240, b3A240, b3V240, b3TL240, b3TS240, b3CL240, b3CS240, b3ML240, b3MS240, b3VOL240, b3VL240, b3VS240] = request.security(ativo3, "240", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b3LD, b3SD, b3AD, b3VD, b3TLD, b3TSD, b3CLD, b3CSD, b3MLD, b3MSD, b3VOLD, b3VLD, b3VSD] = request.security(ativo3, "D", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// ATIVO 4 - AVAX
+// ============================================================================
+
+[b4L1, b4S1, b4A1, b4V1, b4TL1, b4TS1, b4CL1, b4CS1, b4ML1, b4MS1, b4VOL1, b4VL1, b4VS1] = request.security(ativo4, "1", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b4L5, b4S5, b4A5, b4V5, b4TL5, b4TS5, b4CL5, b4CS5, b4ML5, b4MS5, b4VOL5, b4VL5, b4VS5] = request.security(ativo4, "5", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b4L15, b4S15, b4A15, b4V15, b4TL15, b4TS15, b4CL15, b4CS15, b4ML15, b4MS15, b4VOL15, b4VL15, b4VS15] = request.security(ativo4, "15", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b4L30, b4S30, b4A30, b4V30, b4TL30, b4TS30, b4CL30, b4CS30, b4ML30, b4MS30, b4VOL30, b4VL30, b4VS30] = request.security(ativo4, "30", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b4L60, b4S60, b4A60, b4V60, b4TL60, b4TS60, b4CL60, b4CS60, b4ML60, b4MS60, b4VOL60, b4VL60, b4VS60] = request.security(ativo4, "60", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b4L240, b4S240, b4A240, b4V240, b4TL240, b4TS240, b4CL240, b4CS240, b4ML240, b4MS240, b4VOL240, b4VL240, b4VS240] = request.security(ativo4, "240", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b4LD, b4SD, b4AD, b4VD, b4TLD, b4TSD, b4CLD, b4CSD, b4MLD, b4MSD, b4VOLD, b4VLD, b4VSD] = request.security(ativo4, "D", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// ATIVO 5 - ADA
+// ============================================================================
+
+[b5L1, b5S1, b5A1, b5V1, b5TL1, b5TS1, b5CL1, b5CS1, b5ML1, b5MS1, b5VOL1, b5VL1, b5VS1] = request.security(ativo5, "1", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b5L5, b5S5, b5A5, b5V5, b5TL5, b5TS5, b5CL5, b5CS5, b5ML5, b5MS5, b5VOL5, b5VL5, b5VS5] = request.security(ativo5, "5", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b5L15, b5S15, b5A15, b5V15, b5TL15, b5TS15, b5CL15, b5CS15, b5ML15, b5MS15, b5VOL15, b5VL15, b5VS15] = request.security(ativo5, "15", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b5L30, b5S30, b5A30, b5V30, b5TL30, b5TS30, b5CL30, b5CS30, b5ML30, b5MS30, b5VOL30, b5VL30, b5VS30] = request.security(ativo5, "30", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b5L60, b5S60, b5A60, b5V60, b5TL60, b5TS60, b5CL60, b5CS60, b5ML60, b5MS60, b5VOL60, b5VL60, b5VS60] = request.security(ativo5, "60", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b5L240, b5S240, b5A240, b5V240, b5TL240, b5TS240, b5CL240, b5CS240, b5ML240, b5MS240, b5VOL240, b5VL240, b5VS240] = request.security(ativo5, "240", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+[b5LD, b5SD, b5AD, b5VD, b5TLD, b5TSD, b5CLD, b5CSD, b5MLD, b5MSD, b5VOLD, b5VLD, b5VSD] = request.security(ativo5, "D", f_pacote(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// FUNCAO DE CONSOLIDACAO MTF
+// ============================================================================
+
+f_mtfLong(
+     l1,
+     l5,
+     l15,
+     l30,
+     l60,
+     l240,
+     ld) =>
+    (l1 * 10.0 +
+     l5 * 15.0 +
+     l15 * 20.0 +
+     l30 * 20.0 +
+     l60 * 15.0 +
+     l240 * 10.0 +
+     ld * 10.0) / 100.0
+
+
+f_mtfShort(
+     s1,
+     s5,
+     s15,
+     s30,
+     s60,
+     s240,
+     sd) =>
+    (s1 * 10.0 +
+     s5 * 15.0 +
+     s15 * 20.0 +
+     s30 * 20.0 +
+     s60 * 15.0 +
+     s240 * 10.0 +
+     sd * 10.0) / 100.0
+
+
+// ============================================================================
+// CONSOLIDACAO BTC
+// ============================================================================
+
+btcLong = f_mtfLong(b1L1, b1L5, b1L15, b1L30, b1L60, b1L240, b1LD)
+
+btcShort = f_mtfShort(b1S1, b1S5, b1S15, b1S30, b1S60, b1S240, b1SD)
+
+btcATR = (
+     b1A15 * 35.0 +
+     b1A60 * 35.0 +
+     b1A240 * 30.0) / 100.0
+
+btcVol = (
+     b1V15 * 20.0 +
+     b1V30 * 20.0 +
+     b1V60 * 25.0 +
+     b1V240 * 25.0 +
+     b1VD * 10.0) / 100.0
+
+btcConLong = (
+     b1CL15 +
+     b1CL60 +
+     b1CL240 +
+     b1CLD) / 4.0
+
+btcConShort = (
+     b1CS15 +
+     b1CS60 +
+     b1CS240 +
+     b1CSD) / 4.0
+
+btcIntensityLong = (
+     btcLong * 0.60 +
+     b1TL15 * 0.15 +
+     b1ML15 * 0.10 +
+     b1VOL15 * 0.15)
+
+btcIntensityShort = (
+     btcShort * 0.60 +
+     b1TS15 * 0.15 +
+     b1MS15 * 0.10 +
+     b1VOL15 * 0.15)
+
+btcAdv = math.abs(btcLong - btcShort)
+
+btcDir = btcLong >= scoreMin and btcLong > btcShort and btcConLong >= confluenciaMin and btcIntensityLong >= intensidadeMin and btcAdv >= vantagemMinima ? 1 : btcShort >= scoreMin and btcShort > btcLong and btcConShort >= confluenciaMin and btcIntensityShort >= intensidadeMin and btcAdv >= vantagemMinima ? -1 : 0
+
+btcDist = btcDir == 1 ? f_limitar((scoreMin - btcLong) / 2.0, 0.0, 100.0) : btcDir == -1 ? f_limitar((scoreMin - btcShort) / 2.0, 0.0, 100.0) : math.max(0.0, scoreMin - math.max(btcLong, btcShort))
+
+
+// ============================================================================
+// CONSOLIDACAO ETH
+// ============================================================================
+
+ethLong = f_mtfLong(b2L1, b2L5, b2L15, b2L30, b2L60, b2L240, b2LD)
+
+ethShort = f_mtfShort(b2S1, b2S5, b2S15, b2S30, b2S60, b2S240, b2SD)
+
+ethATR = (
+     b2A15 * 35.0 +
+     b2A60 * 35.0 +
+     b2A240 * 30.0) / 100.0
+
+ethVol = (
+     b2V15 * 20.0 +
+     b2V30 * 20.0 +
+     b2V60 * 25.0 +
+     b2V240 * 25.0 +
+     b2VD * 10.0) / 100.0
+
+ethConLong = (b2CL15 + b2CL60 + b2CL240 + b2CLD) / 4.0
+
+ethConShort = (b2CS15 + b2CS60 + b2CS240 + b2CSD) / 4.0
+
+ethIntensityLong = ethLong * 0.60 + b2TL15 * 0.15 + b2ML15 * 0.10 + b2VOL15 * 0.15
+
+ethIntensityShort = ethShort * 0.60 + b2TS15 * 0.15 + b2MS15 * 0.10 + b2VOL15 * 0.15
+
+ethAdv = math.abs(ethLong - ethShort)
+
+ethDir = ethLong >= scoreMin and ethLong > ethShort and ethConLong >= confluenciaMin and ethIntensityLong >= intensidadeMin and ethAdv >= vantagemMinima ? 1 : ethShort >= scoreMin and ethShort > ethLong and ethConShort >= confluenciaMin and ethIntensityShort >= intensidadeMin and ethAdv >= vantagemMinima ? -1 : 0
+
+ethDist = ethDir == 1 ? f_limitar((scoreMin - ethLong) / 2.0, 0.0, 100.0) : ethDir == -1 ? f_limitar((scoreMin - ethShort) / 2.0, 0.0, 100.0) : math.max(0.0, scoreMin - math.max(ethLong, ethShort))
+
+
+// ============================================================================
+// CONSOLIDACAO SOL
+// ============================================================================
+
+solLong = f_mtfLong(b3L1, b3L5, b3L15, b3L30, b3L60, b3L240, b3LD)
+
+solShort = f_mtfShort(b3S1, b3S5, b3S15, b3S30, b3S60, b3S240, b3SD)
+
+solATR = (
+     b3A15 * 35.0 +
+     b3A60 * 35.0 +
+     b3A240 * 30.0) / 100.0
+
+solVol = (
+     b3V15 * 20.0 +
+     b3V30 * 20.0 +
+     b3V60 * 25.0 +
+     b3V240 * 25.0 +
+     b3VD * 10.0) / 100.0
+
+solConLong = (b3CL15 + b3CL60 + b3CL240 + b3CLD) / 4.0
+
+solConShort = (b3CS15 + b3CS60 + b3CS240 + b3CSD) / 4.0
+
+solIntensityLong = solLong * 0.60 + b3TL15 * 0.15 + b3ML15 * 0.10 + b3VOL15 * 0.15
+
+solIntensityShort = solShort * 0.60 + b3TS15 * 0.15 + b3MS15 * 0.10 + b3VOL15 * 0.15
+
+solAdv = math.abs(solLong - solShort)
+
+solDir = solLong >= scoreMin and solLong > solShort and solConLong >= confluenciaMin and solIntensityLong >= intensidadeMin and solAdv >= vantagemMinima ? 1 : solShort >= scoreMin and solShort > solLong and solConShort >= confluenciaMin and solIntensityShort >= intensidadeMin and solAdv >= vantagemMinima ? -1 : 0
+
+solDist = solDir == 1 ? f_limitar((scoreMin - solLong) / 2.0, 0.0, 100.0) : solDir == -1 ? f_limitar((scoreMin - solShort) / 2.0, 0.0, 100.0) : math.max(0.0, scoreMin - math.max(solLong, solShort))
+
+
+// ============================================================================
+// CONSOLIDACAO AVAX
+// ============================================================================
+
+avaxLong = f_mtfLong(b4L1, b4L5, b4L15, b4L30, b4L60, b4L240, b4LD)
+
+avaxShort = f_mtfShort(b4S1, b4S5, b4S15, b4S30, b4S60, b4S240, b4SD)
+
+avaxATR = (
+     b4A15 * 35.0 +
+     b4A60 * 35.0 +
+     b4A240 * 30.0) / 100.0
+
+avaxVol = (
+     b4V15 * 20.0 +
+     b4V30 * 20.0 +
+     b4V60 * 25.0 +
+     b4V240 * 25.0 +
+     b4VD * 10.0) / 100.0
+
+avaxConLong = (b4CL15 + b4CL60 + b4CL240 + b4CLD) / 4.0
+
+avaxConShort = (b4CS15 + b4CS60 + b4CS240 + b4CSD) / 4.0
+
+avaxIntensityLong = avaxLong * 0.60 + b4TL15 * 0.15 + b4ML15 * 0.10 + b4VOL15 * 0.15
+
+avaxIntensityShort = avaxShort * 0.60 + b4TS15 * 0.15 + b4MS15 * 0.10 + b4VOL15 * 0.15
+
+avaxAdv = math.abs(avaxLong - avaxShort)
+
+avaxDir = avaxLong >= scoreMin and avaxLong > avaxShort and avaxConLong >= confluenciaMin and avaxIntensityLong >= intensidadeMin and avaxAdv >= vantagemMinima ? 1 : avaxShort >= scoreMin and avaxShort > avaxLong and avaxConShort >= confluenciaMin and avaxIntensityShort >= intensidadeMin and avaxAdv >= vantagemMinima ? -1 : 0
+
+avaxDist = avaxDir == 1 ? f_limitar((scoreMin - avaxLong) / 2.0, 0.0, 100.0) : avaxDir == -1 ? f_limitar((scoreMin - avaxShort) / 2.0, 0.0, 100.0) : math.max(0.0, scoreMin - math.max(avaxLong, avaxShort))
+
+
+// ============================================================================
+// CONSOLIDACAO ADA
+// ============================================================================
+
+adaLong = f_mtfLong(b5L1, b5L5, b5L15, b5L30, b5L60, b5L240, b5LD)
+
+adaShort = f_mtfShort(b5S1, b5S5, b5S15, b5S30, b5S60, b5S240, b5SD)
+
+adaATR = (
+     b5A15 * 35.0 +
+     b5A60 * 35.0 +
+     b5A240 * 30.0) / 100.0
+
+adaVol = (
+     b5V15 * 20.0 +
+     b5V30 * 20.0 +
+     b5V60 * 25.0 +
+     b5V240 * 25.0 +
+     b5VD * 10.0) / 100.0
+
+adaConLong = (b5CL15 + b5CL60 + b5CL240 + b5CLD) / 4.0
+
+adaConShort = (b5CS15 + b5CS60 + b5CS240 + b5CSD) / 4.0
+
+adaIntensityLong = adaLong * 0.60 + b5TL15 * 0.15 + b5ML15 * 0.10 + b5VOL15 * 0.15
+
+adaIntensityShort = adaShort * 0.60 + b5TS15 * 0.15 + b5MS15 * 0.10 + b5VOL15 * 0.15
+
+adaAdv = math.abs(adaLong - adaShort)
+
+adaDir = adaLong >= scoreMin and adaLong > adaShort and adaConLong >= confluenciaMin and adaIntensityLong >= intensidadeMin and adaAdv >= vantagemMinima ? 1 : adaShort >= scoreMin and adaShort > adaLong and adaConShort >= confluenciaMin and adaIntensityShort >= intensidadeMin and adaAdv >= vantagemMinima ? -1 : 0
+
+adaDist = adaDir == 1 ? f_limitar((scoreMin - adaLong) / 2.0, 0.0, 100.0) : adaDir == -1 ? f_limitar((scoreMin - adaShort) / 2.0, 0.0, 100.0) : math.max(0.0, scoreMin - math.max(adaLong, adaShort))
+
+
+// ============================================================================
+// RANKING DE VOLATILIDADE
+// ============================================================================
+
+vol1 = btcATR
+
+vol2 = ethATR
+
+vol3 = solATR
+
+vol4 = avaxATR
+
+vol5 = adaATR
+
+
+// ============================================================================
+// MAIOR VOLATILIDADE
+// ============================================================================
+
+maiorVol = math.max(
+     vol1,
+     math.max(
+         vol2,
+         math.max(
+             vol3,
+             math.max(vol4, vol5))))
+
+ativoMaiorVol = vol1 == maiorVol ? "BTCUSDT" : vol2 == maiorVol ? "ETHUSDT" : vol3 == maiorVol ? "SOLUSDT" : vol4 == maiorVol ? "AVAXUSDT" : "ADAUSDT"
+
+
+// ============================================================================
+// MAIOR OPORTUNIDADE
+// ============================================================================
+
+oportunidade1 = btcDir != 0 ? btcLong > btcShort ? btcLong : btcShort : 0.0
+
+oportunidade2 = ethDir != 0 ? ethLong > ethShort ? ethLong : ethShort : 0.0
+
+oportunidade3 = solDir != 0 ? solLong > solShort ? solLong : solShort : 0.0
+
+oportunidade4 = avaxDir != 0 ? avaxLong > avaxShort ? avaxLong : avaxShort : 0.0
+
+oportunidade5 = adaDir != 0 ? adaLong > adaShort ? adaLong : adaShort : 0.0
+
+maiorOportunidade = math.max(
+     oportunidade1,
+     math.max(
+         oportunidade2,
+         math.max(
+             oportunidade3,
+             math.max(oportunidade4, oportunidade5))))
+
+ativoMaiorOportunidade = oportunidade1 == maiorOportunidade and maiorOportunidade > 0 ? "BTCUSDT" : oportunidade2 == maiorOportunidade and maiorOportunidade > 0 ? "ETHUSDT" : oportunidade3 == maiorOportunidade and maiorOportunidade > 0 ? "SOLUSDT" : oportunidade4 == maiorOportunidade and maiorOportunidade > 0 ? "AVAXUSDT" : oportunidade5 == maiorOportunidade and maiorOportunidade > 0 ? "ADAUSDT" : "NENHUMA"
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+var table painel = table.new(
+     position.top_right,
+     8,
+     9,
+     border_width=1,
+     frame_width=1)
+
+
+if mostrarPainel and barstate.islast
+
+    table.clear(painel, 0, 0, 7, 8)
+
+    // CABECALHO
+
+    table.cell(painel, 0, 0, "KVO PRO V13.0", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 1, 0, "ATIVO", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 2, 0, "VOL", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 3, 0, "ATR%", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 4, 0, "LONG", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 5, 0, "SHORT", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 6, 0, "DIST", bgcolor=corPreto, text_color=corBranco)
+    table.cell(painel, 7, 0, "STATUS", bgcolor=corPreto, text_color=corBranco)
+
+
+    // BTC
+
+    mostrarBTC = not mostrarSomenteOportunidades or btcDir != 0
+
+    table.cell(painel, 0, 1, "1", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 1, "BTCUSDT", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 2, 1, f_classVol(btcATR), bgcolor=f_corVol(btcATR), text_color=corBranco)
+
+    table.cell(painel, 3, 1, str.tostring(btcATR, "#.##") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 4, 1, str.tostring(btcLong, "#") + "%", bgcolor=corVerde, text_color=corBranco)
+
+    table.cell(painel, 5, 1, str.tostring(btcShort, "#") + "%", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 6, 1, str.tostring(btcDist, "#") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 1, f_status(btcDir), bgcolor=f_corStatus(btcDir), text_color=corBranco)
+
+
+    // ETH
+
+    table.cell(painel, 0, 2, "2", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 2, "ETHUSDT", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 2, 2, f_classVol(ethATR), bgcolor=f_corVol(ethATR), text_color=corBranco)
+
+    table.cell(painel, 3, 2, str.tostring(ethATR, "#.##") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 4, 2, str.tostring(ethLong, "#") + "%", bgcolor=corVerde, text_color=corBranco)
+
+    table.cell(painel, 5, 2, str.tostring(ethShort, "#") + "%", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 6, 2, str.tostring(ethDist, "#") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 2, f_status(ethDir), bgcolor=f_corStatus(ethDir), text_color=corBranco)
+
+
+    // SOL
+
+    table.cell(painel, 0, 3, "3", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 3, "SOLUSDT", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 2, 3, f_classVol(solATR), bgcolor=f_corVol(solATR), text_color=corBranco)
+
+    table.cell(painel, 3, 3, str.tostring(solATR, "#.##") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 4, 3, str.tostring(solLong, "#") + "%", bgcolor=corVerde, text_color=corBranco)
+
+    table.cell(painel, 5, 3, str.tostring(solShort, "#") + "%", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 6, 3, str.tostring(solDist, "#") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 3, f_status(solDir), bgcolor=f_corStatus(solDir), text_color=corBranco)
+
+
+    // AVAX
+
+    table.cell(painel, 0, 4, "4", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 4, "AVAXUSDT", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 2, 4, f_classVol(avaxATR), bgcolor=f_corVol(avaxATR), text_color=corBranco)
+
+    table.cell(painel, 3, 4, str.tostring(avaxATR, "#.##") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 4, 4, str.tostring(avaxLong, "#") + "%", bgcolor=corVerde, text_color=corBranco)
+
+    table.cell(painel, 5, 4, str.tostring(avaxShort, "#") + "%", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 6, 4, str.tostring(avaxDist, "#") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 4, f_status(avaxDir), bgcolor=f_corStatus(avaxDir), text_color=corBranco)
+
+
+    // ADA
+
+    table.cell(painel, 0, 5, "5", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 5, "ADAUSDT", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 2, 5, f_classVol(adaATR), bgcolor=f_corVol(adaATR), text_color=corBranco)
+
+    table.cell(painel, 3, 5, str.tostring(adaATR, "#.##") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 4, 5, str.tostring(adaLong, "#") + "%", bgcolor=corVerde, text_color=corBranco)
+
+    table.cell(painel, 5, 5, str.tostring(adaShort, "#") + "%", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 6, 5, str.tostring(adaDist, "#") + "%", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 5, f_status(adaDir), bgcolor=f_corStatus(adaDir), text_color=corBranco)
+
+
+    // MAIOR VOLATILIDADE
+
+    table.cell(painel, 0, 6, "TOP VOL", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 6, ativoMaiorVol, bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 2, 6, "MAIOR", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 3, 6, str.tostring(maiorVol, "#.##") + "%", bgcolor=corVermelho, text_color=corBranco)
+
+    table.cell(painel, 4, 6, "-", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 5, 6, "-", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 6, 6, "-", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 6, "VOLATIL", bgcolor=corVermelho, text_color=corBranco)
+
+
+    // MAIOR OPORTUNIDADE
+
+    table.cell(painel, 0, 7, "TOP SINAL", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 7, ativoMaiorOportunidade, bgcolor=maiorOportunidade > 0 ? corVerde : corCinza, text_color=corBranco)
+
+    table.cell(painel, 2, 7, maiorOportunidade > 0 ? str.tostring(maiorOportunidade, "#") + "%" : "-", bgcolor=maiorOportunidade > 0 ? corVerde : corCinza, text_color=corBranco)
+
+    table.cell(painel, 3, 7, maiorOportunidade > 0 ? "VALIDO" : "NENHUM", bgcolor=maiorOportunidade > 0 ? corVerde : corCinza, text_color=corBranco)
+
+    table.cell(painel, 4, 7, "-", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 5, 7, "-", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 6, 7, "-", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 7, 7, "SCANNER", bgcolor=corPreto, text_color=corBranco)
+
+
+    // INFORMACAO
+
+    table.cell(painel, 0, 8, "MTF", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 1, 8, "1M/5M/15M", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 2, 8, "30M/1H", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 3, 8, "4H/D", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 4, 8, "35", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 5, 8, "REQUESTS", bgcolor=corPreto, text_color=corBranco)
+
+    table.cell(painel, 6, 8, "LONG", bgcolor=corVerde, text_color=corBranco)
+
+    table.cell(painel, 7, 8, "SHORT", bgcolor=corVermelho, text_color=corBranco)
+
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+
+btcCompra = btcDir == 1 and btcDir[1] != 1
+btcVenda = btcDir == -1 and btcDir[1] != -1
+
+ethCompra = ethDir == 1 and ethDir[1] != 1
+ethVenda = ethDir == -1 and ethDir[1] != -1
+
+solCompra = solDir == 1 and solDir[1] != 1
+solVenda = solDir == -1 and solDir[1] != -1
+
+avaxCompra = avaxDir == 1 and avaxDir[1] != 1
+avaxVenda = avaxDir == -1 and avaxDir[1] != -1
+
+adaCompra = adaDir == 1 and adaDir[1] != 1
+adaVenda = adaDir == -1 and adaDir[1] != -1
+
+
+alertcondition(
+     btcCompra,
+     title="BTC COMPRA",
+     message="KVO PRO V13.0: BTCUSDT COMPRA")
+
+alertcondition(
+     btcVenda,
+     title="BTC VENDA",
+     message="KVO PRO V13.0: BTCUSDT VENDA")
+
+alertcondition(
+     ethCompra,
+     title="ETH COMPRA",
+     message="KVO PRO V13.0: ETHUSDT COMPRA")
+
+alertcondition(
+     ethVenda,
+     title="ETH VENDA",
+     message="KVO PRO V13.0: ETHUSDT VENDA")
+
+alertcondition(
+     solCompra,
+     title="SOL COMPRA",
+     message="KVO PRO V13.0: SOLUSDT COMPRA")
+
+alertcondition(
+     solVenda,
+     title="SOL VENDA",
+     message="KVO PRO V13.0: SOLUSDT VENDA")
+
+alertcondition(
+     avaxCompra,
+     title="AVAX COMPRA",
+     message="KVO PRO V13.0: AVAXUSDT COMPRA")
+
+alertcondition(
+     avaxVenda,
+     title="AVAX VENDA",
+     message="KVO PRO V13.0: AVAXUSDT VENDA")
+
+alertcondition(
+     adaCompra,
+     title="ADA COMPRA",
+     message="KVO PRO V13.0: ADAUSDT COMPRA")
+
+alertcondition(
+     adaVenda,
+     title="ADA VENDA",
+     message="KVO PRO V13.0: ADAUSDT VENDA")
