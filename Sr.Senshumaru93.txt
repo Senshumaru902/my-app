@@ -1,0 +1,1120 @@
+//@version=6
+indicator("KVO PRO V14.6 - SCANNER + VOLATILIDADE + FIBONACCI", overlay=true, max_labels_count=500, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO V14.6
+// SCANNER FOREX
+// 5 ATIVOS
+// LONG + SHORT
+// FUNDO + TOPO
+// TENDENCIA PRINCIPAL
+// DISTANCIA
+// PRE-SINAL SELETIVO
+// SINAL CONFIRMADO
+// VOLATILIDADE
+// FIBONACCI
+// ATIVO MAIS VOLATIL
+// ANTI-REPETICAO
+// REARMAMENTO
+//
+// CONTROLE:
+// 5 ativos x 7 timeframes = 35 requests
+//
+// TIMEFRAMES:
+// 1M / 5M / 15M / 30M / 1H / 4H / DIARIO
+// ============================================================================
+
+// ============================================================================
+// GRUPOS
+// ============================================================================
+grupoAtivos = "ATIVOS"
+grupoFiltros = "FILTROS PRINCIPAIS"
+grupoQualidade = "QUALIDADE DOS SINAIS"
+grupoTecnico = "INDICADORES TECNICOS"
+grupoMTF = "PESOS MTF"
+grupoAlvos = "ALVOS"
+grupoPainel = "PAINEL"
+grupoControle = "CONTROLE DE SINAIS"
+grupoVol = "VOLATILIDADE"
+grupoFib = "FIBONACCI"
+
+// ============================================================================
+// ATIVOS
+// ============================================================================
+ativo1 = input.string("OANDA:EURUSD", "Ativo 1", group=grupoAtivos)
+ativo2 = input.string("OANDA:USDJPY", "Ativo 2", group=grupoAtivos)
+ativo3 = input.string("OANDA:EURJPY", "Ativo 3", group=grupoAtivos)
+ativo4 = input.string("OANDA:GBPUSD", "Ativo 4", group=grupoAtivos)
+ativo5 = input.string("OANDA:GBPJPY", "Ativo 5", group=grupoAtivos)
+
+usarAtivo1 = input.bool(true, "Ativar Ativo 1", group=grupoAtivos)
+usarAtivo2 = input.bool(true, "Ativar Ativo 2", group=grupoAtivos)
+usarAtivo3 = input.bool(true, "Ativar Ativo 3", group=grupoAtivos)
+usarAtivo4 = input.bool(true, "Ativar Ativo 4", group=grupoAtivos)
+usarAtivo5 = input.bool(true, "Ativar Ativo 5", group=grupoAtivos)
+
+// ============================================================================
+// FILTROS PRINCIPAIS
+// ============================================================================
+scoreMinimo = input.float(70.0, "Score minimo para sinal", minval=0, maxval=100, step=1, group=grupoFiltros)
+intensidadeMinima = input.float(62.0, "Intensidade minima", minval=0, maxval=100, step=1, group=grupoFiltros)
+confluenciaMinima = input.float(60.0, "Confluencia minima", minval=0, maxval=100, step=1, group=grupoFiltros)
+vantagemMinima = input.float(12.0, "Vantagem minima", minval=0, maxval=100, step=1, group=grupoFiltros)
+mtfMinimo = input.float(60.0, "MTF minimo", minval=0, maxval=100, step=1, group=grupoFiltros)
+forcaFundoTopoMinima = input.float(60.0, "Forca fundo/topo minima", minval=0, maxval=100, step=1, group=grupoFiltros)
+microMinimo = input.float(60.0, "Microestrutura minima", minval=0, maxval=100, step=1, group=grupoFiltros)
+vantagemTendencia = input.float(8.0, "Vantagem para tendencia principal", minval=0, maxval=50, step=1, group=grupoFiltros)
+
+// ============================================================================
+// QUALIDADE
+// ============================================================================
+scorePreMinimo = input.float(65.0, "Score minimo PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+intensidadePreMinima = input.float(58.0, "Intensidade minima PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+confluenciaPreMinima = input.float(55.0, "Confluencia minima PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+vantagemPreMinima = input.float(10.0, "Vantagem minima PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+mtfPreMinimo = input.float(55.0, "MTF minimo PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+forcaPreMinima = input.float(55.0, "Forca fundo/topo PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+microPreMinimo = input.float(55.0, "Microestrutura PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+qualidadePreMinima = input.float(70.0, "Qualidade minima PRE", minval=0, maxval=100, step=1, group=grupoQualidade)
+qualidadeSinalMinima = input.float(82.0, "Qualidade minima SINAL", minval=0, maxval=100, step=1, group=grupoQualidade)
+
+usarFiltroKVO = input.bool(true, "Exigir KVO alinhado", group=grupoQualidade)
+usarFiltroTendencia = input.bool(true, "Exigir tendencia alinhada", group=grupoQualidade)
+usarFiltroEsticado = input.bool(true, "Bloquear movimento esticado", group=grupoQualidade)
+
+// ============================================================================
+// INDICADORES TECNICOS
+// ============================================================================
+atrPeriodo = input.int(14, "ATR periodo", minval=1, group=grupoTecnico)
+atrMediaPeriodo = input.int(50, "Media ATR", minval=2, group=grupoTecnico)
+fatorATR = input.float(1.0, "Fator ATR adaptativo", minval=0.1, maxval=5.0, step=0.05, group=grupoTecnico)
+usarATRAdaptativo = input.bool(true, "Usar ATR adaptativo", group=grupoTecnico)
+
+rsiPeriodo = input.int(10, "RSI periodo", minval=2, group=grupoTecnico)
+rsiSobrevendido = input.float(35.0, "RSI sobrevendido", minval=1, maxval=50, group=grupoTecnico)
+rsiSobrecomprado = input.float(65.0, "RSI sobrecomprado", minval=50, maxval=99, group=grupoTecnico)
+
+emaRapida = input.int(8, "EMA rapida", minval=1, group=grupoTecnico)
+emaMedia = input.int(21, "EMA media", minval=2, group=grupoTecnico)
+emaLenta = input.int(55, "EMA lenta", minval=3, group=grupoTecnico)
+
+kvoRapido = input.int(34, "KVO rapido", minval=2, group=grupoTecnico)
+kvoLento = input.int(55, "KVO lento", minval=3, group=grupoTecnico)
+kvoSinal = input.int(13, "KVO sinal", minval=2, group=grupoTecnico)
+
+estruturaLookback = input.int(30, "Lookback fundo/topo", minval=5, group=grupoTecnico)
+microLookback = input.int(5, "Lookback microestrutura", minval=2, group=grupoTecnico)
+distanciaMaximaATR = input.float(1.5, "Distancia maxima fundo/topo em ATR", minval=0.1, maxval=10, step=0.1, group=grupoTecnico)
+
+// ============================================================================
+// VOLATILIDADE
+// ============================================================================
+usarFiltroVolatilidade = input.bool(false, "Exigir volatilidade minima", group=grupoVol)
+volatilidadeMinima = input.float(40.0, "Score minimo volatilidade", minval=0, maxval=100, group=grupoVol)
+volatilidadeLookback = input.int(50, "Media ATR volatilidade", minval=5, group=grupoVol)
+
+// ============================================================================
+// FIBONACCI
+// ============================================================================
+usarFiltroFibonacci = input.bool(false, "Exigir zona Fibonacci", group=grupoFib)
+fibLookback = input.int(50, "Lookback Fibonacci", minval=10, group=grupoFib)
+fibDistanciaNivel = input.float(0.35, "Distancia maxima do nivel Fibonacci (%)", minval=0.05, maxval=5.0, step=0.05, group=grupoFib)
+
+// ============================================================================
+// PESOS MTF
+// ============================================================================
+peso1M = input.float(10.0, "Peso 1M", minval=0, group=grupoMTF)
+peso5M = input.float(15.0, "Peso 5M", minval=0, group=grupoMTF)
+peso15M = input.float(20.0, "Peso 15M", minval=0, group=grupoMTF)
+peso30M = input.float(20.0, "Peso 30M", minval=0, group=grupoMTF)
+peso1H = input.float(15.0, "Peso 1H", minval=0, group=grupoMTF)
+peso4H = input.float(10.0, "Peso 4H", minval=0, group=grupoMTF)
+pesoD = input.float(10.0, "Peso Diario", minval=0, group=grupoMTF)
+
+// ============================================================================
+// ALVOS
+// ============================================================================
+alvoPrincipalATR = input.float(2.0, "Alvo principal ATR", minval=0.5, maxval=8.0, step=0.25, group=grupoAlvos)
+
+alvo1ATR = input.float(1.0, "Alvo 1 ATR", minval=0.1, group=grupoAlvos)
+alvo2ATR = input.float(1.5, "Alvo 2 ATR", minval=0.1, group=grupoAlvos)
+alvo3ATR = input.float(2.0, "Alvo 3 ATR", minval=0.1, group=grupoAlvos)
+alvo4ATR = input.float(3.0, "Alvo 4 ATR", minval=0.1, group=grupoAlvos)
+alvo5ATR = input.float(4.0, "Alvo 5 ATR", minval=0.1, group=grupoAlvos)
+alvo6ATR = input.float(5.0, "Alvo 6 ATR", minval=0.1, group=grupoAlvos)
+alvo7ATR = input.float(6.0, "Alvo 7 ATR", minval=0.1, group=grupoAlvos)
+alvo8ATR = input.float(8.0, "Alvo 8 ATR", minval=0.1, group=grupoAlvos)
+
+// ============================================================================
+// CONTROLE
+// ============================================================================
+usarAntiRepeticao = input.bool(true, "Usar anti-repeticao", group=grupoControle)
+barrasCooldown = input.int(5, "Cooldown apos sinal", minval=0, maxval=100, group=grupoControle)
+usarRearmamento = input.bool(true, "Usar rearmamento", group=grupoControle)
+nivelDesarme = input.float(55.0, "Nivel para desarmar", minval=0, maxval=100, group=grupoControle)
+somenteBarraConfirmada = input.bool(true, "Sinal somente em barra confirmada", group=grupoControle)
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+posicaoPainel = input.string("TOPO ESQUERDA", "Posicao do painel", options=["MEIO ESQUERDA", "MEIO DIREITA", "TOPO ESQUERDA", "TOPO DIREITA", "FUNDO ESQUERDA", "FUNDO DIREITA"], group=grupoPainel)
+mostrarAtivosDesligados = input.bool(false, "Mostrar ativos desligados", group=grupoPainel)
+mostrarVolatilidade = input.bool(true, "Mostrar volatilidade", group=grupoPainel)
+mostrarFibonacci = input.bool(true, "Mostrar Fibonacci", group=grupoPainel)
+
+// ============================================================================
+// FUNCOES BASICAS
+// ============================================================================
+f_limitar(valor, minimo, maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+f_preco(valor) =>
+    na(valor) ? "-" : str.tostring(valor, format.mintick)
+
+f_nomeAtivo(ativo) =>
+    partes = str.split(ativo, ":")
+    array.size(partes) > 1 ? array.get(partes, 1) : ativo
+
+// ============================================================================
+// CLASSIFICACAO VOLATILIDADE
+// ============================================================================
+f_classVolatilidade(score) =>
+    score >= 90 ? "EXTREMA" : score >= 75 ? "MUITO FORTE" : score >= 60 ? "FORTE" : score >= 45 ? "MODERADA" : score >= 25 ? "FRACA" : "MUITO FRACA"
+
+f_corVolatilidade(score) =>
+    score >= 90 ? color.new(color.red, 0) : score >= 75 ? color.new(color.orange, 10) : score >= 60 ? color.new(color.yellow, 20) : score >= 45 ? color.new(color.blue, 30) : score >= 25 ? color.new(color.gray, 35) : color.new(color.gray, 70)
+
+// ============================================================================
+// CLASSIFICACAO FIBONACCI
+// ============================================================================
+f_classFib(posicao) =>
+    posicao <= 23.6 ? "FRACA" : posicao <= 38.2 ? "MODERADA" : posicao <= 61.8 ? "FORTE" : posicao <= 78.6 ? "MUITO FORTE" : "EXTREMA"
+
+f_nivelFib(posicao) =>
+    d0 = math.abs(posicao - 0.0)
+    d236 = math.abs(posicao - 23.6)
+    d382 = math.abs(posicao - 38.2)
+    d500 = math.abs(posicao - 50.0)
+    d618 = math.abs(posicao - 61.8)
+    d786 = math.abs(posicao - 78.6)
+    d100 = math.abs(posicao - 100.0)
+    menor = math.min(d0, math.min(d236, math.min(d382, math.min(d500, math.min(d618, math.min(d786, d100))))))
+    menor == d0 ? "0.0%" : menor == d236 ? "23.6%" : menor == d382 ? "38.2%" : menor == d500 ? "50.0%" : menor == d618 ? "61.8%" : menor == d786 ? "78.6%" : "100.0%"
+
+f_corFib(posicao) =>
+    posicao >= 38.2 and posicao <= 61.8 ? color.new(color.green, 20) : posicao >= 23.6 and posicao <= 78.6 ? color.new(color.orange, 25) : color.new(color.red, 30)
+
+// ============================================================================
+// KVO
+// ============================================================================
+f_kvo() =>
+    tp = (high + low + close) / 3.0
+    mediaVolume = ta.sma(volume, kvoRapido)
+    volumeRelativo = mediaVolume > 0 ? volume / mediaVolume : 1.0
+    tendenciaVolume = tp > tp[1] ? 1.0 : tp < tp[1] ? -1.0 : 0.0
+    fluxo = tendenciaVolume * volumeRelativo * volume
+    kvoRap = ta.ema(fluxo, kvoRapido)
+    kvoLen = ta.ema(fluxo, kvoLento)
+    kvo = kvoRap - kvoLen
+    sinal = ta.ema(kvo, kvoSinal)
+    hist = kvo - sinal
+    kvoScoreLong = hist > 0 ? 100.0 : 0.0
+    kvoScoreShort = hist < 0 ? 100.0 : 0.0
+    [kvo, sinal, hist, kvoScoreLong, kvoScoreShort]
+
+// ============================================================================
+// SCORE MTF
+// ============================================================================
+f_scoreMTF() =>
+    ema8 = ta.ema(close, emaRapida)
+    ema21 = ta.ema(close, emaMedia)
+    ema55 = ta.ema(close, emaLenta)
+    rsi = ta.rsi(close, rsiPeriodo)
+    retorno = close[3] != 0 ? (close - close[3]) / close[3] * 100.0 : 0.0
+    volumeMedio = ta.sma(volume, 20)
+    volumeRelativo = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+    scoreLong = 0.0
+    if ema8 > ema21
+        scoreLong += 25.0
+    if ema21 > ema55
+        scoreLong += 25.0
+    if close > ema8
+        scoreLong += 15.0
+    if rsi > 50
+        scoreLong += 15.0
+    if retorno > 0
+        scoreLong += 10.0
+    if volumeRelativo >= 1.0
+        scoreLong += 10.0
+
+    scoreShort = 0.0
+    if ema8 < ema21
+        scoreShort += 25.0
+    if ema21 < ema55
+        scoreShort += 25.0
+    if close < ema8
+        scoreShort += 15.0
+    if rsi < 50
+        scoreShort += 15.0
+    if retorno < 0
+        scoreShort += 10.0
+    if volumeRelativo >= 1.0
+        scoreShort += 10.0
+
+    [scoreLong, scoreShort]
+
+// ============================================================================
+// MODELO LOCAL
+// ============================================================================
+f_modeloLocal() =>
+    atrAtual = ta.atr(atrPeriodo)
+    atrMedio = ta.sma(atrAtual, atrMediaPeriodo)
+    fatorAdaptativo = atrMedio > 0 ? atrAtual / atrMedio : 1.0
+    atrAdapt = usarATRAdaptativo ? atrAtual * fatorATR * f_limitar(fatorAdaptativo, 0.75, 1.50) : atrAtual * fatorATR
+
+    ema8 = ta.ema(close, emaRapida)
+    ema21 = ta.ema(close, emaMedia)
+    ema55 = ta.ema(close, emaLenta)
+    rsi = ta.rsi(close, rsiPeriodo)
+
+    volumeMedio = ta.sma(volume, 20)
+    volumeRelativo = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+    corpo = math.abs(close - open)
+    rangeCandle = high - low
+    forcaCandle = rangeCandle > 0 ? corpo / rangeCandle * 100.0 : 0.0
+
+    retorno1 = close[1] != 0 ? (close - close[1]) / close[1] * 100.0 : 0.0
+    retorno3 = close[3] != 0 ? (close - close[3]) / close[3] * 100.0 : 0.0
+
+    tendenciaLong = 0.0
+    if ema8 > ema21
+        tendenciaLong += 35.0
+    if ema21 > ema55
+        tendenciaLong += 35.0
+    if close > ema8
+        tendenciaLong += 30.0
+
+    tendenciaShort = 0.0
+    if ema8 < ema21
+        tendenciaShort += 35.0
+    if ema21 < ema55
+        tendenciaShort += 35.0
+    if close < ema8
+        tendenciaShort += 30.0
+
+    rsiLong = 0.0
+    if rsi > 50
+        rsiLong := 55.0
+    if rsi <= rsiSobrevendido
+        rsiLong := 100.0
+    if rsi > 50 and rsi < 60
+        rsiLong := 70.0
+
+    rsiShort = 0.0
+    if rsi < 50
+        rsiShort := 55.0
+    if rsi >= rsiSobrecomprado
+        rsiShort := 100.0
+    if rsi < 50 and rsi > 40
+        rsiShort := 70.0
+
+    retornoLong = 0.0
+    if retorno1 > 0
+        retornoLong += 50.0
+    if retorno3 > 0
+        retornoLong += 50.0
+
+    retornoShort = 0.0
+    if retorno1 < 0
+        retornoShort += 50.0
+    if retorno3 < 0
+        retornoShort += 50.0
+
+    candleLong = close > open ? forcaCandle : 0.0
+    candleShort = close < open ? forcaCandle : 0.0
+
+    volumeScore = f_limitar(volumeRelativo * 50.0, 0.0, 100.0)
+
+    [kvo, kvoSinalLocal, histKVO, kvoLong, kvoShort] = f_kvo()
+
+    fundo = ta.lowest(low, estruturaLookback)
+    topo = ta.highest(high, estruturaLookback)
+
+    distanciaFundoATR = atrAdapt > 0 ? (close - fundo) / atrAdapt : 999.0
+    distanciaTopoATR = atrAdapt > 0 ? (topo - close) / atrAdapt : 999.0
+
+    rejeicaoFundo = low <= fundo + atrAdapt * 0.25 and close > low + (high - low) * 0.55
+    rejeicaoTopo = high >= topo - atrAdapt * 0.25 and close < low + (high - low) * 0.45
+
+    fundoBase = 0.0
+    if distanciaFundoATR <= distanciaMaximaATR
+        fundoBase += 40.0
+    if rejeicaoFundo
+        fundoBase += 35.0
+    if rsi <= 50
+        fundoBase += 25.0
+
+    forcaFundo = f_limitar(fundoBase, 0.0, 100.0)
+
+    topoBase = 0.0
+    if distanciaTopoATR <= distanciaMaximaATR
+        topoBase += 40.0
+    if rejeicaoTopo
+        topoBase += 35.0
+    if rsi >= 50
+        topoBase += 25.0
+
+    forcaTopo = f_limitar(topoBase, 0.0, 100.0)
+
+    microMax = ta.highest(high, microLookback)
+    microMin = ta.lowest(low, microLookback)
+
+    rompimentoLong = close > microMax[1]
+    rompimentoShort = close < microMin[1]
+
+    recuperacaoLong = close > open and close > close[1]
+    recuperacaoShort = close < open and close < close[1]
+
+    microLong = 0.0
+    if recuperacaoLong
+        microLong += 35.0
+    if rompimentoLong
+        microLong += 65.0
+
+    microShort = 0.0
+    if recuperacaoShort
+        microShort += 35.0
+    if rompimentoShort
+        microShort += 65.0
+
+    microLong := f_limitar(microLong, 0.0, 100.0)
+    microShort := f_limitar(microShort, 0.0, 100.0)
+
+    scoreLong = tendenciaLong * 0.20 + rsiLong * 0.10 + retornoLong * 0.15 + candleLong * 0.15 + volumeScore * 0.10 + kvoLong * 0.15 + forcaFundo * 0.10 + microLong * 0.05
+    scoreShort = tendenciaShort * 0.20 + rsiShort * 0.10 + retornoShort * 0.15 + candleShort * 0.15 + volumeScore * 0.10 + kvoShort * 0.15 + forcaTopo * 0.10 + microShort * 0.05
+
+    scoreLong := f_limitar(scoreLong, 0.0, 100.0)
+    scoreShort := f_limitar(scoreShort, 0.0, 100.0)
+
+    intensidadeLong = scoreLong * 0.60 + forcaFundo * 0.20 + microLong * 0.20
+    intensidadeShort = scoreShort * 0.60 + forcaTopo * 0.20 + microShort * 0.20
+
+    intensidadeLong := f_limitar(intensidadeLong, 0.0, 100.0)
+    intensidadeShort := f_limitar(intensidadeShort, 0.0, 100.0)
+
+    confluenciaLong = (tendenciaLong + rsiLong + retornoLong + candleLong + kvoLong + forcaFundo + microLong) / 7.0
+    confluenciaShort = (tendenciaShort + rsiShort + retornoShort + candleShort + kvoShort + forcaTopo + microShort) / 7.0
+
+    confluenciaLong := f_limitar(confluenciaLong, 0.0, 100.0)
+    confluenciaShort := f_limitar(confluenciaShort, 0.0, 100.0)
+
+    atrVolMedia = ta.sma(atrAtual, volatilidadeLookback)
+    razaoVolatilidade = atrVolMedia > 0 ? atrAtual / atrVolMedia : 1.0
+    volatilidadeScore = f_limitar(razaoVolatilidade * 50.0, 0.0, 100.0)
+    volatilidadePercentual = close != 0 ? atrAtual / close * 100.0 : 0.0
+
+    fibHigh = ta.highest(high, fibLookback)
+    fibLow = ta.lowest(low, fibLookback)
+    fibRange = fibHigh - fibLow
+
+    fibPosicao = fibRange > 0 ? (close - fibLow) / fibRange * 100.0 : 50.0
+    fibPosicao := f_limitar(fibPosicao, 0.0, 100.0)
+
+    fibNivel = f_nivelFib(fibPosicao)
+    fibClasse = f_classFib(fibPosicao)
+
+    fib23 = fibHigh - fibRange * 0.236
+    fib38 = fibHigh - fibRange * 0.382
+    fib50 = fibHigh - fibRange * 0.500
+    fib61 = fibHigh - fibRange * 0.618
+    fib78 = fibHigh - fibRange * 0.786
+
+    distanciaFib23 = close != 0 ? math.abs(close - fib23) / close * 100.0 : 999.0
+    distanciaFib38 = close != 0 ? math.abs(close - fib38) / close * 100.0 : 999.0
+    distanciaFib50 = close != 0 ? math.abs(close - fib50) / close * 100.0 : 999.0
+    distanciaFib61 = close != 0 ? math.abs(close - fib61) / close * 100.0 : 999.0
+    distanciaFib78 = close != 0 ? math.abs(close - fib78) / close * 100.0 : 999.0
+
+    fibProximo = math.min(distanciaFib23, math.min(distanciaFib38, math.min(distanciaFib50, math.min(distanciaFib61, distanciaFib78))))
+    fibNivelValido = fibProximo <= fibDistanciaNivel
+
+    [scoreLong, scoreShort, intensidadeLong, intensidadeShort, confluenciaLong, confluenciaShort, atrAdapt, atrAtual, forcaFundo, forcaTopo, microLong, microShort, histKVO, fundo, topo, volatilidadeScore, volatilidadePercentual, fibPosicao, fibNivel, fibClasse, fibNivelValido]
+
+// ============================================================================
+// DADOS 1M
+// ============================================================================
+f_dados1M() =>
+    [scoreMLong, scoreMShort] = f_scoreMTF()
+    [localLong, localShort, intensidadeLong, intensidadeShort, confLong, confShort, atrAdapt, atrAtual, fundoForca, topoForca, microLong, microShort, histKVO, fundo, topo, volScore, volPct, fibPos, fibNivel, fibClasse, fibValido] = f_modeloLocal()
+    [scoreMLong, scoreMShort, localLong, localShort, intensidadeLong, intensidadeShort, confLong, confShort, atrAdapt, atrAtual, fundoForca, topoForca, microLong, microShort, histKVO, fundo, topo, volScore, volPct, fibPos, fibNivel, fibClasse, fibValido]
+
+// ============================================================================
+// SCANNER
+// ============================================================================
+f_scanner(ativo) =>
+
+    [score1L, score1S, localL, localS, intL, intS, confL, confS, atrAdapt, atrAtual, fundoForca, topoForca, microL, microS, histAtual, fundoAtivo, topoAtivo, volScore, volPct, fibPos, fibNivel, fibClasse, fibValido] = request.security(ativo, "1", f_dados1M(), barmerge.gaps_off, barmerge.lookahead_off)
+
+    [score5L, score5S] = request.security(ativo, "5", f_scoreMTF(), barmerge.gaps_off, barmerge.lookahead_off)
+    [score15L, score15S] = request.security(ativo, "15", f_scoreMTF(), barmerge.gaps_off, barmerge.lookahead_off)
+    [score30L, score30S] = request.security(ativo, "30", f_scoreMTF(), barmerge.gaps_off, barmerge.lookahead_off)
+    [score1HL, score1HS] = request.security(ativo, "60", f_scoreMTF(), barmerge.gaps_off, barmerge.lookahead_off)
+    [score4HL, score4HS] = request.security(ativo, "240", f_scoreMTF(), barmerge.gaps_off, barmerge.lookahead_off)
+    [scoreDL, scoreDS] = request.security(ativo, "D", f_scoreMTF(), barmerge.gaps_off, barmerge.lookahead_off)
+
+    somaPesos = peso1M + peso5M + peso15M + peso30M + peso1H + peso4H + pesoD
+
+    mtfLong = 0.0
+    mtfShort = 0.0
+
+    if somaPesos > 0
+        mtfLong := (score1L * peso1M + score5L * peso5M + score15L * peso15M + score30L * peso30M + score1HL * peso1H + score4HL * peso4H + scoreDL * pesoD) / somaPesos
+        mtfShort := (score1S * peso1M + score5S * peso5M + score15S * peso15M + score30S * peso30M + score1HS * peso1H + score4HS * peso4H + scoreDS * pesoD) / somaPesos
+
+    vantagemMTF = mtfLong - mtfShort
+
+    tendenciaPrincipal = "LATERAL"
+
+    if vantagemMTF >= vantagemTendencia
+        tendenciaPrincipal := "ALTA"
+    else if vantagemMTF <= -vantagemTendencia
+        tendenciaPrincipal := "BAIXA"
+
+    finalLong = localL * 0.55 + mtfLong * 0.45
+    finalShort = localS * 0.55 + mtfShort * 0.45
+
+    vantagemLong = finalLong - finalShort
+    vantagemShort = finalShort - finalLong
+
+    qualidadeLong = finalLong * 0.30 + intL * 0.15 + confL * 0.15 + mtfLong * 0.15 + fundoForca * 0.10 + microL * 0.10 + f_limitar(vantagemLong * 0.05, 0.0, 5.0)
+    qualidadeShort = finalShort * 0.30 + intS * 0.15 + confS * 0.15 + mtfShort * 0.15 + topoForca * 0.10 + microS * 0.10 + f_limitar(vantagemShort * 0.05, 0.0, 5.0)
+
+    qualidadeLong := f_limitar(qualidadeLong, 0.0, 100.0)
+    qualidadeShort := f_limitar(qualidadeShort, 0.0, 100.0)
+
+    alinhamentoKvoLong = histAtual > 0
+    alinhamentoKvoShort = histAtual < 0
+
+    tendenciaLongOK = tendenciaPrincipal == "ALTA"
+    tendenciaShortOK = tendenciaPrincipal == "BAIXA"
+
+    distanciaFundo = close - fundoAtivo
+    distanciaTopo = topoAtivo - close
+
+    distanciaFundoATR = atrAdapt > 0 ? distanciaFundo / atrAdapt : 999.0
+    distanciaTopoATR = atrAdapt > 0 ? distanciaTopo / atrAdapt : 999.0
+
+    proximidadeFundo = f_limitar(100.0 - distanciaFundoATR / distanciaMaximaATR * 100.0, 0.0, 100.0)
+    proximidadeTopo = f_limitar(100.0 - distanciaTopoATR / distanciaMaximaATR * 100.0, 0.0, 100.0)
+
+    distanciaLong = finalLong * 0.25 + intL * 0.15 + confL * 0.15 + f_limitar(vantagemLong * 5.0, 0.0, 100.0) * 0.15 + mtfLong * 0.10 + fundoForca * 0.10 + microL * 0.05 + proximidadeFundo * 0.05
+    distanciaShort = finalShort * 0.25 + intS * 0.15 + confS * 0.15 + f_limitar(vantagemShort * 5.0, 0.0, 100.0) * 0.15 + mtfShort * 0.10 + topoForca * 0.10 + microS * 0.05 + proximidadeTopo * 0.05
+
+    distanciaLong := f_limitar(distanciaLong, 0.0, 100.0)
+    distanciaShort := f_limitar(distanciaShort, 0.0, 100.0)
+
+    preLong = finalLong >= scorePreMinimo and intL >= intensidadePreMinima and confL >= confluenciaPreMinima and vantagemLong >= vantagemPreMinima and mtfLong >= mtfPreMinimo and fundoForca >= forcaPreMinima and microL >= microPreMinimo and qualidadeLong >= qualidadePreMinima
+
+    preShort = finalShort >= scorePreMinimo and intS >= intensidadePreMinima and confS >= confluenciaPreMinima and vantagemShort >= vantagemPreMinima and mtfShort >= mtfPreMinimo and topoForca >= forcaPreMinima and microS >= microPreMinimo and qualidadeShort >= qualidadePreMinima
+
+    sinalLongBase = finalLong >= scoreMinimo and intL >= intensidadeMinima and confL >= confluenciaMinima and vantagemLong >= vantagemMinima and mtfLong >= mtfMinimo and fundoForca >= forcaFundoTopoMinima and microL >= microMinimo and qualidadeLong >= qualidadeSinalMinima
+
+    sinalShortBase = finalShort >= scoreMinimo and intS >= intensidadeMinima and confS >= confluenciaMinima and vantagemShort >= vantagemMinima and mtfShort >= mtfMinimo and topoForca >= forcaFundoTopoMinima and microS >= microMinimo and qualidadeShort >= qualidadeSinalMinima
+
+    sinalLong = sinalLongBase
+    sinalShort = sinalShortBase
+
+    if usarFiltroKVO and not alinhamentoKvoLong
+        sinalLong := false
+
+    if usarFiltroKVO and not alinhamentoKvoShort
+        sinalShort := false
+
+    if usarFiltroTendencia and not tendenciaLongOK
+        sinalLong := false
+
+    if usarFiltroTendencia and not tendenciaShortOK
+        sinalShort := false
+
+    if usarFiltroEsticado and distanciaFundoATR > distanciaMaximaATR
+        sinalLong := false
+
+    if usarFiltroEsticado and distanciaTopoATR > distanciaMaximaATR
+        sinalShort := false
+
+    if usarFiltroVolatilidade and volScore < volatilidadeMinima
+        sinalLong := false
+
+    if usarFiltroVolatilidade and volScore < volatilidadeMinima
+        sinalShort := false
+
+    if usarFiltroFibonacci and not fibValido
+        sinalLong := false
+
+    if usarFiltroFibonacci and not fibValido
+        sinalShort := false
+
+    conflito = math.abs(finalLong - finalShort) < vantagemMinima and (sinalLong or sinalShort or preLong or preShort)
+
+    direcao = "NEUTRO"
+
+    if conflito
+        direcao := "CONFLITO"
+    else if sinalLong
+        direcao := "LONG"
+    else if sinalShort
+        direcao := "SHORT"
+    else if preLong and not preShort
+        direcao := "PRE-LONG"
+    else if preShort and not preLong
+        direcao := "PRE-SHORT"
+    else if finalLong > finalShort and finalLong >= scorePreMinimo
+        direcao := "OBSERVAR LONG"
+    else if finalShort > finalLong and finalShort >= scorePreMinimo
+        direcao := "OBSERVAR SHORT"
+
+    intensidadeFinal = 0.0
+    confluenciaFinal = 0.0
+    scoreFinal = 0.0
+    mtfFinal = 0.0
+    distanciaFinal = 0.0
+    qualidadeFinal = 0.0
+
+    if direcao == "LONG" or direcao == "PRE-LONG" or direcao == "OBSERVAR LONG"
+        scoreFinal := finalLong
+        intensidadeFinal := intL
+        confluenciaFinal := confL
+        mtfFinal := mtfLong
+        distanciaFinal := distanciaLong
+        qualidadeFinal := qualidadeLong
+    else if direcao == "SHORT" or direcao == "PRE-SHORT" or direcao == "OBSERVAR SHORT"
+        scoreFinal := finalShort
+        intensidadeFinal := intS
+        confluenciaFinal := confS
+        mtfFinal := mtfShort
+        distanciaFinal := distanciaShort
+        qualidadeFinal := qualidadeShort
+    else
+        if finalLong >= finalShort
+            scoreFinal := finalLong
+            intensidadeFinal := intL
+            confluenciaFinal := confL
+            mtfFinal := mtfLong
+            distanciaFinal := distanciaLong
+            qualidadeFinal := qualidadeLong
+        else
+            scoreFinal := finalShort
+            intensidadeFinal := intS
+            confluenciaFinal := confS
+            mtfFinal := mtfShort
+            distanciaFinal := distanciaShort
+            qualidadeFinal := qualidadeShort
+
+    falta = "AGUARDAR"
+
+    if direcao == "LONG"
+        if finalLong < scoreMinimo
+            falta := "SCORE"
+        else if intL < intensidadeMinima
+            falta := "INTENSIDADE"
+        else if confL < confluenciaMinima
+            falta := "CONFLUENCIA"
+        else if vantagemLong < vantagemMinima
+            falta := "VANTAGEM"
+        else if mtfLong < mtfMinimo
+            falta := "MTF"
+        else if fundoForca < forcaFundoTopoMinima
+            falta := "FUNDO"
+        else if microL < microMinimo
+            falta := "MICRO"
+        else if usarFiltroKVO and not alinhamentoKvoLong
+            falta := "KVO"
+        else if usarFiltroTendencia and not tendenciaLongOK
+            falta := "TENDENCIA"
+        else if usarFiltroEsticado and distanciaFundoATR > distanciaMaximaATR
+            falta := "ESTICADO"
+        else if usarFiltroVolatilidade and volScore < volatilidadeMinima
+            falta := "VOLATILIDADE"
+        else if usarFiltroFibonacci and not fibValido
+            falta := "FIBONACCI"
+        else
+            falta := "OK"
+
+    else if direcao == "SHORT"
+        if finalShort < scoreMinimo
+            falta := "SCORE"
+        else if intS < intensidadeMinima
+            falta := "INTENSIDADE"
+        else if confS < confluenciaMinima
+            falta := "CONFLUENCIA"
+        else if vantagemShort < vantagemMinima
+            falta := "VANTAGEM"
+        else if mtfShort < mtfMinimo
+            falta := "MTF"
+        else if topoForca < forcaFundoTopoMinima
+            falta := "TOPO"
+        else if microS < microMinimo
+            falta := "MICRO"
+        else if usarFiltroKVO and not alinhamentoKvoShort
+            falta := "KVO"
+        else if usarFiltroTendencia and not tendenciaShortOK
+            falta := "TENDENCIA"
+        else if usarFiltroEsticado and distanciaTopoATR > distanciaMaximaATR
+            falta := "ESTICADO"
+        else if usarFiltroVolatilidade and volScore < volatilidadeMinima
+            falta := "VOLATILIDADE"
+        else if usarFiltroFibonacci and not fibValido
+            falta := "FIBONACCI"
+        else
+            falta := "OK"
+
+    else if direcao == "PRE-LONG"
+        if finalLong < scorePreMinimo
+            falta := "SCORE"
+        else if intL < intensidadePreMinima
+            falta := "INTENSIDADE"
+        else if confL < confluenciaPreMinima
+            falta := "CONFLUENCIA"
+        else if vantagemLong < vantagemPreMinima
+            falta := "VANTAGEM"
+        else if mtfLong < mtfPreMinimo
+            falta := "MTF"
+        else if fundoForca < forcaPreMinima
+            falta := "FUNDO"
+        else if microL < microPreMinimo
+            falta := "MICRO"
+        else
+            falta := "CONFIRMACAO"
+
+    else if direcao == "PRE-SHORT"
+        if finalShort < scorePreMinimo
+            falta := "SCORE"
+        else if intS < intensidadePreMinima
+            falta := "INTENSIDADE"
+        else if confS < confluenciaPreMinima
+            falta := "CONFLUENCIA"
+        else if vantagemShort < vantagemPreMinima
+            falta := "VANTAGEM"
+        else if mtfShort < mtfPreMinimo
+            falta := "MTF"
+        else if topoForca < forcaPreMinima
+            falta := "TOPO"
+        else if microS < microPreMinimo
+            falta := "MICRO"
+        else
+            falta := "CONFIRMACAO"
+
+    entrada = float(na)
+    alvo = float(na)
+
+    if direcao == "LONG" or direcao == "PRE-LONG"
+        entrada := close
+        alvo := close + atrAdapt * alvoPrincipalATR
+    else if direcao == "SHORT" or direcao == "PRE-SHORT"
+        entrada := close
+        alvo := close - atrAdapt * alvoPrincipalATR
+
+    alvo1Long = close + atrAdapt * alvo1ATR
+    alvo2Long = close + atrAdapt * alvo2ATR
+    alvo3Long = close + atrAdapt * alvo3ATR
+    alvo4Long = close + atrAdapt * alvo4ATR
+    alvo5Long = close + atrAdapt * alvo5ATR
+    alvo6Long = close + atrAdapt * alvo6ATR
+    alvo7Long = close + atrAdapt * alvo7ATR
+    alvo8Long = close + atrAdapt * alvo8ATR
+
+    alvo1Short = close - atrAdapt * alvo1ATR
+    alvo2Short = close - atrAdapt * alvo2ATR
+    alvo3Short = close - atrAdapt * alvo3ATR
+    alvo4Short = close - atrAdapt * alvo4ATR
+    alvo5Short = close - atrAdapt * alvo5ATR
+    alvo6Short = close - atrAdapt * alvo6ATR
+    alvo7Short = close - atrAdapt * alvo7ATR
+    alvo8Short = close - atrAdapt * alvo8ATR
+
+    sinalLongFinal = sinalLong
+    sinalShortFinal = sinalShort
+
+    if somenteBarraConfirmada and not barstate.isconfirmed
+        sinalLongFinal := false
+        sinalShortFinal := false
+
+    [tendenciaPrincipal, direcao, distanciaFinal, scoreFinal, intensidadeFinal, confluenciaFinal, mtfFinal, falta, entrada, alvo, sinalLongFinal, sinalShortFinal, atrAdapt, alvo1Long, alvo2Long, alvo3Long, alvo4Long, alvo5Long, alvo6Long, alvo7Long, alvo8Long, alvo1Short, alvo2Short, alvo3Short, alvo4Short, alvo5Short, alvo6Short, alvo7Short, alvo8Short, qualidadeLong, qualidadeShort, volScore, volPct, fibPos, fibNivel, fibClasse, fibValido]
+
+// ============================================================================
+// CORES
+// ============================================================================
+f_corTendencia(tendencia) =>
+    resultado = color.new(color.gray, 65)
+    if tendencia == "ALTA"
+        resultado := color.new(color.green, 15)
+    else if tendencia == "BAIXA"
+        resultado := color.new(color.red, 15)
+    resultado
+
+f_corDirecao(direcao) =>
+    resultado = color.new(color.gray, 75)
+    if direcao == "LONG"
+        resultado := color.new(color.green, 5)
+    else if direcao == "SHORT"
+        resultado := color.new(color.red, 5)
+    else if direcao == "PRE-LONG"
+        resultado := color.new(color.green, 55)
+    else if direcao == "PRE-SHORT"
+        resultado := color.new(color.red, 55)
+    else if direcao == "CONFLITO"
+        resultado := color.new(color.orange, 35)
+    resultado
+
+f_corDistancia(valor) =>
+    valor >= 80 ? color.new(color.green, 10) : valor >= 65 ? color.new(color.green, 35) : valor >= 50 ? color.new(color.orange, 35) : color.new(color.red, 35)
+
+f_corNumerica(valor, minimo) =>
+    valor >= minimo ? color.new(color.green, 20) : color.new(color.red, 30)
+
+f_corFalta(falta) =>
+    falta == "OK" ? color.new(color.green, 20) : falta == "CONFIRMACAO" ? color.new(color.orange, 25) : color.new(color.red, 35)
+
+// ============================================================================
+// POSICAO DO PAINEL
+// ============================================================================
+posicaoTabela = position.top_left
+
+if posicaoPainel == "MEIO ESQUERDA"
+    posicaoTabela := position.middle_left
+else if posicaoPainel == "MEIO DIREITA"
+    posicaoTabela := position.middle_right
+else if posicaoPainel == "TOPO ESQUERDA"
+    posicaoTabela := position.top_left
+else if posicaoPainel == "TOPO DIREITA"
+    posicaoTabela := position.top_right
+else if posicaoPainel == "FUNDO ESQUERDA"
+    posicaoTabela := position.bottom_left
+else if posicaoPainel == "FUNDO DIREITA"
+    posicaoTabela := position.bottom_right
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+var table painel = table.new(posicaoTabela, 13, 7, border_width=1)
+
+// ============================================================================
+// CONTROLE
+// ============================================================================
+var int ultimoSinal1 = na
+var int ultimoSinal2 = na
+var int ultimoSinal3 = na
+var int ultimoSinal4 = na
+var int ultimoSinal5 = na
+
+var bool armadoLong1 = true
+var bool armadoShort1 = true
+var bool armadoLong2 = true
+var bool armadoShort2 = true
+var bool armadoLong3 = true
+var bool armadoShort3 = true
+var bool armadoLong4 = true
+var bool armadoShort4 = true
+var bool armadoLong5 = true
+var bool armadoShort5 = true
+
+// ============================================================================
+// ATIVO 1
+// ============================================================================
+[tend1, d1, dist1, sc1, in1, co1, mt1, fa1, en1, al1, sigL1Base, sigS1Base, atr1, a11, a21, a31, a41, a51, a61, a71, a81, as11, as21, as31, as41, as51, as61, as71, as81, ql1, qs1, vol1, volPct1, fibPos1, fibNivel1, fibClasse1, fibValido1] = f_scanner(ativo1)
+
+sigL1 = sigL1Base
+sigS1 = sigS1Base
+
+if usarAntiRepeticao and not na(ultimoSinal1)
+    if bar_index - ultimoSinal1 < barrasCooldown
+        sigL1 := false
+        sigS1 := false
+
+if usarRearmamento
+    if not armadoLong1 and ql1 <= nivelDesarme
+        armadoLong1 := true
+    if not armadoShort1 and qs1 <= nivelDesarme
+        armadoShort1 := true
+
+if usarRearmamento
+    if not armadoLong1
+        sigL1 := false
+    if not armadoShort1
+        sigS1 := false
+
+if sigL1 or sigS1
+    ultimoSinal1 := bar_index
+
+if sigL1
+    armadoLong1 := false
+
+if sigS1
+    armadoShort1 := false
+
+// ============================================================================
+// ATIVO 2
+// ============================================================================
+[tend2, d2, dist2, sc2, in2, co2, mt2, fa2, en2, al2, sigL2Base, sigS2Base, atr2, a12, a22, a32, a42, a52, a62, a72, a82, as12, as22, as32, as42, as52, as62, as72, as82, ql2, qs2, vol2, volPct2, fibPos2, fibNivel2, fibClasse2, fibValido2] = f_scanner(ativo2)
+
+sigL2 = sigL2Base
+sigS2 = sigS2Base
+
+if usarAntiRepeticao and not na(ultimoSinal2)
+    if bar_index - ultimoSinal2 < barrasCooldown
+        sigL2 := false
+        sigS2 := false
+
+if usarRearmamento
+    if not armadoLong2 and ql2 <= nivelDesarme
+        armadoLong2 := true
+    if not armadoShort2 and qs2 <= nivelDesarme
+        armadoShort2 := true
+
+if usarRearmamento
+    if not armadoLong2
+        sigL2 := false
+    if not armadoShort2
+        sigS2 := false
+
+if sigL2 or sigS2
+    ultimoSinal2 := bar_index
+
+if sigL2
+    armadoLong2 := false
+
+if sigS2
+    armadoShort2 := false
+
+// ============================================================================
+// ATIVO 3
+// ============================================================================
+[tend3, d3, dist3, sc3, in3, co3, mt3, fa3, en3, al3, sigL3Base, sigS3Base, atr3, a13, a23, a33, a43, a53, a63, a73, a83, as13, as23, as33, as43, as53, as63, as73, as83, ql3, qs3, vol3, volPct3, fibPos3, fibNivel3, fibClasse3, fibValido3] = f_scanner(ativo3)
+
+sigL3 = sigL3Base
+sigS3 = sigS3Base
+
+if usarAntiRepeticao and not na(ultimoSinal3)
+    if bar_index - ultimoSinal3 < barrasCooldown
+        sigL3 := false
+        sigS3 := false
+
+if usarRearmamento
+    if not armadoLong3 and ql3 <= nivelDesarme
+        armadoLong3 := true
+    if not armadoShort3 and qs3 <= nivelDesarme
+        armadoShort3 := true
+
+if usarRearmamento
+    if not armadoLong3
+        sigL3 := false
+    if not armadoShort3
+        sigS3 := false
+
+if sigL3 or sigS3
+    ultimoSinal3 := bar_index
+
+if sigL3
+    armadoLong3 := false
+
+if sigS3
+    armadoShort3 := false
+
+// ============================================================================
+// ATIVO 4
+// ============================================================================
+[tend4, d4, dist4, sc4, in4, co4, mt4, fa4, en4, al4, sigL4Base, sigS4Base, atr4, a14, a24, a34, a44, a54, a64, a74, a84, as14, as24, as34, as44, as54, as64, as74, as84, ql4, qs4, vol4, volPct4, fibPos4, fibNivel4, fibClasse4, fibValido4] = f_scanner(ativo4)
+
+sigL4 = sigL4Base
+sigS4 = sigS4Base
+
+if usarAntiRepeticao and not na(ultimoSinal4)
+    if bar_index - ultimoSinal4 < barrasCooldown
+        sigL4 := false
+        sigS4 := false
+
+if usarRearmamento
+    if not armadoLong4 and ql4 <= nivelDesarme
+        armadoLong4 := true
+    if not armadoShort4 and qs4 <= nivelDesarme
+        armadoShort4 := true
+
+if usarRearmamento
+    if not armadoLong4
+        sigL4 := false
+    if not armadoShort4
+        sigS4 := false
+
+if sigL4 or sigS4
+    ultimoSinal4 := bar_index
+
+if sigL4
+    armadoLong4 := false
+
+if sigS4
+    armadoShort4 := false
+
+// ============================================================================
+// ATIVO 5
+// ============================================================================
+[tend5, d5, dist5, sc5, in5, co5, mt5, fa5, en5, al5, sigL5Base, sigS5Base, atr5, a15, a25, a35, a45, a55, a65, a75, a85, as15, as25, as35, as45, as55, as65, as75, as85, ql5, qs5, vol5, volPct5, fibPos5, fibNivel5, fibClasse5, fibValido5] = f_scanner(ativo5)
+
+sigL5 = sigL5Base
+sigS5 = sigS5Base
+
+if usarAntiRepeticao and not na(ultimoSinal5)
+    if bar_index - ultimoSinal5 < barrasCooldown
+        sigL5 := false
+        sigS5 := false
+
+if usarRearmamento
+    if not armadoLong5 and ql5 <= nivelDesarme
+        armadoLong5 := true
+    if not armadoShort5 and qs5 <= nivelDesarme
+        armadoShort5 := true
+
+if usarRearmamento
+    if not armadoLong5
+        sigL5 := false
+    if not armadoShort5
+        sigS5 := false
+
+if sigL5 or sigS5
+    ultimoSinal5 := bar_index
+
+if sigL5
+    armadoLong5 := false
+
+if sigS5
+    armadoShort5 := false
+
+// ============================================================================
+// ATIVO MAIS VOLATIL
+// ============================================================================
+maiorVol = -1.0
+ativoMaisVolatil = "NENHUM"
+
+if usarAtivo1 and vol1 > maiorVol
+    maiorVol := vol1
+    ativoMaisVolatil := f_nomeAtivo(ativo1)
+
+if usarAtivo2 and vol2 > maiorVol
+    maiorVol := vol2
+    ativoMaisVolatil := f_nomeAtivo(ativo2)
+
+if usarAtivo3 and vol3 > maiorVol
+    maiorVol := vol3
+    ativoMaisVolatil := f_nomeAtivo(ativo3)
+
+if usarAtivo4 and vol4 > maiorVol
+    maiorVol := vol4
+    ativoMaisVolatil := f_nomeAtivo(ativo4)
+
+if usarAtivo5 and vol5 > maiorVol
+    maiorVol := vol5
+    ativoMaisVolatil := f_nomeAtivo(ativo5)
+
+// ============================================================================
+// FUNCAO PARA ESCREVER LINHA
+// ============================================================================
+f_escreverLinha(tabela, linha, nome, tendencia, direcao, distancia, score, intensidade, confluencia, mtf, falta, entrada, alvo, qualidade, volScore, volPct, fibPos, fibNivel, fibClasse, destaque) =>
+    corNome = destaque ? color.new(color.orange, 0) : color.black
+
+    textoVol = str.tostring(volScore, "#.0") + " " + f_classVolatilidade(volScore)
+    textoFib = fibNivel + " " + fibClasse
+
+    table.cell(tabela, 0, linha, nome, text_color=color.white, bgcolor=corNome)
+    table.cell(tabela, 1, linha, tendencia, text_color=color.white, bgcolor=f_corTendencia(tendencia))
+    table.cell(tabela, 2, linha, direcao, text_color=color.white, bgcolor=f_corDirecao(direcao))
+    table.cell(tabela, 3, linha, str.tostring(distancia, "#.0"), text_color=color.white, bgcolor=f_corDistancia(distancia))
+    table.cell(tabela, 4, linha, str.tostring(score, "#.0"), text_color=color.white, bgcolor=f_corNumerica(score, scoreMinimo))
+    table.cell(tabela, 5, linha, str.tostring(intensidade, "#.0"), text_color=color.white, bgcolor=f_corNumerica(intensidade, intensidadeMinima))
+    table.cell(tabela, 6, linha, str.tostring(confluencia, "#.0"), text_color=color.white, bgcolor=f_corNumerica(confluencia, confluenciaMinima))
+    table.cell(tabela, 7, linha, str.tostring(mtf, "#.0"), text_color=color.white, bgcolor=f_corNumerica(mtf, mtfMinimo))
+
+    if mostrarVolatilidade
+        table.cell(tabela, 8, linha, textoVol + " / " + str.tostring(volPct, "#.000") + "%", text_color=color.white, bgcolor=f_corVolatilidade(volScore))
+    else
+        table.cell(tabela, 8, linha, "-", text_color=color.white, bgcolor=color.black)
+
+    if mostrarFibonacci
+        table.cell(tabela, 9, linha, textoFib, text_color=color.white, bgcolor=f_corFib(fibPos))
+    else
+        table.cell(tabela, 9, linha, "-", text_color=color.white, bgcolor=color.black)
+
+    table.cell(tabela, 10, linha, falta + " Q:" + str.tostring(qualidade, "#.0"), text_color=color.white, bgcolor=f_corFalta(falta))
+    table.cell(tabela, 11, linha, na(entrada) ? "-" : f_preco(entrada) + " -> " + f_preco(alvo), text_color=color.white, bgcolor=color.new(color.black, 10))
+    table.cell(tabela, 12, linha, destaque ? "★ MAIS VOLATIL" : "", text_color=color.white, bgcolor=destaque ? color.new(color.orange, 0) : color.black)
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+if barstate.islast
+
+    table.clear(painel, 0, 0, 12, 6)
+
+    table.cell(painel, 0, 0, "PAR", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 1, 0, "TEND.", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 2, 0, "DIRECAO", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 3, 0, "DIST.", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 4, 0, "SCORE", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 5, 0, "INT.", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 6, 0, "CONF.", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 7, 0, "MTF", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 8, 0, "VOL", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 9, 0, "FIB", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 10, 0, "FALTA/Q", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 11, 0, "ENTRADA -> ALVO", text_color=color.white, bgcolor=color.black)
+    table.cell(painel, 12, 0, "DESTAQUE", text_color=color.white, bgcolor=color.black)
+
+    linha = 1
+
+    if usarAtivo1 or mostrarAtivosDesligados
+        qualidadeLinha1 = d1 == "SHORT" ? qs1 : ql1
+        destaque1 = usarAtivo1 and f_nomeAtivo(ativo1) == ativoMaisVolatil
+        f_escreverLinha(painel, linha, f_nomeAtivo(ativo1), tend1, d1, dist1, sc1, in1, co1, mt1, fa1, en1, al1, qualidadeLinha1, vol1, volPct1, fibPos1, fibNivel1, fibClasse1, destaque1)
+        linha += 1
+
+    if usarAtivo2 or mostrarAtivosDesligados
+        qualidadeLinha2 = d2 == "SHORT" ? qs2 : ql2
+        destaque2 = usarAtivo2 and f_nomeAtivo(ativo2) == ativoMaisVolatil
+        f_escreverLinha(painel, linha, f_nomeAtivo(ativo2), tend2, d2, dist2, sc2, in2, co2, mt2, fa2, en2, al2, qualidadeLinha2, vol2, volPct2, fibPos2, fibNivel2, fibClasse2, destaque2)
+        linha += 1
+
+    if usarAtivo3 or mostrarAtivosDesligados
+        qualidadeLinha3 = d3 == "SHORT" ? qs3 : ql3
+        destaque3 = usarAtivo3 and f_nomeAtivo(ativo3) == ativoMaisVolatil
+        f_escreverLinha(painel, linha, f_nomeAtivo(ativo3), tend3, d3, dist3, sc3, in3, co3, mt3, fa3, en3, al3, qualidadeLinha3, vol3, volPct3, fibPos3, fibNivel3, fibClasse3, destaque3)
+        linha += 1
+
+    if usarAtivo4 or mostrarAtivosDesligados
+        qualidadeLinha4 = d4 == "SHORT" ? qs4 : ql4
+        destaque4 = usarAtivo4 and f_nomeAtivo(ativo4) == ativoMaisVolatil
+        f_escreverLinha(painel, linha, f_nomeAtivo(ativo4), tend4, d4, dist4, sc4, in4, co4, mt4, fa4, en4, al4, qualidadeLinha4, vol4, volPct4, fibPos4, fibNivel4, fibClasse4, destaque4)
+        linha += 1
+
+    if usarAtivo5 or mostrarAtivosDesligados
+        qualidadeLinha5 = d5 == "SHORT" ? qs5 : ql5
+        destaque5 = usarAtivo5 and f_nomeAtivo(ativo5) == ativoMaisVolatil
+        f_escreverLinha(painel, linha, f_nomeAtivo(ativo5), tend5, d5, dist5, sc5, in5, co5, mt5, fa5, en5, al5, qualidadeLinha5, vol5, volPct5, fibPos5, fibNivel5, fibClasse5, destaque5)
+        linha += 1
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+alertcondition(sigL1, "EURUSD LONG", "KVO PRO V14.6 - EURUSD LONG confirmado")
+alertcondition(sigS1, "EURUSD SHORT", "KVO PRO V14.6 - EURUSD SHORT confirmado")
+
+alertcondition(sigL2, "USDJPY LONG", "KVO PRO V14.6 - USDJPY LONG confirmado")
+alertcondition(sigS2, "USDJPY SHORT", "KVO PRO V14.6 - USDJPY SHORT confirmado")
+
+alertcondition(sigL3, "EURJPY LONG", "KVO PRO V14.6 - EURJPY LONG confirmado")
+alertcondition(sigS3, "EURJPY SHORT", "KVO PRO V14.6 - EURJPY SHORT confirmado")
+
+alertcondition(sigL4, "GBPUSD LONG", "KVO PRO V14.6 - GBPUSD LONG confirmado")
+alertcondition(sigS4, "GBPUSD SHORT", "KVO PRO V14.6 - GBPUSD SHORT confirmado")
+
+alertcondition(sigL5, "GBPJPY LONG", "KVO PRO V14.6 - GBPJPY LONG confirmado")
+alertcondition(sigS5, "GBPJPY SHORT", "KVO PRO V14.6 - GBPJPY SHORT confirmado")
