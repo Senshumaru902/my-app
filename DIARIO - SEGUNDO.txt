@@ -1,0 +1,1193 @@
+//@version=6
+indicator("KVO PRO V17.1 - DAILY ONLY - SCANNER SELETIVO", overlay=true, max_labels_count=100, max_bars_back=300, dynamic_requests=true)
+
+// ============================================================================
+// KVO PRO V17.1
+// ============================================================================
+// SCANNER FOREX
+// SOMENTE DIARIO
+// LONG + SHORT
+// SEM MTF
+// PAINEL SOMENTE
+// ATR
+// VOLATILIDADE
+// FIBONACCI
+// DISTANCIA ATR
+// PERNA ESTICADA
+// PADROES GRAFICOS
+// TENDENCIA
+// CONFLUENCIA
+// PRE-SINAL
+// SINAL
+// ALVO
+// ============================================================================
+
+
+// ============================================================================
+// GERAL
+// ============================================================================
+
+mostrarPainel = input.bool(true, "Mostrar painel", group="GERAL")
+somenteFechamento = input.bool(true, "Somente candle diario fechado", group="GERAL")
+
+
+// ============================================================================
+// ATIVOS
+// ============================================================================
+
+ativo1 = input.string("OANDA:EURUSD", "Ativo 1", group="ATIVOS")
+ativo2 = input.string("OANDA:USDJPY", "Ativo 2", group="ATIVOS")
+ativo3 = input.string("OANDA:EURJPY", "Ativo 3", group="ATIVOS")
+ativo4 = input.string("OANDA:GBPUSD", "Ativo 4", group="ATIVOS")
+ativo5 = input.string("OANDA:GBPJPY", "Ativo 5", group="ATIVOS")
+
+
+// ============================================================================
+// FILTROS DE SINAL
+// ============================================================================
+
+scoreMinimo = input.float(72.0, "Score minimo", minval=0, maxval=100, group="FILTROS")
+intensidadeMinima = input.float(64.0, "Intensidade minima", minval=0, maxval=100, group="FILTROS")
+confluenciaMinima = input.float(68.0, "Confluencia minima", minval=0, maxval=100, group="FILTROS")
+vantagemMinima = input.float(12.0, "Vantagem minima", minval=0, maxval=100, group="FILTROS")
+qualidadeMinima = input.float(80.0, "Qualidade minima", minval=0, maxval=100, group="FILTROS")
+
+
+// ============================================================================
+// PRE-SINAL
+// ============================================================================
+
+preScoreMinimo = input.float(66.0, "Pre-score minimo", minval=0, maxval=100, group="PRE-SINAL")
+preIntensidadeMinima = input.float(58.0, "Pre-intensidade minima", minval=0, maxval=100, group="PRE-SINAL")
+preConfluenciaMinima = input.float(58.0, "Pre-confluencia minima", minval=0, maxval=100, group="PRE-SINAL")
+preVantagemMinima = input.float(9.0, "Pre-vantagem minima", minval=0, maxval=100, group="PRE-SINAL")
+preQualidadeMinima = input.float(70.0, "Pre-qualidade minima", minval=0, maxval=100, group="PRE-SINAL")
+
+
+// ============================================================================
+// INDICADORES
+// ============================================================================
+
+emaRapida = input.int(9, "EMA rapida", minval=2, group="INDICADORES")
+emaMedia = input.int(21, "EMA media", minval=2, group="INDICADORES")
+emaLenta = input.int(50, "EMA lenta", minval=5, group="INDICADORES")
+
+rsiPeriodo = input.int(10, "RSI periodo", minval=2, group="INDICADORES")
+rsiSobrevendido = input.float(35.0, "RSI sobrevendido", group="INDICADORES")
+rsiSobrecomprado = input.float(65.0, "RSI sobrecomprado", group="INDICADORES")
+
+kvoFast = input.int(34, "KVO rapido", minval=2, group="INDICADORES")
+kvoSlow = input.int(55, "KVO lento", minval=2, group="INDICADORES")
+kvoSignalPeriodo = input.int(13, "KVO sinal", minval=2, group="INDICADORES")
+
+
+// ============================================================================
+// ATR / VOLATILIDADE
+// ============================================================================
+
+atrPeriodo = input.int(14, "ATR periodo", minval=2, group="ATR")
+atrMediaPeriodo = input.int(50, "Media ATR", minval=10, group="ATR")
+fatorATR = input.float(1.0, "Fator ATR", minval=0.1, group="ATR")
+
+usarFiltroVolatilidade = input.bool(true, "Usar filtro volatilidade", group="VOLATILIDADE")
+volatilidadeMinima = input.float(35.0, "Volatilidade minima", minval=0, maxval=100, group="VOLATILIDADE")
+
+
+// ============================================================================
+// ESTRUTURA
+// ============================================================================
+
+estruturaLookback = input.int(30, "Estrutura fundo/topo", minval=10, group="ESTRUTURA")
+microLookback = input.int(5, "Microestrutura", minval=2, group="ESTRUTURA")
+distanciaMaximaATR = input.float(1.50, "Distancia maxima ATR", minval=0.10, group="ESTRUTURA")
+
+
+// ============================================================================
+// PERNA ESTICADA
+// ============================================================================
+
+usarFiltroPerna = input.bool(true, "Usar filtro perna esticada", group="PERNA")
+
+pernaLookback = input.int(12, "Lookback perna", minval=3, group="PERNA")
+pernaEsticandoATR = input.float(0.75, "Esticando ATR", minval=0.10, group="PERNA")
+pernaEsticadaATR = input.float(1.25, "Esticada ATR", minval=0.20, group="PERNA")
+pernaMuitoEsticadaATR = input.float(1.75, "Muito esticada ATR", minval=0.30, group="PERNA")
+pernaExtremaATR = input.float(2.25, "Extrema ATR", minval=0.50, group="PERNA")
+pernaBloqueio = input.float(78.0, "Score bloqueio", minval=50, maxval=100, group="PERNA")
+pernaCandlesMax = input.int(6, "Maximo candles consecutivos", minval=2, group="PERNA")
+
+
+// ============================================================================
+// FIBONACCI
+// ============================================================================
+
+usarFibonacci = input.bool(true, "Usar Fibonacci", group="FIBONACCI")
+fibLookback = input.int(50, "Lookback Fibonacci", minval=10, group="FIBONACCI")
+
+
+// ============================================================================
+// PADROES
+// ============================================================================
+
+usarPadroes = input.bool(true, "Usar padroes", group="PADROES")
+padraoLookback = input.int(20, "Lookback padrao", minval=8, group="PADROES")
+padraoConfiancaMinima = input.float(60.0, "Confianca minima", minval=0, maxval=100, group="PADROES")
+
+
+// ============================================================================
+// ALVO
+// ============================================================================
+
+alvoATR = input.float(2.0, "Alvo principal ATR", minval=0.5, group="ALVO")
+
+
+// ============================================================================
+// ANTI REPETICAO
+// ============================================================================
+
+usarAntiRepeticao = input.bool(true, "Usar anti-repeticao", group="ANTI-REPETICAO")
+cooldownBarras = input.int(5, "Cooldown barras", minval=1, group="ANTI-REPETICAO")
+nivelRearmamento = input.float(55.0, "Nivel rearmamento", minval=0, maxval=100, group="ANTI-REPETICAO")
+
+
+// ============================================================================
+// FUNCOES
+// ============================================================================
+
+f_clamp(float valor, float minimo, float maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+
+f_nome(string simbolo) =>
+    int p = str.pos(simbolo, ":")
+    p >= 0 ? str.substring(simbolo, p + 1, str.length(simbolo)) : simbolo
+
+
+f_volClasse(float valor) =>
+    string r = "MUITO FRACA"
+    if valor >= 85
+        r := "EXTREMA"
+    else if valor >= 70
+        r := "MUITO FORTE"
+    else if valor >= 55
+        r := "FORTE"
+    else if valor >= 40
+        r := "MODERADA"
+    else if valor >= 25
+        r := "FRACA"
+    r
+
+
+f_corVol(float valor) =>
+    color r = color.gray
+    if valor >= 85
+        r := color.red
+    else if valor >= 70
+        r := color.orange
+    else if valor >= 55
+        r := color.yellow
+    else if valor >= 40
+        r := color.aqua
+    r
+
+
+f_corSinal(string valor) =>
+    color r = color.gray
+    if valor == "COMPRA"
+        r := color.lime
+    else if valor == "VENDA"
+        r := color.red
+    else if valor == "PRE COMPRA"
+        r := color.yellow
+    else if valor == "PRE VENDA"
+        r := color.orange
+    r
+
+
+f_corTend(string valor) =>
+    color r = color.yellow
+    if valor == "ALTA"
+        r := color.lime
+    else if valor == "BAIXA"
+        r := color.red
+    r
+
+
+f_pernaClasse(float valor) =>
+    string r = "NORMAL"
+    if valor >= 85
+        r := "EXTREMA"
+    else if valor >= 70
+        r := "MUITO ESTICADA"
+    else if valor >= 55
+        r := "ESTICADA"
+    else if valor >= 35
+        r := "ESTICANDO"
+    r
+
+
+f_corPerna(string valor) =>
+    color r = color.green
+    if valor == "EXTREMA"
+        r := color.red
+    else if valor == "MUITO ESTICADA"
+        r := color.orange
+    else if valor == "ESTICADA"
+        r := color.yellow
+    else if valor == "ESTICANDO"
+        r := color.aqua
+    r
+
+
+f_fibClasse(float valor) =>
+    string r = "0-23.6"
+    if valor >= 78.6
+        r := "78.6-100"
+    else if valor >= 61.8
+        r := "61.8-78.6"
+    else if valor >= 50
+        r := "50-61.8"
+    else if valor >= 38.2
+        r := "38.2-50"
+    else if valor >= 23.6
+        r := "23.6-38.2"
+    r
+
+
+f_corFib(float valor) =>
+    color r = color.orange
+    if valor >= 38.2 and valor <= 61.8
+        r := color.lime
+    else if valor >= 23.6 and valor <= 78.6
+        r := color.yellow
+    r
+
+
+f_corStatus(string valor) =>
+    color r = color.gray
+    if valor == "SINAL"
+        r := color.lime
+    else if valor == "PRE-SINAL"
+        r := color.yellow
+    else if valor == "CAUTELA"
+        r := color.orange
+    else if valor == "OBSERVAR"
+        r := color.aqua
+    r
+
+
+// ============================================================================
+// MODELO DIARIO
+// ============================================================================
+
+f_diario() =>
+
+    // ------------------------------------------------------------------------
+    // RANGE / CANDLE
+    // ------------------------------------------------------------------------
+
+    float rangeCandle = math.max(high - low, syminfo.mintick)
+    float corpo = math.abs(close - open)
+
+    float forcaCandle = f_clamp(corpo / rangeCandle * 100.0, 0.0, 100.0)
+
+    float candleLong = close > open ? forcaCandle : forcaCandle * 0.30
+    float candleShort = close < open ? forcaCandle : forcaCandle * 0.30
+
+
+    // ------------------------------------------------------------------------
+    // EMAS
+    // ------------------------------------------------------------------------
+
+    float ema9 = ta.ema(close, emaRapida)
+    float ema21 = ta.ema(close, emaMedia)
+    float ema50 = ta.ema(close, emaLenta)
+
+
+    // ------------------------------------------------------------------------
+    // RSI
+    // ------------------------------------------------------------------------
+
+    float rsi = ta.rsi(close, rsiPeriodo)
+
+
+    // ------------------------------------------------------------------------
+    // KVO
+    // ------------------------------------------------------------------------
+
+    float fluxo = volume * (2.0 * ((close - low) - (high - close)) / rangeCandle)
+
+    float kvoF = ta.ema(fluxo, kvoFast)
+    float kvoS = ta.ema(fluxo, kvoSlow)
+
+    float kvo = kvoF - kvoS
+    float kvoSignal = ta.ema(kvo, kvoSignalPeriodo)
+
+
+    // ------------------------------------------------------------------------
+    // RETORNOS
+    // ------------------------------------------------------------------------
+
+    float retorno1 = close[1] != 0 ? (close - close[1]) / close[1] * 100.0 : 0.0
+    float retorno3 = close[3] != 0 ? (close - close[3]) / close[3] * 100.0 : 0.0
+
+
+    // ------------------------------------------------------------------------
+    // TENDENCIA
+    // ------------------------------------------------------------------------
+
+    float tendenciaLong = 25.0
+
+    if ema9 > ema21 and ema21 > ema50
+        tendenciaLong := 100.0
+    else if ema9 > ema21
+        tendenciaLong := 75.0
+    else if ema9 > ema50
+        tendenciaLong := 60.0
+
+
+    float tendenciaShort = 25.0
+
+    if ema9 < ema21 and ema21 < ema50
+        tendenciaShort := 100.0
+    else if ema9 < ema21
+        tendenciaShort := 75.0
+    else if ema9 < ema50
+        tendenciaShort := 60.0
+
+
+    string tendencia = "LATERAL"
+
+    if ema9 > ema21 and ema21 > ema50
+        tendencia := "ALTA"
+    else if ema9 < ema21 and ema21 < ema50
+        tendencia := "BAIXA"
+
+
+    // ------------------------------------------------------------------------
+    // RSI SCORE
+    // ------------------------------------------------------------------------
+
+    float rsiLong = 25.0
+
+    if rsi <= rsiSobrevendido
+        rsiLong := 100.0
+    else if rsi < 45
+        rsiLong := 85.0
+    else if rsi < 50
+        rsiLong := 70.0
+    else if rsi < 55
+        rsiLong := 55.0
+
+
+    float rsiShort = 25.0
+
+    if rsi >= rsiSobrecomprado
+        rsiShort := 100.0
+    else if rsi > 55
+        rsiShort := 85.0
+    else if rsi > 50
+        rsiShort := 70.0
+    else if rsi > 45
+        rsiShort := 55.0
+
+
+    // ------------------------------------------------------------------------
+    // KVO SCORE
+    // ------------------------------------------------------------------------
+
+    float kvoLong = 30.0
+
+    if kvo > kvoSignal and kvo > 0
+        kvoLong := 100.0
+    else if kvo > kvoSignal
+        kvoLong := 80.0
+    else if kvo > 0
+        kvoLong := 65.0
+
+
+    float kvoShort = 30.0
+
+    if kvo < kvoSignal and kvo < 0
+        kvoShort := 100.0
+    else if kvo < kvoSignal
+        kvoShort := 80.0
+    else if kvo < 0
+        kvoShort := 65.0
+
+
+    // ------------------------------------------------------------------------
+    // RETORNO SCORE
+    // ------------------------------------------------------------------------
+
+    float retornoLong = 25.0
+
+    if retorno1 > 0 and retorno3 > 0
+        retornoLong := 100.0
+    else if retorno1 > 0 or retorno3 > 0
+        retornoLong := 70.0
+
+
+    float retornoShort = 25.0
+
+    if retorno1 < 0 and retorno3 < 0
+        retornoShort := 100.0
+    else if retorno1 < 0 or retorno3 < 0
+        retornoShort := 70.0
+
+
+    // ------------------------------------------------------------------------
+    // SCORE BASE
+    // ------------------------------------------------------------------------
+
+    float scoreBaseLong = tendenciaLong * 0.30 + rsiLong * 0.15 + kvoLong * 0.20 + retornoLong * 0.15 + candleLong * 0.20
+
+    float scoreBaseShort = tendenciaShort * 0.30 + rsiShort * 0.15 + kvoShort * 0.20 + retornoShort * 0.15 + candleShort * 0.20
+
+
+    // ------------------------------------------------------------------------
+    // ATR
+    // ------------------------------------------------------------------------
+
+    float atr = ta.atr(atrPeriodo)
+    float atrMedia = ta.sma(atr, atrMediaPeriodo)
+
+    float atrUsado = atr * fatorATR
+
+    // ------------------------------------------------------------------------
+    // VOLATILIDADE
+    // ------------------------------------------------------------------------
+
+    float volatilidade = atrMedia > 0 ? atr / atrMedia * 50.0 : 50.0
+
+    volatilidade := f_clamp(volatilidade, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // ESTRUTURA
+    // ------------------------------------------------------------------------
+
+    float fundo = ta.lowest(low, estruturaLookback)
+    float topo = ta.highest(high, estruturaLookback)
+
+
+    // ------------------------------------------------------------------------
+    // DISTANCIA EMA21
+    // ------------------------------------------------------------------------
+
+    float distanciaATR = atr > 0 ? math.abs(close - ema21) / atr : 99.0
+
+    string distanciaTexto = "NORMAL"
+
+    if distanciaATR <= 0.50
+        distanciaTexto := "PROXIMA"
+    else if distanciaATR <= 1.00
+        distanciaTexto := "NORMAL"
+    else if distanciaATR <= distanciaMaximaATR
+        distanciaTexto := "AFASTADA"
+    else
+        distanciaTexto := "LONGE"
+
+
+    bool distanciaOK = distanciaATR <= distanciaMaximaATR
+
+
+    // ------------------------------------------------------------------------
+    // FUNDO / TOPO
+    // ------------------------------------------------------------------------
+
+    float distanciaFundoATR = atr > 0 ? math.abs(close - fundo) / atr : 99.0
+    float distanciaTopoATR = atr > 0 ? math.abs(close - topo) / atr : 99.0
+
+    float proximidadeFundo = f_clamp(100.0 - distanciaFundoATR / distanciaMaximaATR * 100.0, 0.0, 100.0)
+    float proximidadeTopo = f_clamp(100.0 - distanciaTopoATR / distanciaMaximaATR * 100.0, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // MICROESTRUTURA
+    // ------------------------------------------------------------------------
+
+    float microHigh = ta.highest(high, microLookback)
+    float microLow = ta.lowest(low, microLookback)
+
+    bool microBreakLong = close > microHigh[1]
+    bool microBreakShort = close < microLow[1]
+
+    bool recuperacaoLong = low < low[1] and close > open and close > close[1]
+    bool rejeicaoShort = high > high[1] and close < open and close < close[1]
+
+
+    float microLong = 35.0
+
+    if microBreakLong
+        microLong += 35.0
+
+    if recuperacaoLong
+        microLong += 20.0
+
+    if close > ema9
+        microLong += 10.0
+
+    microLong := f_clamp(microLong, 0.0, 100.0)
+
+
+    float microShort = 35.0
+
+    if microBreakShort
+        microShort += 35.0
+
+    if rejeicaoShort
+        microShort += 20.0
+
+    if close < ema9
+        microShort += 10.0
+
+    microShort := f_clamp(microShort, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // FUNDO / TOPO
+    // ------------------------------------------------------------------------
+
+    float forcaFundo = proximidadeFundo
+
+    if rsi <= rsiSobrevendido
+        forcaFundo += 20.0
+    else if rsi < 45
+        forcaFundo += 10.0
+
+    if kvo > kvoSignal
+        forcaFundo += 15.0
+
+    if close > ema9
+        forcaFundo += 10.0
+
+    if recuperacaoLong
+        forcaFundo += 15.0
+
+    forcaFundo := f_clamp(forcaFundo, 0.0, 100.0)
+
+
+    float forcaTopo = proximidadeTopo
+
+    if rsi >= rsiSobrecomprado
+        forcaTopo += 20.0
+    else if rsi > 55
+        forcaTopo += 10.0
+
+    if kvo < kvoSignal
+        forcaTopo += 15.0
+
+    if close < ema9
+        forcaTopo += 10.0
+
+    if rejeicaoShort
+        forcaTopo += 15.0
+
+    forcaTopo := f_clamp(forcaTopo, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // CONFLUENCIA
+    // ------------------------------------------------------------------------
+
+    float confluenciaLong = 0.0
+
+    if tendencia == "ALTA"
+        confluenciaLong += 25.0
+
+    if kvo > kvoSignal
+        confluenciaLong += 20.0
+
+    if rsi < 55
+        confluenciaLong += 15.0
+
+    if microLong >= 60
+        confluenciaLong += 20.0
+
+    if forcaFundo >= 60
+        confluenciaLong += 20.0
+
+    confluenciaLong := f_clamp(confluenciaLong, 0.0, 100.0)
+
+
+    float confluenciaShort = 0.0
+
+    if tendencia == "BAIXA"
+        confluenciaShort += 25.0
+
+    if kvo < kvoSignal
+        confluenciaShort += 20.0
+
+    if rsi > 45
+        confluenciaShort += 15.0
+
+    if microShort >= 60
+        confluenciaShort += 20.0
+
+    if forcaTopo >= 60
+        confluenciaShort += 20.0
+
+    confluenciaShort := f_clamp(confluenciaShort, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // SCORE FINAL
+    // ------------------------------------------------------------------------
+
+    float scoreLong = scoreBaseLong * 0.55 + forcaFundo * 0.20 + confluenciaLong * 0.15 + microLong * 0.10
+    float scoreShort = scoreBaseShort * 0.55 + forcaTopo * 0.20 + confluenciaShort * 0.15 + microShort * 0.10
+
+    scoreLong := f_clamp(scoreLong, 0.0, 100.0)
+    scoreShort := f_clamp(scoreShort, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // VANTAGEM
+    // ------------------------------------------------------------------------
+
+    float vantagemLong = f_clamp(scoreLong - scoreShort, 0.0, 100.0)
+    float vantagemShort = f_clamp(scoreShort - scoreLong, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // INTENSIDADE
+    // ------------------------------------------------------------------------
+
+    float intensidadeLong = scoreLong * 0.40 + confluenciaLong * 0.20 + microLong * 0.15 + forcaFundo * 0.25
+    float intensidadeShort = scoreShort * 0.40 + confluenciaShort * 0.20 + microShort * 0.15 + forcaTopo * 0.25
+
+    intensidadeLong := f_clamp(intensidadeLong, 0.0, 100.0)
+    intensidadeShort := f_clamp(intensidadeShort, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // QUALIDADE
+    // ------------------------------------------------------------------------
+
+    float qualidadeLong = scoreLong * 0.30 + intensidadeLong * 0.20 + confluenciaLong * 0.20 + microLong * 0.15 + forcaFundo * 0.15
+
+    float qualidadeShort = scoreShort * 0.30 + intensidadeShort * 0.20 + confluenciaShort * 0.20 + microShort * 0.15 + forcaTopo * 0.15
+
+    qualidadeLong := f_clamp(qualidadeLong, 0.0, 100.0)
+    qualidadeShort := f_clamp(qualidadeShort, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // FIBONACCI
+    // ------------------------------------------------------------------------
+
+    float fibHigh = ta.highest(high, fibLookback)
+    float fibLow = ta.lowest(low, fibLookback)
+
+    float fibAmplitude = math.max(fibHigh - fibLow, syminfo.mintick)
+
+    float fibPos = (close - fibLow) / fibAmplitude * 100.0
+
+    fibPos := f_clamp(fibPos, 0.0, 100.0)
+
+    string fibClasse = f_fibClasse(fibPos)
+
+    bool fibLongOK = true
+    bool fibShortOK = true
+
+    if usarFibonacci
+        fibLongOK := fibPos <= 65.3
+        fibShortOK := fibPos >= 34.7
+
+
+    // ------------------------------------------------------------------------
+    // PERNA
+    // ------------------------------------------------------------------------
+
+    float extensaoLongATR = atr > 0 ? (close - ta.lowest(low, pernaLookback)) / atr : 0.0
+    float extensaoShortATR = atr > 0 ? (ta.highest(high, pernaLookback) - close) / atr : 0.0
+
+
+    float pernaLongExt = f_clamp((extensaoLongATR - pernaEsticandoATR) / math.max(pernaExtremaATR - pernaEsticandoATR, 0.1) * 100.0, 0.0, 100.0)
+
+    float pernaShortExt = f_clamp((extensaoShortATR - pernaEsticandoATR) / math.max(pernaExtremaATR - pernaEsticandoATR, 0.1) * 100.0, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // CONTAGEM DE CANDLES
+    // ------------------------------------------------------------------------
+
+    int barrasAlta = 0
+    int barrasBaixa = 0
+
+    for i = 0 to pernaCandlesMax - 1
+        if close[i] > open[i]
+            barrasAlta += 1
+        if close[i] < open[i]
+            barrasBaixa += 1
+
+
+    float candlesLongScore = f_clamp(barrasAlta / pernaCandlesMax * 100.0, 0.0, 100.0)
+    float candlesShortScore = f_clamp(barrasBaixa / pernaCandlesMax * 100.0, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // EXCESSO RSI
+    // ------------------------------------------------------------------------
+
+    float excessoRSILong = rsi >= 70 ? 100.0 : rsi >= 65 ? 70.0 : 20.0
+    float excessoRSIShort = rsi <= 30 ? 100.0 : rsi <= 35 ? 70.0 : 20.0
+
+
+    // ------------------------------------------------------------------------
+    // PERDA KVO
+    // ------------------------------------------------------------------------
+
+    float perdaKVOLong = kvo < kvoSignal ? 70.0 : kvo < 0 ? 45.0 : 10.0
+    float perdaKVOShort = kvo > kvoSignal ? 70.0 : kvo > 0 ? 45.0 : 10.0
+
+
+    // ------------------------------------------------------------------------
+    // DISTANCIA COMO RISCO DE PERNA
+    // ------------------------------------------------------------------------
+
+    float distanciaScore = f_clamp(distanciaATR / distanciaMaximaATR * 100.0, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // SCORE DA PERNA
+    // ------------------------------------------------------------------------
+
+    float pernaScoreLong = pernaLongExt * 0.35 + distanciaScore * 0.15 + candlesLongScore * 0.15 + perdaKVOLong * 0.15 + excessoRSILong * 0.20
+
+    float pernaScoreShort = pernaShortExt * 0.35 + distanciaScore * 0.15 + candlesShortScore * 0.15 + perdaKVOShort * 0.15 + excessoRSIShort * 0.20
+
+
+    if extensaoLongATR >= pernaExtremaATR
+        pernaScoreLong += 10.0
+    else if extensaoLongATR >= pernaMuitoEsticadaATR
+        pernaScoreLong += 7.0
+    else if extensaoLongATR >= pernaEsticadaATR
+        pernaScoreLong += 3.0
+
+
+    if extensaoShortATR >= pernaExtremaATR
+        pernaScoreShort += 10.0
+    else if extensaoShortATR >= pernaMuitoEsticadaATR
+        pernaScoreShort += 7.0
+    else if extensaoShortATR >= pernaEsticadaATR
+        pernaScoreShort += 3.0
+
+
+    pernaScoreLong := f_clamp(pernaScoreLong, 0.0, 100.0)
+    pernaScoreShort := f_clamp(pernaScoreShort, 0.0, 100.0)
+
+
+    // ------------------------------------------------------------------------
+    // EXAUSTAO
+    // ------------------------------------------------------------------------
+
+    bool exaustaoLong = false
+    bool exaustaoShort = false
+
+
+    if pernaScoreLong >= pernaBloqueio
+        if extensaoLongATR >= pernaMuitoEsticadaATR and excessoRSILong >= 70
+            exaustaoLong := true
+        else if extensaoLongATR >= pernaExtremaATR
+            exaustaoLong := true
+
+
+    if pernaScoreShort >= pernaBloqueio
+        if extensaoShortATR >= pernaMuitoEsticadaATR and excessoRSIShort >= 70
+            exaustaoShort := true
+        else if extensaoShortATR >= pernaExtremaATR
+            exaustaoShort := true
+
+
+    bool pernaLongOK = not usarFiltroPerna or not exaustaoLong
+    bool pernaShortOK = not usarFiltroPerna or not exaustaoShort
+
+
+    // ------------------------------------------------------------------------
+    // VOLATILIDADE
+    // ------------------------------------------------------------------------
+
+    string volClasse = f_volClasse(volatilidade)
+
+    bool volatilidadeOK = not usarFiltroVolatilidade or volatilidade >= volatilidadeMinima
+
+
+    // ------------------------------------------------------------------------
+    // PADROES
+    // ------------------------------------------------------------------------
+
+    float padraoATR = ta.atr(atrPeriodo)
+    float tolerancia = math.max(padraoATR * 0.35, syminfo.mintick * 5.0)
+
+    int metade = int(math.max(math.floor(padraoLookback / 2), 4))
+
+    float lowAtual = ta.lowest(low, metade)
+    float lowAnterior = ta.lowest(low, metade)[metade]
+
+    float highAtual = ta.highest(high, metade)
+    float highAnterior = ta.highest(high, metade)[metade]
+
+    bool duploFundo = math.abs(lowAtual - lowAnterior) <= tolerancia and close > ta.sma(close, 5)
+
+    bool duploTopo = math.abs(highAtual - highAnterior) <= tolerancia and close < ta.sma(close, 5)
+
+    bool rompimentoAlta = close > ta.highest(high, 10)[1]
+    bool rompimentoBaixa = close < ta.lowest(low, 10)[1]
+
+    bool engolfoAlta = close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+
+    bool engolfoBaixa = close < open and close[1] > open[1] and close <= open[1] and open >= close[1]
+
+    float rangeAtual = math.max(high - low, syminfo.mintick)
+
+    float rangeMedio = math.max(ta.sma(high - low, 10), syminfo.mintick)
+
+    bool compressao = rangeAtual < rangeMedio * 0.72
+
+
+    string padrao = "SEM PADRAO"
+    float padraoConf = 0.0
+
+
+    if usarPadroes
+        if duploFundo
+            padrao := "DUPLO FUNDO"
+            padraoConf := 86.0
+        else if duploTopo
+            padrao := "DUPLO TOPO"
+            padraoConf := 86.0
+        else if rompimentoAlta
+            padrao := "ROMPIMENTO ALTA"
+            padraoConf := 82.0
+        else if rompimentoBaixa
+            padrao := "ROMPIMENTO BAIXA"
+            padraoConf := 82.0
+        else if engolfoAlta
+            padrao := "ENGOLFO ALTA"
+            padraoConf := 76.0
+        else if engolfoBaixa
+            padrao := "ENGOLFO BAIXA"
+            padraoConf := 76.0
+        else if compressao
+            padrao := "COMPRESSAO"
+            padraoConf := 64.0
+
+
+    if padraoConf < padraoConfiancaMinima
+        padrao := "SEM PADRAO"
+        padraoConf := 0.0
+
+
+    // ------------------------------------------------------------------------
+    // CONDICOES
+    // ------------------------------------------------------------------------
+
+    bool preLong = scoreLong >= preScoreMinimo and intensidadeLong >= preIntensidadeMinima and confluenciaLong >= preConfluenciaMinima and vantagemLong >= preVantagemMinima and qualidadeLong >= preQualidadeMinima and volatilidadeOK and distanciaOK and fibLongOK and pernaLongOK and scoreLong > scoreShort
+
+    bool preShort = scoreShort >= preScoreMinimo and intensidadeShort >= preIntensidadeMinima and confluenciaShort >= preConfluenciaMinima and vantagemShort >= preVantagemMinima and qualidadeShort >= preQualidadeMinima and volatilidadeOK and distanciaOK and fibShortOK and pernaShortOK and scoreShort > scoreLong
+
+
+    bool sinalLong = scoreLong >= scoreMinimo and intensidadeLong >= intensidadeMinima and confluenciaLong >= confluenciaMinima and vantagemLong >= vantagemMinima and qualidadeLong >= qualidadeMinima and tendencia == "ALTA" and volatilidadeOK and distanciaOK and fibLongOK and pernaLongOK and scoreLong > scoreShort
+
+    bool sinalShort = scoreShort >= scoreMinimo and intensidadeShort >= intensidadeMinima and confluenciaShort >= confluenciaMinima and vantagemShort >= vantagemMinima and qualidadeShort >= qualidadeMinima and tendencia == "BAIXA" and volatilidadeOK and distanciaOK and fibShortOK and pernaShortOK and scoreShort > scoreLong
+
+
+    // ------------------------------------------------------------------------
+    // SINAL
+    // ------------------------------------------------------------------------
+
+    string sinal = "AGUARDAR"
+
+    if sinalLong
+        sinal := "COMPRA"
+    else if sinalShort
+        sinal := "VENDA"
+    else if preLong
+        sinal := "PRE COMPRA"
+    else if preShort
+        sinal := "PRE VENDA"
+
+
+    // ------------------------------------------------------------------------
+    // SCORE PRINCIPAL
+    // ------------------------------------------------------------------------
+
+    bool principalLong = scoreLong >= scoreShort
+
+    float scorePrincipal = principalLong ? scoreLong : scoreShort
+    float intensidadePrincipal = principalLong ? intensidadeLong : intensidadeShort
+    float confluenciaPrincipal = principalLong ? confluenciaLong : confluenciaShort
+    float vantagemPrincipal = principalLong ? vantagemLong : vantagemShort
+    float qualidadePrincipal = principalLong ? qualidadeLong : qualidadeShort
+    float pernaPrincipal = principalLong ? pernaScoreLong : pernaScoreShort
+    float pernaATRPrincipal = principalLong ? extensaoLongATR : extensaoShortATR
+
+    string classePerna = f_pernaClasse(pernaPrincipal)
+
+    float alvo = principalLong ? close + atrUsado * alvoATR : close - atrUsado * alvoATR
+
+
+    // ------------------------------------------------------------------------
+    // STATUS
+    // ------------------------------------------------------------------------
+
+    string status = "AGUARDAR"
+
+    if sinal == "COMPRA" or sinal == "VENDA"
+        status := "SINAL"
+    else if sinal == "PRE COMPRA" or sinal == "PRE VENDA"
+        status := "PRE-SINAL"
+    else if classePerna == "EXTREMA" or classePerna == "MUITO ESTICADA"
+        status := "CAUTELA"
+    else if distanciaTexto == "LONGE"
+        status := "DISTANTE"
+    else if scorePrincipal >= 65
+        status := "OBSERVAR"
+
+
+    // ------------------------------------------------------------------------
+    // RETORNO
+    // ------------------------------------------------------------------------
+
+    [sinal, scorePrincipal, intensidadePrincipal, confluenciaPrincipal, vantagemPrincipal, qualidadePrincipal, volClasse, volatilidade, tendencia, distanciaTexto, distanciaATR, classePerna, pernaATRPrincipal, fibClasse, fibPos, alvo, padrao, padraoConf, status]
+
+
+// ============================================================================
+// REQUESTS - SOMENTE DIARIO
+// ============================================================================
+
+[sinal1, score1, intensidade1, conf1, vant1, qual1, volClasse1, volPct1, tendencia1, dist1, distAtr1, perna1, pernaAtr1, fib1, fibPos1, alvo1, padrao1, padraoConf1, status1] = request.security(ativo1, "D", f_diario(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=250)
+
+[sinal2, score2, intensidade2, conf2, vant2, qual2, volClasse2, volPct2, tendencia2, dist2, distAtr2, perna2, pernaAtr2, fib2, fibPos2, alvo2, padrao2, padraoConf2, status2] = request.security(ativo2, "D", f_diario(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=250)
+
+[sinal3, score3, intensidade3, conf3, vant3, qual3, volClasse3, volPct3, tendencia3, dist3, distAtr3, perna3, pernaAtr3, fib3, fibPos3, alvo3, padrao3, padraoConf3, status3] = request.security(ativo3, "D", f_diario(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=250)
+
+[sinal4, score4, intensidade4, conf4, vant4, qual4, volClasse4, volPct4, tendencia4, dist4, distAtr4, perna4, pernaAtr4, fib4, fibPos4, alvo4, padrao4, padraoConf4, status4] = request.security(ativo4, "D", f_diario(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=250)
+
+[sinal5, score5, intensidade5, conf5, vant5, qual5, volClasse5, volPct5, tendencia5, dist5, distAtr5, perna5, pernaAtr5, fib5, fibPos5, alvo5, padrao5, padraoConf5, status5] = request.security(ativo5, "D", f_diario(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=250)
+
+
+// ============================================================================
+// NOMES
+// ============================================================================
+
+nome1 = f_nome(ativo1)
+nome2 = f_nome(ativo2)
+nome3 = f_nome(ativo3)
+nome4 = f_nome(ativo4)
+nome5 = f_nome(ativo5)
+
+
+// ============================================================================
+// GARANTIA DE OPERACAO DIARIA
+// ============================================================================
+
+bool diario = timeframe.isdaily
+
+if not diario
+    sinal1 := "USE DIARIO"
+    sinal2 := "USE DIARIO"
+    sinal3 := "USE DIARIO"
+    sinal4 := "USE DIARIO"
+    sinal5 := "USE DIARIO"
+
+    status1 := "USE DIARIO"
+    status2 := "USE DIARIO"
+    status3 := "USE DIARIO"
+    status4 := "USE DIARIO"
+    status5 := "USE DIARIO"
+
+
+// ============================================================================
+// ANTI REPETICAO
+// ============================================================================
+
+var int ultimaBarra1 = na
+var int ultimaBarra2 = na
+var int ultimaBarra3 = na
+var int ultimaBarra4 = na
+var int ultimaBarra5 = na
+
+if diario and usarAntiRepeticao
+
+    if sinal1 == "COMPRA" or sinal1 == "VENDA"
+        if na(ultimaBarra1) or bar_index - ultimaBarra1 >= cooldownBarras
+            ultimaBarra1 := bar_index
+        else
+            sinal1 := "AGUARDAR"
+            status1 := "COOLDOWN"
+
+    if sinal2 == "COMPRA" or sinal2 == "VENDA"
+        if na(ultimaBarra2) or bar_index - ultimaBarra2 >= cooldownBarras
+            ultimaBarra2 := bar_index
+        else
+            sinal2 := "AGUARDAR"
+            status2 := "COOLDOWN"
+
+    if sinal3 == "COMPRA" or sinal3 == "VENDA"
+        if na(ultimaBarra3) or bar_index - ultimaBarra3 >= cooldownBarras
+            ultimaBarra3 := bar_index
+        else
+            sinal3 := "AGUARDAR"
+            status3 := "COOLDOWN"
+
+    if sinal4 == "COMPRA" or sinal4 == "VENDA"
+        if na(ultimaBarra4) or bar_index - ultimaBarra4 >= cooldownBarras
+            ultimaBarra4 := bar_index
+        else
+            sinal4 := "AGUARDAR"
+            status4 := "COOLDOWN"
+
+    if sinal5 == "COMPRA" or sinal5 == "VENDA"
+        if na(ultimaBarra5) or bar_index - ultimaBarra5 >= cooldownBarras
+            ultimaBarra5 := bar_index
+        else
+            sinal5 := "AGUARDAR"
+            status5 := "COOLDOWN"
+
+
+// ============================================================================
+// MAIOR VOLATILIDADE
+// ============================================================================
+
+float maiorVol = volPct1
+string maiorAtivo = nome1
+
+if volPct2 > maiorVol
+    maiorVol := volPct2
+    maiorAtivo := nome2
+
+if volPct3 > maiorVol
+    maiorVol := volPct3
+    maiorAtivo := nome3
+
+if volPct4 > maiorVol
+    maiorVol := volPct4
+    maiorAtivo := nome4
+
+if volPct5 > maiorVol
+    maiorVol := volPct5
+    maiorAtivo := nome5
+
+
+// ============================================================================
+// TABELA
+// ============================================================================
+
+var table painel = table.new(position.middle_left, 12, 7, border_width=1)
+
+
+// ============================================================================
+// FUNCAO CELULA
+// ============================================================================
+
+f_cell(table tabela, int coluna, int linha, string texto, color fundo, color textoCor) =>
+    table.cell(tabela, coluna, linha, texto, bgcolor=fundo, text_color=textoCor, text_size=size.small)
+
+
+// ============================================================================
+// FUNCAO LINHA
+// ============================================================================
+
+f_linha(table tabela, int linha, string ativo, string sinal, float score, string tendencia, string distancia, float distAtr, string perna, float pernaAtr, string vol, float volPct, string fib, float alvo, string padrao, float padraoConf, string status, bool destaque) =>
+
+    color corSinal = f_corSinal(sinal)
+    color corTend = f_corTend(tendencia)
+    color corVol = f_corVol(volPct)
+    color corPerna = f_corPerna(perna)
+    color corFib = f_corFib(0.0)
+    color corStatus = f_corStatus(status)
+
+    string distTexto = distancia + " " + str.tostring(distAtr, "#.00") + "A"
+    string pernaTexto = perna + " " + str.tostring(pernaAtr, "#.00") + "A"
+
+    string padraoTexto = padrao
+
+    if padrao != "SEM PADRAO"
+        padraoTexto := padrao + " " + str.tostring(padraoConf, "#.0")
+
+    color fundo = destaque ? color.new(color.blue, 75) : color.black
+
+    f_cell(tabela, 0, linha, ativo, fundo, color.white)
+    f_cell(tabela, 1, linha, sinal, corSinal, color.black)
+    f_cell(tabela, 2, linha, str.tostring(score, "#.0"), fundo, color.white)
+    f_cell(tabela, 3, linha, tendencia, corTend, color.black)
+    f_cell(tabela, 4, linha, distTexto, fundo, color.white)
+    f_cell(tabela, 5, linha, pernaTexto, corPerna, color.black)
+    f_cell(tabela, 6, linha, vol, corVol, color.black)
+    f_cell(tabela, 7, linha, padraoTexto, fundo, color.white)
+    f_cell(tabela, 8, linha, fib, corFib, color.white)
+    f_cell(tabela, 9, linha, str.tostring(alvo, format.mintick), fundo, color.white)
+    f_cell(tabela, 10, linha, status, corStatus, color.black)
+    f_cell(tabela, 11, linha, destaque ? "★" : "", destaque ? color.yellow : fundo, color.black)
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+if mostrarPainel and barstate.islast
+
+    f_cell(painel, 0, 0, "ATIVO", color.new(color.blue, 15), color.white)
+    f_cell(painel, 1, 0, "SINAL", color.new(color.blue, 15), color.white)
+    f_cell(painel, 2, 0, "FORCA", color.new(color.blue, 15), color.white)
+    f_cell(painel, 3, 0, "TEND.", color.new(color.blue, 15), color.white)
+    f_cell(painel, 4, 0, "DIST.", color.new(color.blue, 15), color.white)
+    f_cell(painel, 5, 0, "PERNA", color.new(color.blue, 15), color.white)
+    f_cell(painel, 6, 0, "VOL.", color.new(color.blue, 15), color.white)
+    f_cell(painel, 7, 0, "PADRAO", color.new(color.blue, 15), color.white)
+    f_cell(painel, 8, 0, "FIB", color.new(color.blue, 15), color.white)
+    f_cell(painel, 9, 0, "ALVO", color.new(color.blue, 15), color.white)
+    f_cell(painel, 10, 0, "STATUS", color.new(color.blue, 15), color.white)
+    f_cell(painel, 11, 0, "★", color.new(color.blue, 15), color.white)
+
+
+    f_linha(painel, 1, nome1, sinal1, score1, tendencia1, dist1, distAtr1, perna1, pernaAtr1, volClasse1, volPct1, fib1, alvo1, padrao1, padraoConf1, status1, volPct1 >= maiorVol)
+
+    f_linha(painel, 2, nome2, sinal2, score2, tendencia2, dist2, distAtr2, perna2, pernaAtr2, volClasse2, volPct2, fib2, alvo2, padrao2, padraoConf2, status2, volPct2 >= maiorVol)
+
+    f_linha(painel, 3, nome3, sinal3, score3, tendencia3, dist3, distAtr3, perna3, pernaAtr3, volClasse3, volPct3, fib3, alvo3, padrao3, padraoConf3, status3, volPct3 >= maiorVol)
+
+    f_linha(painel, 4, nome4, sinal4, score4, tendencia4, dist4, distAtr4, perna4, pernaAtr4, volClasse4, volPct4, fib4, alvo4, padrao4, padraoConf4, status4, volPct4 >= maiorVol)
+
+    f_linha(painel, 5, nome5, sinal5, score5, tendencia5, dist5, distAtr5, perna5, pernaAtr5, volClasse5, volPct5, fib5, alvo5, padrao5, padraoConf5, status5, volPct5 >= maiorVol)
+
+
+    f_cell(painel, 0, 6, "MAIOR VOL", color.new(color.purple, 25), color.white)
+    f_cell(painel, 1, 6, maiorAtivo, color.yellow, color.black)
+    f_cell(painel, 2, 6, str.tostring(maiorVol, "#.0") + "%", color.yellow, color.black)
+    f_cell(painel, 3, 6, "SOMENTE", color.new(color.purple, 25), color.white)
+    f_cell(painel, 4, 6, "DIARIO", color.aqua, color.black)
+    f_cell(painel, 5, 6, diario ? "ATIVO" : "MUDE TF", diario ? color.lime : color.red, color.black)
+    f_cell(painel, 6, 6, "ATR", color.new(color.purple, 25), color.white)
+    f_cell(painel, 7, 6, "DIST", color.new(color.purple, 25), color.white)
+    f_cell(painel, 8, 6, "PERNA", color.new(color.purple, 25), color.white)
+    f_cell(painel, 9, 6, "FIB", color.new(color.purple, 25), color.white)
+    f_cell(painel, 10, 6, "PADRAO", color.new(color.purple, 25), color.white)
+    f_cell(painel, 11, 6, "★", color.yellow, color.black)
+
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+
+alertcondition(sinal1 == "COMPRA", "KVO V17.1 COMPRA ATIVO 1", "KVO PRO V17.1 DAILY COMPRA ATIVO 1")
+alertcondition(sinal1 == "VENDA", "KVO V17.1 VENDA ATIVO 1", "KVO PRO V17.1 DAILY VENDA ATIVO 1")
+
+alertcondition(sinal2 == "COMPRA", "KVO V17.1 COMPRA ATIVO 2", "KVO PRO V17.1 DAILY COMPRA ATIVO 2")
+alertcondition(sinal2 == "VENDA", "KVO V17.1 VENDA ATIVO 2", "KVO PRO V17.1 DAILY VENDA ATIVO 2")
+
+alertcondition(sinal3 == "COMPRA", "KVO V17.1 COMPRA ATIVO 3", "KVO PRO V17.1 DAILY COMPRA ATIVO 3")
+alertcondition(sinal3 == "VENDA", "KVO V17.1 VENDA ATIVO 3", "KVO PRO V17.1 DAILY VENDA ATIVO 3")
+
+alertcondition(sinal4 == "COMPRA", "KVO V17.1 COMPRA ATIVO 4", "KVO PRO V17.1 DAILY COMPRA ATIVO 4")
+alertcondition(sinal4 == "VENDA", "KVO V17.1 VENDA ATIVO 4", "KVO PRO V17.1 DAILY VENDA ATIVO 4")
+
+alertcondition(sinal5 == "COMPRA", "KVO V17.1 COMPRA ATIVO 5", "KVO PRO V17.1 DAILY COMPRA ATIVO 5")
+alertcondition(sinal5 == "VENDA", "KVO V17.1 VENDA ATIVO 5", "KVO PRO V17.1 DAILY VENDA ATIVO 5")
+
+alertcondition(sinal1 == "PRE COMPRA" or sinal2 == "PRE COMPRA" or sinal3 == "PRE COMPRA" or sinal4 == "PRE COMPRA" or sinal5 == "PRE COMPRA", "KVO V17.1 PRE COMPRA", "KVO PRO V17.1 DAILY PRE COMPRA")
+
+alertcondition(sinal1 == "PRE VENDA" or sinal2 == "PRE VENDA" or sinal3 == "PRE VENDA" or sinal4 == "PRE VENDA" or sinal5 == "PRE VENDA", "KVO V17.1 PRE VENDA", "KVO PRO V17.1 DAILY PRE VENDA")
