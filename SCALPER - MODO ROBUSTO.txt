@@ -1,0 +1,2087 @@
+//@version=6
+
+strategy("KVO PRO V40.6 - PREVISÃO DINÂMICA + PADRÕES + CONFLUÊNCIA",
+     overlay=true,
+     max_labels_count=500,
+     dynamic_requests=true,
+     pyramiding=0,
+     process_orders_on_close=true,
+     calc_on_every_tick=true,
+     calc_on_order_fills=true,
+     initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=1)
+
+// ============================================================================
+// KVO PRO V40.6
+// PREVISÃO DINÂMICA
+// PADRÕES + SUPORTE + RESISTÊNCIA
+// TOPO + FUNDO INTERNOS
+// CONFLUÊNCIA
+// MTF
+// PAINEL MODO FÁCIL
+//
+// ALTERAÇÕES:
+// 1. Painel agora acompanha o gráfico.
+// 2. SCORE não fica mais congelado.
+// 3. PREV. ALTA/BAIXA não ficam mais congeladas.
+// 4. Suporte/resistência do painel são atuais.
+// 5. Padrão do painel é atual.
+// 6. MTF do painel é atual.
+// 7. PRÓX. PREVISÃO usa time_close.
+// 8. Horário fixado em America/Sao_Paulo.
+// 9. COMPRA/VENDA continuam somente em candle confirmado.
+// 10. TOPO/FUNDO não são mais plotados no gráfico.
+// ============================================================================
+
+
+// ============================================================================
+// 1. GRUPOS
+// ============================================================================
+
+grupoGeral   = "01 - GERAL"
+grupoSinal   = "02 - SINAIS"
+grupoMTF     = "03 - MTF"
+grupoPadrao  = "04 - PADRÕES"
+grupoSR      = "05 - SUPORTE / RESISTÊNCIA"
+grupoKVO     = "06 - KVO"
+grupoATR     = "07 - ATR"
+grupoPainel  = "08 - PAINEL"
+grupoVisual  = "09 - VISUAL"
+grupoRisco   = "10 - ESTRATÉGIA"
+
+
+// ============================================================================
+// 2. GERAL
+// ============================================================================
+
+mostrarSinais = input.bool(
+     true,
+     "Mostrar sinais no gráfico",
+     group=grupoGeral)
+
+mostrarPainel = input.bool(
+     true,
+     "Mostrar painel",
+     group=grupoGeral)
+
+modoFacil = input.bool(
+     true,
+     "Modo Fácil",
+     group=grupoGeral)
+
+periodoBase = input.int(
+     20,
+     "Período base",
+     minval=5,
+     group=grupoGeral)
+
+sensibilidade = input.float(
+     1.0,
+     "Sensibilidade",
+     minval=0.50,
+     maxval=2.00,
+     step=0.05,
+     group=grupoGeral)
+
+
+// ============================================================================
+// 3. SINAIS
+// ============================================================================
+
+scoreMinimoCompra = input.float(
+     58.0,
+     "Score mínimo COMPRA",
+     minval=0,
+     maxval=100,
+     group=grupoSinal)
+
+scoreMinimoVenda = input.float(
+     58.0,
+     "Score mínimo VENDA",
+     minval=0,
+     maxval=100,
+     group=grupoSinal)
+
+forcaMinima = input.float(
+     45.0,
+     "Força mínima",
+     minval=0,
+     maxval=100,
+     group=grupoSinal)
+
+confluenciaMinima = input.float(
+     45.0,
+     "Confluência mínima",
+     minval=0,
+     maxval=100,
+     group=grupoSinal)
+
+vantagemMinima = input.float(
+     5.0,
+     "Vantagem mínima",
+     minval=0,
+     maxval=50,
+     group=grupoSinal)
+
+cooldown = input.int(
+     5,
+     "Cooldown entre sinais",
+     minval=0,
+     maxval=100,
+     group=grupoSinal)
+
+fecharReversao = input.bool(
+     true,
+     "Fechar em reversão",
+     group=grupoSinal)
+
+
+// ============================================================================
+// 4. MTF
+// ============================================================================
+
+usarMTF = input.bool(
+     true,
+     "Usar MTF",
+     group=grupoMTF)
+
+tf1 = input.timeframe(
+     "1",
+     "MTF 1",
+     group=grupoMTF)
+
+tf2 = input.timeframe(
+     "5",
+     "MTF 2",
+     group=grupoMTF)
+
+tf3 = input.timeframe(
+     "15",
+     "MTF 3",
+     group=grupoMTF)
+
+tf4 = input.timeframe(
+     "30",
+     "MTF 4",
+     group=grupoMTF)
+
+tf5 = input.timeframe(
+     "60",
+     "MTF 5",
+     group=grupoMTF)
+
+tf6 = input.timeframe(
+     "240",
+     "MTF 6",
+     group=grupoMTF)
+
+tf7 = input.timeframe(
+     "D",
+     "MTF Diário",
+     group=grupoMTF)
+
+pesoTF1 = input.float(
+     10,
+     "Peso MTF 1",
+     minval=0,
+     group=grupoMTF)
+
+pesoTF2 = input.float(
+     15,
+     "Peso MTF 2",
+     minval=0,
+     group=grupoMTF)
+
+pesoTF3 = input.float(
+     20,
+     "Peso MTF 3",
+     minval=0,
+     group=grupoMTF)
+
+pesoTF4 = input.float(
+     20,
+     "Peso MTF 4",
+     minval=0,
+     group=grupoMTF)
+
+pesoTF5 = input.float(
+     15,
+     "Peso MTF 5",
+     minval=0,
+     group=grupoMTF)
+
+pesoTF6 = input.float(
+     10,
+     "Peso MTF 6",
+     minval=0,
+     group=grupoMTF)
+
+pesoTF7 = input.float(
+     10,
+     "Peso MTF Diário",
+     minval=0,
+     group=grupoMTF)
+
+
+// ============================================================================
+// 5. PADRÕES
+// ============================================================================
+
+periodoPadrao = input.int(
+     20,
+     "Período padrão",
+     minval=5,
+     group=grupoPadrao)
+
+usarFundoTopo = input.bool(
+     true,
+     "Detectar fundo/topo",
+     group=grupoPadrao)
+
+distanciaMaxATR = input.float(
+     1.5,
+     "Distância máxima ATR",
+     minval=0.1,
+     step=0.1,
+     group=grupoPadrao)
+
+forcaFundoTopoMinima = input.float(
+     50,
+     "Força mínima fundo/topo",
+     minval=0,
+     maxval=100,
+     group=grupoPadrao)
+
+
+// ============================================================================
+// 6. SUPORTE / RESISTÊNCIA
+// ============================================================================
+
+periodoSR = input.int(
+     30,
+     "Período suporte/resistência",
+     minval=5,
+     group=grupoSR)
+
+proximidadeSRATR = input.float(
+     0.75,
+     "Proximidade S/R em ATR",
+     minval=0.1,
+     step=0.05,
+     group=grupoSR)
+
+
+// ============================================================================
+// 7. KVO
+// ============================================================================
+
+kvoRapido = input.int(
+     34,
+     "KVO rápido",
+     minval=2,
+     group=grupoKVO)
+
+kvoLento = input.int(
+     55,
+     "KVO lento",
+     minval=2,
+     group=grupoKVO)
+
+kvoSinal = input.int(
+     13,
+     "KVO sinal",
+     minval=2,
+     group=grupoKVO)
+
+
+// ============================================================================
+// 8. ATR
+// ============================================================================
+
+atrPeriodo = input.int(
+     14,
+     "ATR período",
+     minval=2,
+     group=grupoATR)
+
+atrMediaPeriodo = input.int(
+     50,
+     "ATR média",
+     minval=5,
+     group=grupoATR)
+
+
+// ============================================================================
+// 9. PAINEL
+// ============================================================================
+
+painelTextoBranco = input.bool(
+     true,
+     "Texto branco",
+     group=grupoPainel)
+
+mostrarMTFNoPainel = input.bool(
+     true,
+     "Mostrar MTF",
+     group=grupoPainel)
+
+
+// ============================================================================
+// 10. VISUAL
+// ============================================================================
+
+tamanhoTextoSinal = input.string(
+     "normal",
+     "Tamanho do sinal",
+     options=["tiny", "small", "normal", "large", "huge"],
+     group=grupoVisual)
+
+mostrarSuporte = input.bool(
+     true,
+     "Mostrar suporte",
+     group=grupoVisual)
+
+mostrarResistencia = input.bool(
+     true,
+     "Mostrar resistência",
+     group=grupoVisual)
+
+
+// ============================================================================
+// 11. ESTRATÉGIA
+// ============================================================================
+
+usarOrdens = input.bool(
+     true,
+     "Executar ordens",
+     group=grupoRisco)
+
+
+// ============================================================================
+// 12. FUNÇÕES BÁSICAS
+// ============================================================================
+
+f_limitar(float valor, float minimo, float maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+
+f_pontos(bool condicao, float pontos) =>
+    condicao ? pontos : 0.0
+
+
+f_textoDirecao(int direcao) =>
+    direcao == 1 ? "COMPRA" :
+     direcao == -1 ? "VENDA" :
+     "NEUTRO"
+
+
+f_corDirecao(int direcao) =>
+    direcao == 1 ? color.lime :
+     direcao == -1 ? color.red :
+     color.gray
+
+
+f_textoForca(float valor) =>
+    valor >= 80 ? "EXTREMA" :
+     valor >= 70 ? "MUITO FORTE" :
+     valor >= 60 ? "FORTE" :
+     valor >= 50 ? "MODERADA" :
+     valor >= 40 ? "FRACA" :
+     "MUITO FRACA"
+
+
+f_corForca(float valor) =>
+    valor >= 70 ? color.lime :
+     valor >= 55 ? color.green :
+     valor >= 45 ? color.yellow :
+     valor >= 30 ? color.orange :
+     color.red
+
+
+f_textoQualidade(float valor) =>
+    valor >= 80 ? "EXCELENTE" :
+     valor >= 70 ? "MUITO BOA" :
+     valor >= 60 ? "BOA" :
+     valor >= 50 ? "REGULAR" :
+     valor >= 40 ? "FRACA" :
+     "MUITO FRACA"
+
+
+// ============================================================================
+// 13. FUNÇÃO DE PADRÃO
+// ============================================================================
+
+f_textoPadrao(
+     bool fundo,
+     bool topo,
+     bool rompimentoAlta,
+     bool rompimentoBaixa,
+     bool recuperacao,
+     bool rejeicaoAlta,
+     bool rejeicaoBaixa) =>
+
+    fundo ? "FUNDO" :
+     topo ? "TOPO" :
+     rompimentoAlta ? "ROMP. ALTA" :
+     rompimentoBaixa ? "ROMP. BAIXA" :
+     recuperacao ? "RECUPERAÇÃO" :
+     rejeicaoAlta ? "REJEIÇÃO ALTA" :
+     rejeicaoBaixa ? "REJEIÇÃO BAIXA" :
+     "NEUTRO"
+
+
+// ============================================================================
+// 14. FUNÇÕES MTF
+// ============================================================================
+
+f_direcaoTF() =>
+    ema8TF = ta.ema(close, 8)
+    ema21TF = ta.ema(close, 21)
+    rsiTF = ta.rsi(close, 10)
+
+    close > ema8TF and
+     ema8TF > ema21TF and
+     rsiTF >= 50 ? 1 :
+     close < ema8TF and
+     ema8TF < ema21TF and
+     rsiTF <= 50 ? -1 :
+     0
+
+
+f_forcaTF() =>
+    ema8TF = ta.ema(close, 8)
+    ema21TF = ta.ema(close, 21)
+    atrTF = ta.atr(14)
+
+    distanciaTF =
+         atrTF > 0 ?
+         math.abs(ema8TF - ema21TF) / atrTF :
+         0.0
+
+    f_limitar(
+         distanciaTF * 35 + 35,
+         0,
+         100)
+
+
+// ============================================================================
+// 15. ATR
+// ============================================================================
+
+atr = ta.atr(atrPeriodo)
+
+atrMedia = ta.sma(
+     atr,
+     atrMediaPeriodo)
+
+atrNormalizado =
+     atrMedia > 0 ?
+     atr / atrMedia :
+     1.0
+
+volatilidadeAlta =
+     atrNormalizado > 1.20
+
+volatilidadeBaixa =
+     atrNormalizado < 0.80
+
+
+// ============================================================================
+// 16. CANDLE
+// ============================================================================
+
+rangeCandle =
+     math.max(
+         high - low,
+         syminfo.mintick)
+
+corpoCandle =
+     math.abs(close - open)
+
+corpoPercentual =
+     rangeCandle > 0 ?
+     corpoCandle / rangeCandle * 100 :
+     0
+
+pavioSuperior =
+     high - math.max(open, close)
+
+pavioInferior =
+     math.min(open, close) - low
+
+forcaCandleAlta =
+     close > open ?
+     f_limitar(
+         corpoPercentual +
+         pavioInferior /
+         math.max(rangeCandle, syminfo.mintick) * 20,
+         0,
+         100) :
+     0
+
+forcaCandleBaixa =
+     close < open ?
+     f_limitar(
+         corpoPercentual +
+         pavioSuperior /
+         math.max(rangeCandle, syminfo.mintick) * 20,
+         0,
+         100) :
+     0
+
+
+// ============================================================================
+// 17. MÉDIAS
+// ============================================================================
+
+ema8 = ta.ema(close, 8)
+ema21 = ta.ema(close, 21)
+ema55 = ta.ema(close, 55)
+
+tendenciaAlta =
+     ema8 > ema21 and
+     ema21 > ema55
+
+tendenciaBaixa =
+     ema8 < ema21 and
+     ema21 < ema55
+
+tendenciaNeutra =
+     not tendenciaAlta and
+     not tendenciaBaixa
+
+
+// ============================================================================
+// 18. RSI
+// ============================================================================
+
+rsi = ta.rsi(close, 10)
+
+rsiCompra =
+     rsi > 50
+
+rsiVenda =
+     rsi < 50
+
+rsiSobrevendido =
+     rsi <= 35
+
+rsiSobrecomprado =
+     rsi >= 65
+
+
+// ============================================================================
+// 19. DMI / ADX
+// ============================================================================
+
+dmiPeriodo = 14
+adxSuavizacao = 14
+
+[diPlus, diMinus, adx] =
+     ta.dmi(
+         dmiPeriodo,
+         adxSuavizacao)
+
+adxMinimo = 18.0
+
+adxForte =
+     adx >= adxMinimo
+
+pressaoAlta =
+     diPlus > diMinus
+
+pressaoBaixa =
+     diMinus > diPlus
+
+
+// ============================================================================
+// 20. VOLUME
+// ============================================================================
+
+volumeMedio =
+     ta.sma(
+         volume,
+         20)
+
+volumeRelativo =
+     volumeMedio > 0 ?
+     volume / volumeMedio :
+     1.0
+
+volumeForte =
+     volumeRelativo >= 1.20
+
+
+// ============================================================================
+// 21. KVO
+// ============================================================================
+
+rangeKvo =
+     math.max(
+         high - low,
+         syminfo.mintick)
+
+tpKvo =
+     (high + low + close) / 3
+
+tpAnterior =
+     nz(
+         tpKvo[1],
+         tpKvo)
+
+tendenciaKvo =
+     tpKvo > tpAnterior ?
+     1.0 :
+     -1.0
+
+forcaKvo =
+     volume *
+     (
+         math.abs(tpKvo - tpAnterior) /
+         rangeKvo
+     ) *
+     tendenciaKvo
+
+kvoRapidoValor =
+     ta.ema(
+         forcaKvo,
+         kvoRapido)
+
+kvoLentoValor =
+     ta.ema(
+         forcaKvo,
+         kvoLento)
+
+kvoLinha =
+     kvoRapidoValor -
+     kvoLentoValor
+
+kvoSinalValor =
+     ta.ema(
+         kvoLinha,
+         kvoSinal)
+
+kvoHistograma =
+     kvoLinha -
+     kvoSinalValor
+
+kvoAlta =
+     kvoLinha >
+     kvoSinalValor
+
+kvoBaixa =
+     kvoLinha <
+     kvoSinalValor
+
+kvoCruzAlta =
+     ta.crossover(
+         kvoLinha,
+         kvoSinalValor)
+
+kvoCruzBaixa =
+     ta.crossunder(
+         kvoLinha,
+         kvoSinalValor)
+
+kvoVariacao =
+     kvoLinha -
+     nz(kvoLinha[1])
+
+kvoForca =
+     f_limitar(
+         50 +
+         kvoVariacao /
+         math.max(
+             math.abs(kvoLinha) + 1,
+             1) * 100,
+         0,
+         100)
+
+
+// ============================================================================
+// 22. SUPORTE / RESISTÊNCIA
+// ============================================================================
+
+resistencia =
+     ta.highest(
+         high,
+         periodoSR)[1]
+
+suporte =
+     ta.lowest(
+         low,
+         periodoSR)[1]
+
+distanciaSuporte =
+     math.abs(
+         close - suporte)
+
+distanciaResistencia =
+     math.abs(
+         resistencia - close)
+
+pertoSuporte =
+     not na(suporte) and
+     distanciaSuporte <=
+     atr * proximidadeSRATR
+
+pertoResistencia =
+     not na(resistencia) and
+     distanciaResistencia <=
+     atr * proximidadeSRATR
+
+rompeuResistencia =
+     not na(resistencia) and
+     close > resistencia
+
+rompeuSuporte =
+     not na(suporte) and
+     close < suporte
+
+
+// ============================================================================
+// 23. FUNDO / TOPO
+// ============================================================================
+
+metade =
+     math.max(
+         5,
+         int(periodoPadrao / 2))
+
+fundoEstrutural =
+     low <=
+     ta.lowest(
+         low[metade],
+         metade)
+
+topoEstrutural =
+     high >=
+     ta.highest(
+         high[metade],
+         metade)
+
+recuperacaoFundo =
+     pertoSuporte and
+     close > open and
+     close > low + rangeCandle * 0.55
+
+rejeicaoTopo =
+     pertoResistencia and
+     close < open and
+     close < high - rangeCandle * 0.55
+
+rejeicaoFundo =
+     pertoSuporte and
+     close > open and
+     close > low + rangeCandle * 0.55
+
+rejeicaoAlta =
+     pertoResistencia and
+     close < open
+
+rompimentoAlta =
+     rompeuResistencia and
+     close > open
+
+rompimentoBaixa =
+     rompeuSuporte and
+     close < open
+
+forcaFundo =
+     pertoSuporte ?
+     f_limitar(
+         50 +
+         (
+             pavioInferior /
+             math.max(
+                 rangeCandle,
+                 syminfo.mintick)
+         ) * 50 +
+         (
+             rsiSobrevendido ?
+             15 :
+             0
+         ),
+         0,
+         100) :
+     0
+
+forcaTopo =
+     pertoResistencia ?
+     f_limitar(
+         50 +
+         (
+             pavioSuperior /
+             math.max(
+                 rangeCandle,
+                 syminfo.mintick)
+         ) * 50 +
+         (
+             rsiSobrecomprado ?
+             15 :
+             0
+         ),
+         0,
+         100) :
+     0
+
+
+// ============================================================================
+// 24. MICROESTRUTURA
+// ============================================================================
+
+microAlta =
+     close > high[1] or
+     (
+         close > open and
+         close > close[1]
+     )
+
+microBaixa =
+     close < low[1] or
+     (
+         close < open and
+         close < close[1]
+     )
+
+microRecuperacao =
+     close > open and
+     low < low[1] and
+     close > close[1]
+
+microRejeicaoVenda =
+     high > high[1] and
+     close < close[1]
+
+
+// ============================================================================
+// 25. RETORNOS
+// ============================================================================
+
+retorno1 =
+     close[1] != 0 ?
+     (close / close[1] - 1) * 100 :
+     0
+
+retorno3 =
+     close[3] != 0 ?
+     (close / close[3] - 1) * 100 :
+     0
+
+retorno5 =
+     close[5] != 0 ?
+     (close / close[5] - 1) * 100 :
+     0
+
+retornoAlta =
+     retorno1 > 0 and
+     retorno3 > 0
+
+retornoBaixa =
+     retorno1 < 0 and
+     retorno3 < 0
+
+
+// ============================================================================
+// 26. MODELO LOCAL COMPRA
+// ============================================================================
+
+float compraLocal = 0.0
+
+compraLocal += f_pontos(
+     tendenciaAlta,
+     18)
+
+compraLocal += f_pontos(
+     ema8 > ema21,
+     7)
+
+compraLocal += f_pontos(
+     rsiCompra,
+     8)
+
+compraLocal += f_pontos(
+     kvoAlta,
+     12)
+
+compraLocal += f_pontos(
+     kvoCruzAlta,
+     5)
+
+compraLocal += f_pontos(
+     pressaoAlta,
+     8)
+
+compraLocal += f_pontos(
+     microAlta,
+     8)
+
+compraLocal += f_pontos(
+     retornoAlta,
+     6)
+
+compraLocal += f_pontos(
+     volumeForte and close > open,
+     5)
+
+compraLocal += f_pontos(
+     recuperacaoFundo,
+     10)
+
+compraLocal += f_pontos(
+     fundoEstrutural,
+     8)
+
+compraLocal -= f_pontos(
+     pertoResistencia,
+     8)
+
+compraLocal -= f_pontos(
+     rsiSobrecomprado,
+     5)
+
+compraLocal -= f_pontos(
+     rompeuSuporte,
+     15)
+
+compraLocal := f_limitar(
+     compraLocal * sensibilidade,
+     0,
+     100)
+
+
+// ============================================================================
+// 27. MODELO LOCAL VENDA
+// ============================================================================
+
+float vendaLocal = 0.0
+
+vendaLocal += f_pontos(
+     tendenciaBaixa,
+     18)
+
+vendaLocal += f_pontos(
+     ema8 < ema21,
+     7)
+
+vendaLocal += f_pontos(
+     rsiVenda,
+     8)
+
+vendaLocal += f_pontos(
+     kvoBaixa,
+     12)
+
+vendaLocal += f_pontos(
+     kvoCruzBaixa,
+     5)
+
+vendaLocal += f_pontos(
+     pressaoBaixa,
+     8)
+
+vendaLocal += f_pontos(
+     microBaixa,
+     8)
+
+vendaLocal += f_pontos(
+     retornoBaixa,
+     6)
+
+vendaLocal += f_pontos(
+     volumeForte and close < open,
+     5)
+
+vendaLocal += f_pontos(
+     rejeicaoTopo,
+     10)
+
+vendaLocal += f_pontos(
+     topoEstrutural,
+     8)
+
+vendaLocal -= f_pontos(
+     pertoSuporte,
+     8)
+
+vendaLocal -= f_pontos(
+     rsiSobrevendido,
+     5)
+
+vendaLocal -= f_pontos(
+     rompeuResistencia,
+     15)
+
+vendaLocal := f_limitar(
+     vendaLocal * sensibilidade,
+     0,
+     100)
+
+
+// ============================================================================
+// 28. MTF
+// ============================================================================
+
+mtfDir1 =
+     request.security(
+         syminfo.tickerid,
+         tf1,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfDir2 =
+     request.security(
+         syminfo.tickerid,
+         tf2,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfDir3 =
+     request.security(
+         syminfo.tickerid,
+         tf3,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfDir4 =
+     request.security(
+         syminfo.tickerid,
+         tf4,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfDir5 =
+     request.security(
+         syminfo.tickerid,
+         tf5,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfDir6 =
+     request.security(
+         syminfo.tickerid,
+         tf6,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfDir7 =
+     request.security(
+         syminfo.tickerid,
+         tf7,
+         f_direcaoTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+
+mtfForca1 =
+     request.security(
+         syminfo.tickerid,
+         tf1,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfForca2 =
+     request.security(
+         syminfo.tickerid,
+         tf2,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfForca3 =
+     request.security(
+         syminfo.tickerid,
+         tf3,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfForca4 =
+     request.security(
+         syminfo.tickerid,
+         tf4,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfForca5 =
+     request.security(
+         syminfo.tickerid,
+         tf5,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfForca6 =
+     request.security(
+         syminfo.tickerid,
+         tf6,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+mtfForca7 =
+     request.security(
+         syminfo.tickerid,
+         tf7,
+         f_forcaTF(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+
+pesoTotal =
+     pesoTF1 +
+     pesoTF2 +
+     pesoTF3 +
+     pesoTF4 +
+     pesoTF5 +
+     pesoTF6 +
+     pesoTF7
+
+float somaMTF = 0.0
+
+somaMTF += mtfDir1 * pesoTF1
+somaMTF += mtfDir2 * pesoTF2
+somaMTF += mtfDir3 * pesoTF3
+somaMTF += mtfDir4 * pesoTF4
+somaMTF += mtfDir5 * pesoTF5
+somaMTF += mtfDir6 * pesoTF6
+somaMTF += mtfDir7 * pesoTF7
+
+mtfDirecao =
+     pesoTotal > 0 ?
+     somaMTF / pesoTotal :
+     0
+
+mtfCompra =
+     f_limitar(
+         50 + mtfDirecao * 50,
+         0,
+         100)
+
+mtfVenda =
+     f_limitar(
+         50 - mtfDirecao * 50,
+         0,
+         100)
+
+mtfForca =
+     f_limitar(
+         (
+             mtfForca1 * pesoTF1 +
+             mtfForca2 * pesoTF2 +
+             mtfForca3 * pesoTF3 +
+             mtfForca4 * pesoTF4 +
+             mtfForca5 * pesoTF5 +
+             mtfForca6 * pesoTF6 +
+             mtfForca7 * pesoTF7
+         ) /
+         math.max(pesoTotal, 1),
+         0,
+         100)
+
+
+// ============================================================================
+// 29. CONFLUÊNCIA
+// ============================================================================
+
+float confluenciaCompra = 0.0
+
+confluenciaCompra += f_pontos(
+     tendenciaAlta,
+     20)
+
+confluenciaCompra += f_pontos(
+     kvoAlta,
+     15)
+
+confluenciaCompra += f_pontos(
+     rsiCompra,
+     10)
+
+confluenciaCompra += f_pontos(
+     pressaoAlta,
+     10)
+
+confluenciaCompra += f_pontos(
+     microAlta,
+     10)
+
+confluenciaCompra += f_pontos(
+     retornoAlta,
+     10)
+
+confluenciaCompra += f_pontos(
+     mtfCompra >= 55,
+     15)
+
+confluenciaCompra += f_pontos(
+     pertoSuporte,
+     10)
+
+confluenciaCompra := f_limitar(
+     confluenciaCompra,
+     0,
+     100)
+
+
+float confluenciaVenda = 0.0
+
+confluenciaVenda += f_pontos(
+     tendenciaBaixa,
+     20)
+
+confluenciaVenda += f_pontos(
+     kvoBaixa,
+     15)
+
+confluenciaVenda += f_pontos(
+     rsiVenda,
+     10)
+
+confluenciaVenda += f_pontos(
+     pressaoBaixa,
+     10)
+
+confluenciaVenda += f_pontos(
+     microBaixa,
+     10)
+
+confluenciaVenda += f_pontos(
+     retornoBaixa,
+     10)
+
+confluenciaVenda += f_pontos(
+     mtfVenda >= 55,
+     15)
+
+confluenciaVenda += f_pontos(
+     pertoResistencia,
+     10)
+
+confluenciaVenda := f_limitar(
+     confluenciaVenda,
+     0,
+     100)
+
+
+// ============================================================================
+// 30. SCORE FINAL
+// ============================================================================
+
+float scoreCompra =
+     usarMTF ?
+     compraLocal * 0.55 +
+     mtfCompra * 0.45 :
+     compraLocal
+
+float scoreVenda =
+     usarMTF ?
+     vendaLocal * 0.55 +
+     mtfVenda * 0.45 :
+     vendaLocal
+
+scoreCompra := f_limitar(
+     scoreCompra,
+     0,
+     100)
+
+scoreVenda := f_limitar(
+     scoreVenda,
+     0,
+     100)
+
+vantagem =
+     math.abs(
+         scoreCompra -
+         scoreVenda)
+
+direcaoAtual =
+     scoreCompra > scoreVenda ?
+     1 :
+     scoreVenda > scoreCompra ?
+     -1 :
+     0
+
+scoreDominante =
+     direcaoAtual == 1 ?
+     scoreCompra :
+     direcaoAtual == -1 ?
+     scoreVenda :
+     50
+
+
+// ============================================================================
+// 31. FORÇA
+// ============================================================================
+
+forcaCompra =
+     f_limitar(
+         scoreCompra * 0.45 +
+         confluenciaCompra * 0.25 +
+         mtfForca * 0.15 +
+         forcaCandleAlta * 0.15,
+         0,
+         100)
+
+forcaVenda =
+     f_limitar(
+         scoreVenda * 0.45 +
+         confluenciaVenda * 0.25 +
+         mtfForca * 0.15 +
+         forcaCandleBaixa * 0.15,
+         0,
+         100)
+
+forcaDominante =
+     direcaoAtual == 1 ?
+     forcaCompra :
+     direcaoAtual == -1 ?
+     forcaVenda :
+     0
+
+
+// ============================================================================
+// 32. PADRÃO ATUAL
+// ============================================================================
+
+padraoAtual =
+     f_textoPadrao(
+         fundoEstrutural,
+         topoEstrutural,
+         rompimentoAlta,
+         rompimentoBaixa,
+         recuperacaoFundo,
+         rejeicaoAlta,
+         rejeicaoTopo)
+
+
+// ============================================================================
+// 33. OPORTUNIDADE
+// ============================================================================
+
+oportunidadeCompra =
+     scoreCompra >= 80 and
+     forcaCompra >= 70 and
+     confluenciaCompra >= 60 ?
+     "MUITO FORTE" :
+     scoreCompra >= 70 and
+     forcaCompra >= 60 ?
+     "FORTE" :
+     scoreCompra >= 60 ?
+     "MODERADA" :
+     "FRACA"
+
+oportunidadeVenda =
+     scoreVenda >= 80 and
+     forcaVenda >= 70 and
+     confluenciaVenda >= 60 ?
+     "MUITO FORTE" :
+     scoreVenda >= 70 and
+     forcaVenda >= 60 ?
+     "FORTE" :
+     scoreVenda >= 60 ?
+     "MODERADA" :
+     "FRACA"
+
+
+// ============================================================================
+// 34. PREVISÃO ATUAL
+// ============================================================================
+
+previsaoAltaAtual =
+     f_limitar(
+         scoreCompra * 0.55 +
+         confluenciaCompra * 0.25 +
+         mtfCompra * 0.20,
+         0,
+         100)
+
+previsaoBaixaAtual =
+     f_limitar(
+         scoreVenda * 0.55 +
+         confluenciaVenda * 0.25 +
+         mtfVenda * 0.20,
+         0,
+         100)
+
+
+// ============================================================================
+// 35. PRÓXIMA PREVISÃO
+//
+// IMPORTANTE:
+// time_close representa o horário de fechamento da vela atual.
+// Esse é o próximo momento de confirmação/previsão para o próximo candle.
+//
+// O horário é convertido explicitamente para São Paulo.
+// ============================================================================
+
+proximaPrevisaoTime = time_close
+
+proximaPrevisaoTexto =
+     na(proximaPrevisaoTime) ?
+     "--:--" :
+     str.format_time(
+         proximaPrevisaoTime,
+         "HH:mm",
+         "America/Sao_Paulo")
+
+
+// ============================================================================
+// 36. CONDIÇÕES DE SINAL
+// ============================================================================
+
+condicaoCompra =
+     scoreCompra >= scoreMinimoCompra and
+     forcaCompra >= forcaMinima and
+     confluenciaCompra >= confluenciaMinima and
+     vantagem >= vantagemMinima and
+     scoreCompra > scoreVenda and
+     not pertoResistencia
+
+condicaoVenda =
+     scoreVenda >= scoreMinimoVenda and
+     forcaVenda >= forcaMinima and
+     confluenciaVenda >= confluenciaMinima and
+     vantagem >= vantagemMinima and
+     scoreVenda > scoreCompra and
+     not pertoSuporte
+
+
+// ============================================================================
+// 37. COOLDOWN
+// ============================================================================
+
+var int ultimaBarraSinal = na
+
+podeGerarSinal =
+     na(ultimaBarraSinal) or
+     bar_index - ultimaBarraSinal >= cooldown
+
+sinalCompraNovo =
+     condicaoCompra and
+     podeGerarSinal and
+     barstate.isconfirmed
+
+sinalVendaNovo =
+     condicaoVenda and
+     podeGerarSinal and
+     barstate.isconfirmed
+
+novoSinal =
+     sinalCompraNovo or
+     sinalVendaNovo
+
+if novoSinal
+    ultimaBarraSinal := bar_index
+
+
+// ============================================================================
+// 38. ESTADO ATUAL
+//
+// NÃO É MAIS CONGELADO.
+//
+// O painel acompanha o gráfico.
+// ============================================================================
+
+estadoSinalAtual =
+     direcaoAtual
+
+textoEstadoAtual =
+     estadoSinalAtual == 1 ?
+     "COMPRA" :
+     estadoSinalAtual == -1 ?
+     "VENDA" :
+     "AGUARDANDO"
+
+corEstadoAtual =
+     estadoSinalAtual == 1 ?
+     color.lime :
+     estadoSinalAtual == -1 ?
+     color.red :
+     color.gray
+
+corEstadoTextoAtual =
+     estadoSinalAtual == 1 ?
+     color.black :
+     color.white
+
+
+// ============================================================================
+// 39. OPORTUNIDADE ATUAL
+// ============================================================================
+
+oportunidadeAtual =
+     direcaoAtual == 1 ?
+     oportunidadeCompra :
+     direcaoAtual == -1 ?
+     oportunidadeVenda :
+     "AGUARDANDO"
+
+
+// ============================================================================
+// 40. FORÇA ATUAL
+// ============================================================================
+
+forcaAtual =
+     direcaoAtual == 1 ?
+     forcaCompra :
+     direcaoAtual == -1 ?
+     forcaVenda :
+     0
+
+
+// ============================================================================
+// 41. MTF ATUAL
+// ============================================================================
+
+estadoMTFTextoAtual =
+     not usarMTF ?
+     "DESLIGADO" :
+     mtfDirecao > 0.25 ?
+     "COMPRA" :
+     mtfDirecao < -0.25 ?
+     "VENDA" :
+     "NEUTRO"
+
+
+// ============================================================================
+// 42. PLOT DOS SINAIS
+//
+// COMPRA/VENDA continuam somente no candle confirmado.
+// ============================================================================
+
+plotshape(
+     mostrarSinais and sinalCompraNovo,
+     title="COMPRA",
+     style=shape.labelup,
+     location=location.belowbar,
+     color=color.lime,
+     text="COMPRA",
+     textcolor=color.black,
+     size=size.small)
+
+plotshape(
+     mostrarSinais and sinalVendaNovo,
+     title="VENDA",
+     style=shape.labeldown,
+     location=location.abovebar,
+     color=color.red,
+     text="VENDA",
+     textcolor=color.white,
+     size=size.small)
+
+
+// ============================================================================
+// 43. SUPORTE / RESISTÊNCIA NO GRÁFICO
+// ============================================================================
+
+plot(
+     mostrarSuporte ?
+     suporte :
+     na,
+     title="SUPORTE",
+     color=color.new(color.lime, 35),
+     linewidth=1,
+     style=plot.style_linebr)
+
+plot(
+     mostrarResistencia ?
+     resistencia :
+     na,
+     title="RESISTÊNCIA",
+     color=color.new(color.red, 35),
+     linewidth=1,
+     style=plot.style_linebr)
+
+
+// ============================================================================
+// 44. ALERTAS
+// ============================================================================
+
+alertcondition(
+     sinalCompraNovo,
+     title="KVO PRO - COMPRA",
+     message="KVO PRO V40.6 - NOVO SINAL DE COMPRA")
+
+alertcondition(
+     sinalVendaNovo,
+     title="KVO PRO - VENDA",
+     message="KVO PRO V40.6 - NOVO SINAL DE VENDA")
+
+
+// ============================================================================
+// 45. WEBHOOK COMPRA
+// ============================================================================
+
+if sinalCompraNovo
+    alert(
+         '{"algoritmo":"KVO PRO V40.6","sinal":"COMPRA","score":' +
+         str.tostring(scoreCompra, "#.##") +
+         ',"forca":' +
+         str.tostring(forcaCompra, "#.##") +
+         ',"confluencia":' +
+         str.tostring(confluenciaCompra, "#.##") +
+         ',"prev_alta":' +
+         str.tostring(previsaoAltaAtual, "#.##") +
+         ',"prev_baixa":' +
+         str.tostring(previsaoBaixaAtual, "#.##") +
+         '}', 
+         alert.freq_once_per_bar_close)
+
+
+// ============================================================================
+// 46. WEBHOOK VENDA
+// ============================================================================
+
+if sinalVendaNovo
+    alert(
+         '{"algoritmo":"KVO PRO V40.6","sinal":"VENDA","score":' +
+         str.tostring(scoreVenda, "#.##") +
+         ',"forca":' +
+         str.tostring(forcaVenda, "#.##") +
+         ',"confluencia":' +
+         str.tostring(confluenciaVenda, "#.##") +
+         ',"prev_alta":' +
+         str.tostring(previsaoAltaAtual, "#.##") +
+         ',"prev_baixa":' +
+         str.tostring(previsaoBaixaAtual, "#.##") +
+         '}', 
+         alert.freq_once_per_bar_close)
+
+
+// ============================================================================
+// 47. ORDENS
+// ============================================================================
+
+if usarOrdens
+
+    if sinalCompraNovo
+
+        if fecharReversao and strategy.position_size < 0
+            strategy.close(
+                 "VENDA",
+                 comment="Fechamento reversão COMPRA")
+
+        strategy.entry(
+             "COMPRA",
+             strategy.long,
+             comment="KVO PRO COMPRA")
+
+
+    if sinalVendaNovo
+
+        if fecharReversao and strategy.position_size > 0
+            strategy.close(
+                 "COMPRA",
+                 comment="Fechamento reversão VENDA")
+
+        strategy.entry(
+             "VENDA",
+             strategy.short,
+             comment="KVO PRO VENDA")
+
+
+// ============================================================================
+// 48. PAINEL MODO FÁCIL
+// ============================================================================
+
+var table painel =
+     table.new(
+         position.middle_left,
+         2,
+         12,
+         border_width=1)
+
+
+// ============================================================================
+// 49. FUNÇÃO DO PAINEL
+// ============================================================================
+
+f_celula(
+     table tabela,
+     int coluna,
+     int linha,
+     string texto,
+     color fundo,
+     color textoCor) =>
+
+    table.cell(
+         tabela,
+         coluna,
+         linha,
+         texto,
+         bgcolor=fundo,
+         text_color=textoCor,
+         text_size=size.small)
+
+
+// ============================================================================
+// 50. CORES DO PAINEL
+// ============================================================================
+
+fundoPainel =
+     color.new(
+         color.black,
+         10)
+
+fundoTitulo =
+     color.new(
+         color.gray,
+         15)
+
+corTexto =
+     color.white
+
+
+// ============================================================================
+// 51. PAINEL DINÂMICO
+//
+// O painel agora é atualizado a cada execução.
+// Não existe mais estadoScore, estadoForca,
+// estadoPrevAlta etc. congelados.
+// ============================================================================
+
+if mostrarPainel
+
+    // ------------------------------------------------------------------------
+    // TÍTULO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         0,
+         "KVO PRO",
+         fundoTitulo,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         0,
+         "V40.6",
+         fundoTitulo,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // ESTADO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         1,
+         "ESTADO",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         1,
+         textoEstadoAtual,
+         corEstadoAtual,
+         corEstadoTextoAtual)
+
+
+    // ------------------------------------------------------------------------
+    // PRÓXIMA PREVISÃO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         2,
+         "PRÓX. PREVISÃO",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         2,
+         proximaPrevisaoTexto,
+         fundoPainel,
+         color.white)
+
+
+    // ------------------------------------------------------------------------
+    // SCORE
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         3,
+         "SCORE",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         3,
+         str.tostring(
+             scoreDominante,
+             "#.##") + "%",
+         fundoPainel,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // OPORTUNIDADE
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         4,
+         "OPORTUNIDADE",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         4,
+         oportunidadeAtual,
+         fundoPainel,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // PADRÃO
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         5,
+         "PADRÃO",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         5,
+         padraoAtual,
+         fundoPainel,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // RESISTÊNCIA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         6,
+         "RESISTÊNCIA",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         6,
+         na(resistencia) ?
+         "--" :
+         str.tostring(
+             resistencia,
+             format.mintick),
+         fundoPainel,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // SUPORTE
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         7,
+         "SUPORTE",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         7,
+         na(suporte) ?
+         "--" :
+         str.tostring(
+             suporte,
+             format.mintick),
+         fundoPainel,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // PREVISÃO ALTA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         8,
+         "PREV. ALTA",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         8,
+         str.tostring(
+             previsaoAltaAtual,
+             "#.##") + "%",
+         fundoPainel,
+         color.white)
+
+
+    // ------------------------------------------------------------------------
+    // PREVISÃO BAIXA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         9,
+         "PREV. BAIXA",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         9,
+         str.tostring(
+             previsaoBaixaAtual,
+             "#.##") + "%",
+         fundoPainel,
+         color.white)
+
+
+    // ------------------------------------------------------------------------
+    // MTF
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         10,
+         "MTF",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         10,
+         mostrarMTFNoPainel ?
+         estadoMTFTextoAtual :
+         "--",
+         fundoPainel,
+         corTexto)
+
+
+    // ------------------------------------------------------------------------
+    // FORÇA
+    // ------------------------------------------------------------------------
+
+    f_celula(
+         painel,
+         0,
+         11,
+         "FORÇA",
+         fundoPainel,
+         corTexto)
+
+    f_celula(
+         painel,
+         1,
+         11,
+         f_textoForca(forcaAtual),
+         fundoPainel,
+         f_corForca(forcaAtual))
+
+
+// ============================================================================
+// 52. LIMPEZA DO PAINEL
+// ============================================================================
+
+if not mostrarPainel
+
+    for linha = 0 to 11
+
+        table.cell(
+             painel,
+             0,
+             linha,
+             "",
+             bgcolor=color.new(
+                 color.black,
+                 100),
+             text_color=color.new(
+                 color.white,
+                 100))
+
+        table.cell(
+             painel,
+             1,
+             linha,
+             "",
+             bgcolor=color.new(
+                 color.black,
+                 100),
+             text_color=color.new(
+                 color.white,
+                 100))
+
+
+// ============================================================================
+// FIM V40.6
+// ============================================================================
+//
+// COMPORTAMENTO FINAL:
+//
+// PAINEL:
+//   ESTADO              = DINÂMICO
+//   PRÓX. PREVISÃO      = DINÂMICO
+//   SCORE               = DINÂMICO
+//   OPORTUNIDADE        = DINÂMICO
+//   PADRÃO              = DINÂMICO
+//   RESISTÊNCIA         = DINÂMICO
+//   SUPORTE             = DINÂMICO
+//   PREV. ALTA          = DINÂMICO
+//   PREV. BAIXA         = DINÂMICO
+//   MTF                 = DINÂMICO
+//   FORÇA               = DINÂMICO
+//
+// GRÁFICO:
+//   COMPRA              = somente candle confirmado
+//   VENDA               = somente candle confirmado
+//   TOPO                = não plotado
+//   FUNDO               = não plotado
+//   SUPORTE             = plotado
+//   RESISTÊNCIA         = plotada
+//
+// HORÁRIO:
+//   Usa time_close
+//   Usa America/Sao_Paulo
+//   Não usa o horário da exchange para o painel
+// ============================================================================ 

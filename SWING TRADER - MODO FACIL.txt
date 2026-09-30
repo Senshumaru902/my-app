@@ -1,0 +1,1998 @@
+//@version=6
+strategy(
+     "V40.17 CORRIGIDA - PREVISÃO DIÁRIA + PADRÕES GRÁFICOS",
+     overlay=true,
+     pyramiding=0,
+     process_orders_on_close=false,
+     calc_on_every_tick=true,
+     calc_on_order_fills=false,
+     initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=1)
+
+// ============================================================================
+// V40.17 CORRIGIDA
+// PREVISÃO DIÁRIA + PADRÕES GRÁFICOS
+//
+// PRINCÍPIOS:
+// 1. Motor principal calculado no DIÁRIO.
+// 2. Semanal utilizado como confirmação/filtro.
+// 3. O gráfico pode estar em qualquer timeframe.
+// 4. Sinais NÃO são desenhados no gráfico.
+// 5. Informações principais ficam no painel MODO FÁCIL.
+// 6. Strategy Tester continua funcionando.
+// 7. Duração da operação é contabilizada em DIAS, e não em candles do gráfico.
+// ============================================================================
+
+
+// ============================================================================
+// FUNÇÕES BÁSICAS
+// ============================================================================
+
+f_clamp(float x, float lo, float hi) =>
+    math.max(lo, math.min(hi, x))
+
+f_pts(bool cond, float peso) =>
+    cond ? peso : 0.0
+
+
+// ============================================================================
+// GRUPOS DE INPUTS
+// ============================================================================
+
+G_MODO   = "V40.17 - MODO"
+G_PADROES = "V40.17 - PADRÕES GRÁFICOS"
+G_FILTROS = "V40.17 - FILTROS"
+G_EXEC   = "V40.17 - EXECUÇÃO"
+G_VISUAL = "V40.17 - VISUAL"
+G_PAINEL = "V40.17 - PAINEL"
+
+
+// ============================================================================
+// MODO
+// ============================================================================
+
+ativar = input.bool(
+     true,
+     "Ativar algoritmo",
+     group=G_MODO)
+
+modo = input.string(
+     "Equilibrado",
+     "Modo",
+     options=["Conservador", "Equilibrado", "Rápido"],
+     group=G_MODO)
+
+periodoSR = input.int(
+     20,
+     "Período suporte/resistência",
+     minval=10,
+     maxval=100,
+     group=G_MODO)
+
+scoreBase = input.float(
+     70.0,
+     "Score mínimo base",
+     minval=45,
+     maxval=95,
+     step=0.5,
+     group=G_MODO)
+
+vantagemBase = input.float(
+     10.0,
+     "Vantagem mínima base",
+     minval=3,
+     maxval=40,
+     step=0.5,
+     group=G_MODO)
+
+
+// ============================================================================
+// PADRÕES
+// ============================================================================
+
+usarPadroes = input.bool(
+     true,
+     "Usar padrões gráficos",
+     group=G_PADROES)
+
+exigirPadrao = input.bool(
+     false,
+     "Exigir padrão para entrada",
+     group=G_PADROES)
+
+usarDuplo = input.bool(
+     true,
+     "Usar topo/fundo duplo",
+     group=G_PADROES)
+
+usarTriangulo = input.bool(
+     true,
+     "Usar triângulo",
+     group=G_PADROES)
+
+usarCanal = input.bool(
+     true,
+     "Usar canal",
+     group=G_PADROES)
+
+usarCunha = input.bool(
+     true,
+     "Usar cunha",
+     group=G_PADROES)
+
+usarBandeira = input.bool(
+     true,
+     "Usar bandeira",
+     group=G_PADROES)
+
+
+// ============================================================================
+// FILTROS
+// ============================================================================
+
+exigirTendencia = input.bool(
+     true,
+     "Exigir tendência",
+     group=G_FILTROS)
+
+exigirMomentum = input.bool(
+     true,
+     "Exigir momentum",
+     group=G_FILTROS)
+
+exigirEstrutura = input.bool(
+     true,
+     "Exigir estrutura",
+     group=G_FILTROS)
+
+usarRompimento = input.bool(
+     true,
+     "Usar rompimento",
+     group=G_FILTROS)
+
+usarReteste = input.bool(
+     true,
+     "Usar reteste",
+     group=G_FILTROS)
+
+usarSemanal = input.bool(
+     true,
+     "Usar confirmação semanal",
+     group=G_FILTROS)
+
+usarVolatilidade = input.bool(
+     true,
+     "Usar filtro de volatilidade",
+     group=G_FILTROS)
+
+
+// ============================================================================
+// EXECUÇÃO
+// ============================================================================
+
+executarStrategy = input.bool(
+     true,
+     "Executar Strategy",
+     group=G_EXEC)
+
+duracaoBase = input.int(
+     1,
+     "Duração base em dias",
+     minval=1,
+     maxval=10,
+     group=G_EXEC)
+
+fecharPorDuracao = input.bool(
+     true,
+     "Fechar por duração",
+     group=G_EXEC)
+
+
+// ============================================================================
+// VISUAL
+// ============================================================================
+
+mostrarSinais = input.bool(
+     false,
+     "Mostrar sinais no gráfico",
+     group=G_VISUAL)
+
+mostrarPreparacao = input.bool(
+     false,
+     "Mostrar preparação no gráfico",
+     group=G_VISUAL)
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+mostrarPainel = input.bool(
+     true,
+     "Mostrar painel Modo Fácil",
+     group=G_PAINEL)
+
+
+// ============================================================================
+// PERFIL DINÂMICO
+// ============================================================================
+
+scoreMin =
+     modo == "Conservador"
+     ? math.max(scoreBase, 76.0)
+     : modo == "Rápido"
+     ? math.min(scoreBase, 62.0)
+     : scoreBase
+
+vantagemMin =
+     modo == "Conservador"
+     ? math.max(vantagemBase, 14.0)
+     : modo == "Rápido"
+     ? math.min(vantagemBase, 7.0)
+     : vantagemBase
+
+
+// ============================================================================
+// MOTOR DIÁRIO
+// ============================================================================
+
+f_diario() =>
+
+    // ------------------------------------------------------------------------
+    // MÉDIAS
+    // ------------------------------------------------------------------------
+
+    ema5 = ta.ema(close, 5)
+    ema9 = ta.ema(close, 9)
+    ema21 = ta.ema(close, 21)
+    ema50 = ta.ema(close, 50)
+
+    // ------------------------------------------------------------------------
+    // MOMENTUM
+    // ------------------------------------------------------------------------
+
+    rsi = ta.rsi(close, 7)
+
+    atr = ta.atr(14)
+
+    [diPlus, diMinus, adx] = ta.dmi(14, 14)
+
+    impulso = atr > 0
+         ? (close - close[1]) / atr
+         : 0.0
+
+    aceleracao = impulso - impulso[1]
+
+    // ------------------------------------------------------------------------
+    // SUPORTE / RESISTÊNCIA
+    // ------------------------------------------------------------------------
+
+    suporte = ta.lowest(low, periodoSR)[1]
+    resistencia = ta.highest(high, periodoSR)[1]
+
+    distanciaSup =
+         atr > 0
+         ? (close - suporte) / atr
+         : 0.0
+
+    distanciaRes =
+         atr > 0
+         ? (resistencia - close) / atr
+         : 0.0
+
+    // ------------------------------------------------------------------------
+    // CANDLE
+    // ------------------------------------------------------------------------
+
+    rangeCandle = high - low
+
+    mediaRange = ta.sma(
+         high - low,
+         20)
+
+    corpo = math.abs(close - open)
+
+    mediaCorpo = ta.sma(
+         math.abs(close - open),
+         20)
+
+    pavioSuperior =
+         high - math.max(open, close)
+
+    pavioInferior =
+         math.min(open, close) - low
+
+    candleAlta = close > open
+    candleBaixa = close < open
+
+    candleForteAlta =
+         candleAlta and
+         atr > 0 and
+         corpo >= atr * 0.35
+
+    candleForteBaixa =
+         candleBaixa and
+         atr > 0 and
+         corpo >= atr * 0.35
+
+    compressao =
+         mediaRange > 0 and
+         rangeCandle < mediaRange * 0.80
+
+    volatilidadeBoa =
+         mediaRange > 0 and
+         rangeCandle >= mediaRange * 0.50 and
+         rangeCandle <= mediaRange * 2.50
+
+    // ------------------------------------------------------------------------
+    // ROMPIMENTOS
+    // ------------------------------------------------------------------------
+
+    rompAlta =
+         close > resistencia
+
+    rompBaixa =
+         close < suporte
+
+    // ------------------------------------------------------------------------
+    // PRÉ-ROMPIMENTO
+    // ------------------------------------------------------------------------
+
+    preAlta =
+         resistencia > 0 and
+         atr > 0 and
+         high >= resistencia - atr * 0.35 and
+         close > open
+
+    preBaixa =
+         suporte > 0 and
+         atr > 0 and
+         low <= suporte + atr * 0.35 and
+         close < open
+
+    // ------------------------------------------------------------------------
+    // RETESTE
+    // ------------------------------------------------------------------------
+
+    retesteAlta =
+         resistencia > 0 and
+         low <= resistencia and
+         close > resistencia and
+         close > open
+
+    retesteBaixa =
+         suporte > 0 and
+         high >= suporte and
+         close < suporte and
+         close < open
+
+    // ------------------------------------------------------------------------
+    // REJEIÇÃO
+    // ------------------------------------------------------------------------
+
+    rejeicaoAlta =
+         suporte > 0 and
+         atr > 0 and
+         low <= suporte + atr * 0.25 and
+         close > open and
+         pavioInferior >= corpo
+
+    rejeicaoBaixa =
+         resistencia > 0 and
+         atr > 0 and
+         high >= resistencia - atr * 0.25 and
+         close < open and
+         pavioSuperior >= corpo
+
+    // ------------------------------------------------------------------------
+    // PADRÕES DE CANDLE
+    // ------------------------------------------------------------------------
+
+    engolfoAlta =
+         close > open and
+         close[1] < open[1] and
+         open <= close[1] and
+         close >= open[1]
+
+    engolfoBaixa =
+         close < open and
+         close[1] > open[1] and
+         open >= close[1] and
+         close <= open[1]
+
+    martelo =
+         pavioInferior > corpo * 2.0 and
+         pavioSuperior <= corpo * 0.80 and
+         close >= open
+
+    estrelaCadente =
+         pavioSuperior > corpo * 2.0 and
+         pavioInferior <= corpo * 0.80 and
+         close <= open
+
+    // ------------------------------------------------------------------------
+    // TENDÊNCIA
+    // ------------------------------------------------------------------------
+
+    tendenciaAlta =
+         ema9 > ema21 and
+         ema21 > ema50 and
+         close >= ema9
+
+    tendenciaBaixa =
+         ema9 < ema21 and
+         ema21 < ema50 and
+         close <= ema9
+
+    tendenciaNeutra =
+         not tendenciaAlta and
+         not tendenciaBaixa
+
+    // ------------------------------------------------------------------------
+    // MOMENTUM
+    // ------------------------------------------------------------------------
+
+    momentumAlta =
+         rsi >= 52 and
+         impulso > 0 and
+         aceleracao >= -0.10 and
+         diPlus >= diMinus
+
+    momentumBaixa =
+         rsi <= 48 and
+         impulso < 0 and
+         aceleracao <= 0.10 and
+         diMinus >= diPlus
+
+    // ------------------------------------------------------------------------
+    // ESPAÇO
+    // ------------------------------------------------------------------------
+
+    espacoAlta =
+         rompAlta or
+         distanciaRes >= 0.50
+
+    espacoBaixa =
+         rompBaixa or
+         distanciaSup >= 0.50
+
+    // ------------------------------------------------------------------------
+    // PADRÕES ESTRUTURAIS
+    // ------------------------------------------------------------------------
+
+    max5 = ta.highest(high, 5)[1]
+    min5 = ta.lowest(low, 5)[1]
+
+    max10 = ta.highest(high, 10)[1]
+    min10 = ta.lowest(low, 10)[1]
+
+    max20 = ta.highest(high, 20)[1]
+    min20 = ta.lowest(low, 20)[1]
+
+    amplitude10 = max10 - min10
+    amplitude20 = max20 - min20
+
+    triangulo =
+         amplitude20 > 0 and
+         amplitude10 < amplitude20 * 0.72 and
+         rangeCandle <= mediaRange * 1.15
+
+    centro8 =
+         (ta.highest(high, 8)[1] +
+          ta.lowest(low, 8)[1]) / 2.0
+
+    canalAlta =
+         close > centro8 and
+         ema9 >= ema21
+
+    canalBaixa =
+         close < centro8 and
+         ema9 <= ema21
+
+    topoA =
+         ta.highest(high, 10)[3]
+
+    topoB =
+         ta.highest(high, 10)[1]
+
+    fundoA =
+         ta.lowest(low, 10)[3]
+
+    fundoB =
+         ta.lowest(low, 10)[1]
+
+    duploTopo =
+         atr > 0 and
+         math.abs(topoA - topoB) <= atr * 0.60 and
+         close < topoB
+
+    duploFundo =
+         atr > 0 and
+         math.abs(fundoA - fundoB) <= atr * 0.60 and
+         close > fundoB
+
+    cunhaAlta =
+         amplitude20 > 0 and
+         amplitude10 < amplitude20 * 0.72 and
+         tendenciaAlta and
+         close >= centro8
+
+    cunhaBaixa =
+         amplitude20 > 0 and
+         amplitude10 < amplitude20 * 0.72 and
+         tendenciaBaixa and
+         close <= centro8
+
+    impulsoAnterior =
+         atr > 0
+         ? math.abs(close[5] - close[10]) / atr
+         : 0.0
+
+    bandeiraAlta =
+         impulsoAnterior >= 1.20 and
+         compressao and
+         ema9 >= ema21 and
+         close >= centro8
+
+    bandeiraBaixa =
+         impulsoAnterior >= 1.20 and
+         compressao and
+         ema9 <= ema21 and
+         close <= centro8
+
+    // ------------------------------------------------------------------------
+    // PADRÃO DE COMPRA
+    // ------------------------------------------------------------------------
+
+    padraoAlta =
+         usarPadroes and
+         (
+             (usarDuplo and duploFundo) or
+             (usarTriangulo and triangulo and rompAlta) or
+             (usarCanal and canalAlta) or
+             (usarCunha and cunhaAlta) or
+             (usarBandeira and bandeiraAlta) or
+             retesteAlta or
+             engolfoAlta
+         )
+
+    // ------------------------------------------------------------------------
+    // PADRÃO DE VENDA
+    // ------------------------------------------------------------------------
+
+    padraoBaixa =
+         usarPadroes and
+         (
+             (usarDuplo and duploTopo) or
+             (usarTriangulo and triangulo and rompBaixa) or
+             (usarCanal and canalBaixa) or
+             (usarCunha and cunhaBaixa) or
+             (usarBandeira and bandeiraBaixa) or
+             retesteBaixa or
+             engolfoBaixa
+         )
+
+    // ------------------------------------------------------------------------
+    // ESTRUTURA
+    // ------------------------------------------------------------------------
+
+    estruturaAlta =
+         f_pts(rompAlta, 30) +
+         f_pts(retesteAlta, 25) +
+         f_pts(padraoAlta, 20) +
+         f_pts(preAlta, 10) +
+         f_pts(rejeicaoAlta, 10) +
+         f_pts(engolfoAlta, 5) +
+         f_pts(martelo, 5) +
+         f_pts(candleForteAlta, 5) +
+         f_pts(compressao, 3)
+
+    estruturaBaixa =
+         f_pts(rompBaixa, 30) +
+         f_pts(retesteBaixa, 25) +
+         f_pts(padraoBaixa, 20) +
+         f_pts(preBaixa, 10) +
+         f_pts(rejeicaoBaixa, 10) +
+         f_pts(engolfoBaixa, 5) +
+         f_pts(estrelaCadente, 5) +
+         f_pts(candleForteBaixa, 5) +
+         f_pts(compressao, 3)
+
+    estruturaAlta := f_clamp(estruturaAlta, 0, 100)
+    estruturaBaixa := f_clamp(estruturaBaixa, 0, 100)
+
+    // ------------------------------------------------------------------------
+    // PREVISÃO ALTA
+    // ------------------------------------------------------------------------
+
+    previsaoAlta =
+         f_pts(ema5 > ema9, 8) +
+         f_pts(ema9 > ema21, 12) +
+         f_pts(ema21 > ema50, 10) +
+         f_pts(rsi >= 52, 10) +
+         f_pts(impulso > 0, 10) +
+         f_pts(aceleracao >= 0, 7) +
+         f_pts(diPlus > diMinus, 10) +
+         f_pts(adx >= 20, 7) +
+         estruturaAlta * 0.16 +
+         f_pts(espacoAlta, 5) +
+         f_pts(padraoAlta, 5)
+
+    // ------------------------------------------------------------------------
+    // PREVISÃO BAIXA
+    // ------------------------------------------------------------------------
+
+    previsaoBaixa =
+         f_pts(ema5 < ema9, 8) +
+         f_pts(ema9 < ema21, 12) +
+         f_pts(ema21 < ema50, 10) +
+         f_pts(rsi <= 48, 10) +
+         f_pts(impulso < 0, 10) +
+         f_pts(aceleracao <= 0, 7) +
+         f_pts(diMinus > diPlus, 10) +
+         f_pts(adx >= 20, 7) +
+         estruturaBaixa * 0.16 +
+         f_pts(espacoBaixa, 5) +
+         f_pts(padraoBaixa, 5)
+
+    previsaoAltaFinal =
+         f_clamp(previsaoAlta, 0, 100)
+
+    previsaoBaixaFinal =
+         f_clamp(previsaoBaixa, 0, 100)
+
+    // ------------------------------------------------------------------------
+    // SCORE FINAL DE COMPRA
+    // ------------------------------------------------------------------------
+
+    scoreAlta =
+         f_pts(tendenciaAlta, 18) +
+         f_pts(momentumAlta, 15) +
+         estruturaAlta * 0.20 +
+         previsaoAltaFinal * 0.22 +
+         f_pts(padraoAlta, 10) +
+         f_pts(espacoAlta, 5) +
+         f_pts(rompAlta, 5) +
+         f_pts(retesteAlta, 5) +
+         f_pts(volatilidadeBoa, 3) +
+         f_pts(candleForteAlta, 2)
+
+    // ------------------------------------------------------------------------
+    // SCORE FINAL DE VENDA
+    // ------------------------------------------------------------------------
+
+    scoreBaixa =
+         f_pts(tendenciaBaixa, 18) +
+         f_pts(momentumBaixa, 15) +
+         estruturaBaixa * 0.20 +
+         previsaoBaixaFinal * 0.22 +
+         f_pts(padraoBaixa, 10) +
+         f_pts(espacoBaixa, 5) +
+         f_pts(rompBaixa, 5) +
+         f_pts(retesteBaixa, 5) +
+         f_pts(volatilidadeBoa, 3) +
+         f_pts(candleForteBaixa, 2)
+
+    scoreAltaFinal =
+         f_clamp(scoreAlta, 0, 100)
+
+    scoreBaixaFinal =
+         f_clamp(scoreBaixa, 0, 100)
+
+    // ------------------------------------------------------------------------
+    // SAÍDA DA FUNÇÃO
+    // É UTILIZADO [1] PARA TRABALHAR COM O ÚLTIMO DIÁRIO FECHADO.
+    // ------------------------------------------------------------------------
+
+    [
+         close[1],
+         ema5[1],
+         ema9[1],
+         ema21[1],
+         ema50[1],
+         rsi[1],
+         atr[1],
+         diPlus[1],
+         diMinus[1],
+         adx[1],
+         impulso[1],
+         aceleracao[1],
+         suporte[1],
+         resistencia[1],
+         distanciaSup[1],
+         distanciaRes[1],
+         estruturaAlta[1],
+         estruturaBaixa[1],
+         previsaoAltaFinal[1],
+         previsaoBaixaFinal[1],
+         scoreAltaFinal[1],
+         scoreBaixaFinal[1],
+         tendenciaAlta[1],
+         tendenciaBaixa[1],
+         momentumAlta[1],
+         momentumBaixa[1],
+         rompAlta[1],
+         rompBaixa[1],
+         preAlta[1],
+         preBaixa[1],
+         retesteAlta[1],
+         retesteBaixa[1],
+         padraoAlta[1],
+         padraoBaixa[1],
+         duploFundo[1],
+         duploTopo[1],
+         triangulo[1],
+         canalAlta[1],
+         canalBaixa[1],
+         cunhaAlta[1],
+         cunhaBaixa[1],
+         bandeiraAlta[1],
+         bandeiraBaixa[1],
+         rejeicaoAlta[1],
+         rejeicaoBaixa[1],
+         volatilidadeBoa[1]
+    ]
+
+
+// ============================================================================
+// REQUEST DIÁRIO
+// ============================================================================
+
+[
+     closeD,
+     ema5D,
+     ema9D,
+     ema21D,
+     ema50D,
+     rsiD,
+     atrD,
+     diPlusD,
+     diMinusD,
+     adxD,
+     impulsoD,
+     aceleracaoD,
+     suporteD,
+     resistenciaD,
+     distanciaSupD,
+     distanciaResD,
+     estruturaAltaD,
+     estruturaBaixaD,
+     previsaoAltaD,
+     previsaoBaixaD,
+     scoreAltaD,
+     scoreBaixaD,
+     tendenciaAltaD,
+     tendenciaBaixaD,
+     momentumAltaD,
+     momentumBaixaD,
+     rompAltaD,
+     rompBaixaD,
+     preAltaD,
+     preBaixaD,
+     retesteAltaD,
+     retesteBaixaD,
+     padraoAltaD,
+     padraoBaixaD,
+     duploFundoD,
+     duploTopoD,
+     trianguloD,
+     canalAltaD,
+     canalBaixaD,
+     cunhaAltaD,
+     cunhaBaixaD,
+     bandeiraAltaD,
+     bandeiraBaixaD,
+     rejeicaoAltaD,
+     rejeicaoBaixaD,
+     volatilidadeBoaD
+] =
+     request.security(
+         syminfo.tickerid,
+         "D",
+         f_diario(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+
+// ============================================================================
+// MOTOR SEMANAL
+// ============================================================================
+
+f_semanal() =>
+    ema9 = ta.ema(close, 9)
+    ema21 = ta.ema(close, 21)
+
+    [
+         ema9[1],
+         ema21[1],
+         close[1]
+    ]
+
+[
+     ema9W,
+     ema21W,
+     closeW
+] =
+     request.security(
+         syminfo.tickerid,
+         "W",
+         f_semanal(),
+         gaps=barmerge.gaps_off,
+         lookahead=barmerge.lookahead_off)
+
+semanalAlta =
+     ema9W > ema21W
+
+semanalBaixa =
+     ema9W < ema21W
+
+
+// ============================================================================
+// CONFLUÊNCIA
+// ============================================================================
+
+vantagemPrevisao =
+     previsaoAltaD - previsaoBaixaD
+
+previsaoCompra =
+     previsaoAltaD >= previsaoBaixaD + vantagemMin
+
+previsaoVenda =
+     previsaoBaixaD >= previsaoAltaD + vantagemMin
+
+
+// ============================================================================
+// FILTROS DE COMPRA
+// ============================================================================
+
+filtroTendenciaCompra =
+     not exigirTendencia or tendenciaAltaD
+
+filtroMomentumCompra =
+     not exigirMomentum or momentumAltaD
+
+filtroEstruturaCompra =
+     not exigirEstrutura or estruturaAltaD >= 45
+
+filtroRompimentoCompra =
+     not usarRompimento or
+     rompAltaD or
+     preAltaD or
+     retesteAltaD
+
+filtroRetesteCompra =
+     not usarReteste or
+     retesteAltaD or
+     rompAltaD or
+     preAltaD
+
+filtroSemanalCompra =
+     not usarSemanal or semanalAlta
+
+filtroVolatilidadeCompra =
+     not usarVolatilidade or volatilidadeBoaD
+
+filtroPadraoCompra =
+     not exigirPadrao or padraoAltaD
+
+
+// ============================================================================
+// FILTROS DE VENDA
+// ============================================================================
+
+filtroTendenciaVenda =
+     not exigirTendencia or tendenciaBaixaD
+
+filtroMomentumVenda =
+     not exigirMomentum or momentumBaixaD
+
+filtroEstruturaVenda =
+     not exigirEstrutura or estruturaBaixaD >= 45
+
+filtroRompimentoVenda =
+     not usarRompimento or
+     rompBaixaD or
+     preBaixaD or
+     retesteBaixaD
+
+filtroRetesteVenda =
+     not usarReteste or
+     retesteBaixaD or
+     rompBaixaD or
+     preBaixaD
+
+filtroSemanalVenda =
+     not usarSemanal or semanalBaixa
+
+filtroVolatilidadeVenda =
+     not usarVolatilidade or volatilidadeBoaD
+
+filtroPadraoVenda =
+     not exigirPadrao or padraoBaixaD
+
+
+// ============================================================================
+// CANDIDATO DE COMPRA
+// ============================================================================
+
+candidatoCompra =
+     ativar and
+     scoreAltaD >= scoreMin and
+     previsaoCompra and
+     filtroTendenciaCompra and
+     filtroMomentumCompra and
+     filtroEstruturaCompra and
+     filtroRompimentoCompra and
+     filtroRetesteCompra and
+     filtroSemanalCompra and
+     filtroVolatilidadeCompra and
+     filtroPadraoCompra
+
+
+// ============================================================================
+// CANDIDATO DE VENDA
+// ============================================================================
+
+candidatoVenda =
+     ativar and
+     scoreBaixaD >= scoreMin and
+     previsaoVenda and
+     filtroTendenciaVenda and
+     filtroMomentumVenda and
+     filtroEstruturaVenda and
+     filtroRompimentoVenda and
+     filtroRetesteVenda and
+     filtroSemanalVenda and
+     filtroVolatilidadeVenda and
+     filtroPadraoVenda
+
+
+// ============================================================================
+// CONFLITO
+// ============================================================================
+
+conflito =
+     candidatoCompra and candidatoVenda
+
+
+// ============================================================================
+// DECISÃO
+// ============================================================================
+
+compra =
+     candidatoCompra and not conflito
+
+venda =
+     candidatoVenda and not conflito
+
+aguarda =
+     not compra and not venda
+
+direcao =
+     conflito
+     ? "CONFLITO"
+     : compra
+     ? "COMPRA"
+     : venda
+     ? "VENDA"
+     : "AGUARDA"
+
+
+// ============================================================================
+// SCORE ATUAL
+// ============================================================================
+
+scoreAtual =
+     compra
+     ? scoreAltaD
+     : venda
+     ? scoreBaixaD
+     : math.max(scoreAltaD, scoreBaixaD)
+
+vantagemAtual =
+     math.abs(scoreAltaD - scoreBaixaD)
+
+vantagemPrevisaoAbs =
+     math.abs(previsaoAltaD - previsaoBaixaD)
+
+
+// ============================================================================
+// FORÇA
+// ============================================================================
+//
+// A força não depende apenas do score.
+// Combina:
+// - score dominante
+// - vantagem
+// - previsão
+// - ADX
+// - estrutura
+// ============================================================================
+
+forcaBase =
+     scoreAtual * 0.45 +
+     f_clamp(vantagemAtual * 2.0, 0, 25) * 0.25 +
+     f_clamp(vantagemPrevisaoAbs * 2.0, 0, 25) * 0.15 +
+     f_clamp(adxD, 0, 50) * 0.15
+
+forcaFinal =
+     f_clamp(forcaBase, 0, 100)
+
+string forcaTexto =
+     forcaFinal >= 85
+     ? "EXTREMA"
+     : forcaFinal >= 75
+     ? "MUITO FORTE"
+     : forcaFinal >= 65
+     ? "FORTE"
+     : forcaFinal >= 55
+     ? "MODERADA"
+     : forcaFinal >= 45
+     ? "FRACA"
+     : "MUITO FRACA"
+
+
+// ============================================================================
+// QUALIDADE
+// ============================================================================
+
+qualidadeBase =
+     scoreAtual * 0.50 +
+     vantagemAtual * 1.20 +
+     vantagemPrevisaoAbs * 0.80 +
+     adxD * 0.25
+
+qualidadeFinal =
+     f_clamp(qualidadeBase, 0, 100)
+
+string qualidade =
+     conflito
+     ? "CONFLITO"
+     : qualidadeFinal >= 85 and scoreAtual >= 80
+     ? "EXCELENTE"
+     : qualidadeFinal >= 75 and scoreAtual >= 75
+     ? "MUITO ALTA"
+     : qualidadeFinal >= 65 and scoreAtual >= 68
+     ? "ALTA"
+     : qualidadeFinal >= 55
+     ? "BOA"
+     : qualidadeFinal >= 45
+     ? "NORMAL"
+     : "BAIXA"
+
+
+// ============================================================================
+// OPORTUNIDADE
+// ============================================================================
+//
+// Diferente de QUALIDADE:
+// QUALIDADE = consistência da leitura.
+// OPORTUNIDADE = existência de condições para uma entrada.
+// ============================================================================
+
+fatoresOportunidadeCompra =
+     f_pts(scoreAltaD >= scoreMin, 25) +
+     f_pts(previsaoCompra, 20) +
+     f_pts(estruturaAltaD >= 45, 15) +
+     f_pts(momentumAltaD, 10) +
+     f_pts(tendenciaAltaD, 10) +
+     f_pts(
+         rompAltaD or
+         retesteAltaD or
+         preAltaD or
+         padraoAltaD,
+         10) +
+     f_pts(volatilidadeBoaD, 5) +
+     f_pts(semanalAlta, 5)
+
+fatoresOportunidadeVenda =
+     f_pts(scoreBaixaD >= scoreMin, 25) +
+     f_pts(previsaoVenda, 20) +
+     f_pts(estruturaBaixaD >= 45, 15) +
+     f_pts(momentumBaixaD, 10) +
+     f_pts(tendenciaBaixaD, 10) +
+     f_pts(
+         rompBaixaD or
+         retesteBaixaD or
+         preBaixaD or
+         padraoBaixaD,
+         10) +
+     f_pts(volatilidadeBoaD, 5) +
+     f_pts(semanalBaixa, 5)
+
+oportunidadeCompra =
+     f_clamp(fatoresOportunidadeCompra, 0, 100)
+
+oportunidadeVenda =
+     f_clamp(fatoresOportunidadeVenda, 0, 100)
+
+oportunidadeAtual =
+     compra
+     ? oportunidadeCompra
+     : venda
+     ? oportunidadeVenda
+     : math.max(
+         oportunidadeCompra,
+         oportunidadeVenda)
+
+string oportunidadeTexto =
+     conflito
+     ? "EVITAR"
+     : oportunidadeAtual >= 85
+     ? "EXCELENTE"
+     : oportunidadeAtual >= 75
+     ? "ALTA"
+     : oportunidadeAtual >= 60
+     ? "BOA"
+     : oportunidadeAtual >= 45
+     ? "MODERADA"
+     : "BAIXA"
+
+
+// ============================================================================
+// PADRÃO TEXTUAL
+// ============================================================================
+
+string padraoTexto =
+     duploFundoD
+     ? "FUNDO DUPLO"
+     : duploTopoD
+     ? "TOPO DUPLO"
+     : trianguloD and rompAltaD
+     ? "TRIÂNGULO COMPRA"
+     : trianguloD and rompBaixaD
+     ? "TRIÂNGULO VENDA"
+     : bandeiraAltaD
+     ? "BANDEIRA COMPRA"
+     : bandeiraBaixaD
+     ? "BANDEIRA VENDA"
+     : cunhaAltaD
+     ? "CUNHA COMPRA"
+     : cunhaBaixaD
+     ? "CUNHA VENDA"
+     : canalAltaD
+     ? "CANAL ALTA"
+     : canalBaixaD
+     ? "CANAL BAIXA"
+     : retesteAltaD
+     ? "RETESTE COMPRA"
+     : retesteBaixaD
+     ? "RETESTE VENDA"
+     : padraoAltaD
+     ? "PADRÃO COMPRA"
+     : padraoBaixaD
+     ? "PADRÃO VENDA"
+     : "NENHUM"
+
+
+// ============================================================================
+// ESTRUTURA TEXTUAL
+// ============================================================================
+
+string estruturaTexto =
+     rompAltaD
+     ? "ROMPIMENTO ALTA"
+     : rompBaixaD
+     ? "ROMPIMENTO BAIXA"
+     : retesteAltaD
+     ? "RETESTE ALTA"
+     : retesteBaixaD
+     ? "RETESTE BAIXA"
+     : preAltaD
+     ? "PRÉ-ROMPIMENTO ALTA"
+     : preBaixaD
+     ? "PRÉ-ROMPIMENTO BAIXA"
+     : rejeicaoAltaD
+     ? "REJEIÇÃO SUPORTE"
+     : rejeicaoBaixaD
+     ? "REJEIÇÃO RESISTÊNCIA"
+     : "SEM CONFIRMAÇÃO"
+
+
+// ============================================================================
+// TENDÊNCIA TEXTUAL
+// ============================================================================
+
+string tendenciaTexto =
+     tendenciaAltaD
+     ? "ALTA"
+     : tendenciaBaixaD
+     ? "BAIXA"
+     : "NEUTRA"
+
+
+// ============================================================================
+// MOMENTUM TEXTUAL
+// ============================================================================
+
+string momentumTexto =
+     momentumAltaD
+     ? "ALTA"
+     : momentumBaixaD
+     ? "BAIXA"
+     : "NEUTRO"
+
+
+// ============================================================================
+// SEMANAL TEXTUAL
+// ============================================================================
+
+string semanalTexto =
+     semanalAlta
+     ? "ALTA"
+     : semanalBaixa
+     ? "BAIXA"
+     : "NEUTRA"
+
+
+// ============================================================================
+// DURAÇÃO
+// ============================================================================
+
+duracaoCalculada =
+     scoreAtual >= 88 and adxD >= 25
+     ? math.min(duracaoBase + 2, 5)
+     : scoreAtual >= 78 and adxD >= 20
+     ? math.min(duracaoBase + 1, 4)
+     : duracaoBase
+
+duracaoFinal =
+     aguarda or conflito
+     ? 0
+     : duracaoCalculada
+
+string duracaoTexto =
+     duracaoFinal <= 0
+     ? "AGUARDAR"
+     : duracaoFinal == 1
+     ? "1 DIA"
+     : str.tostring(duracaoFinal) + " DIAS"
+
+
+// ============================================================================
+// PREPARAÇÃO
+// ============================================================================
+
+preparacaoCompra =
+     aguarda and
+     previsaoAltaD > previsaoBaixaD and
+     previsaoAltaD >= 58 and
+     (
+         padraoAltaD or
+         preAltaD or
+         retesteAltaD or
+         rejeicaoAltaD
+     )
+
+preparacaoVenda =
+     aguarda and
+     previsaoBaixaD > previsaoAltaD and
+     previsaoBaixaD >= 58 and
+     (
+         padraoBaixaD or
+         preBaixaD or
+         retesteBaixaD or
+         rejeicaoBaixaD
+     )
+
+string proximaAcao =
+     compra
+     ? "COMPRA"
+     : venda
+     ? "VENDA"
+     : preparacaoCompra
+     ? "PREPARAÇÃO COMPRA"
+     : preparacaoVenda
+     ? "PREPARAÇÃO VENDA"
+     : "AGUARDAR"
+
+
+// ============================================================================
+// NOVA VELA DIÁRIA
+// ============================================================================
+
+novaVelaDiaria =
+     ta.change(time("D")) != 0
+
+
+// ============================================================================
+// ENTRADAS
+// ============================================================================
+//
+// O motor continua diário.
+// A entrada ocorre uma vez por novo período diário.
+// ============================================================================
+
+entradaCompra =
+     executarStrategy and
+     compra and
+     novaVelaDiaria
+
+entradaVenda =
+     executarStrategy and
+     venda and
+     novaVelaDiaria
+
+
+// ============================================================================
+// EXECUÇÃO DA STRATEGY
+// ============================================================================
+
+if entradaCompra
+    strategy.entry(
+         "V40.17 COMPRA",
+         strategy.long)
+
+if entradaVenda
+    strategy.entry(
+         "V40.17 VENDA",
+         strategy.short)
+
+
+// ============================================================================
+// CONTROLE DE DURAÇÃO
+// ============================================================================
+//
+// CORREÇÃO IMPORTANTE:
+// A duração agora é contada por mudanças do DIA,
+// e não por bar_index.
+// Isso evita que uma operação configurada para 1 DIA
+// seja encerrada após 1 candle em um gráfico de 1H,
+// por exemplo.
+// ============================================================================
+
+var int diaEntrada = na
+var int direcaoEntrada = 0
+var int duracaoEntrada = 0
+
+if entradaCompra
+    diaEntrada := time("D")
+    direcaoEntrada := 1
+    duracaoEntrada := duracaoFinal
+
+if entradaVenda
+    diaEntrada := time("D")
+    direcaoEntrada := -1
+    duracaoEntrada := duracaoFinal
+
+
+// ============================================================================
+// CONTAGEM DE DIAS DA OPERAÇÃO
+// ============================================================================
+
+novoDiaDepoisEntrada =
+     novaVelaDiaria and
+     not na(diaEntrada) and
+     strategy.position_size != 0
+
+diasDecorridos =
+     not na(diaEntrada)
+     ? math.max(
+         0,
+         int(
+             math.floor(
+                 (time("D") - diaEntrada) /
+                 86400000.0)))
+     : 0
+
+
+// ============================================================================
+// FECHAMENTO POR DURAÇÃO
+// ============================================================================
+
+fecharPorTempo =
+     fecharPorDuracao and
+     strategy.position_size != 0 and
+     duracaoEntrada > 0 and
+     diasDecorridos >= duracaoEntrada
+
+if fecharPorTempo
+    strategy.close_all(
+         comment="FIM DURAÇÃO")
+
+    diaEntrada := na
+    direcaoEntrada := 0
+    duracaoEntrada := 0
+
+
+// ============================================================================
+// RESET APÓS ENCERRAMENTO DA POSIÇÃO
+// ============================================================================
+
+if strategy.position_size == 0 and not entradaCompra and not entradaVenda
+    if not na(diaEntrada) and not fecharPorTempo
+        if strategy.position_size[1] != 0
+            diaEntrada := na
+            direcaoEntrada := 0
+            duracaoEntrada := 0
+
+
+// ============================================================================
+// TEXTO DE EXECUÇÃO
+// ============================================================================
+
+string execucaoTexto =
+     strategy.position_size > 0
+     ? "LONG ATIVO"
+     : strategy.position_size < 0
+     ? "SHORT ATIVO"
+     : executarStrategy
+     ? "ATIVA"
+     : "DESATIVADA"
+
+
+// ============================================================================
+// COR DO STATUS
+// ============================================================================
+
+color corDirecao =
+     compra
+     ? color.new(color.green, 0)
+     : venda
+     ? color.new(color.red, 0)
+     : conflito
+     ? color.new(color.orange, 0)
+     : color.new(color.gray, 0)
+
+color corForca =
+     forcaFinal >= 75
+     ? color.new(color.green, 0)
+     : forcaFinal >= 55
+     ? color.new(color.yellow, 0)
+     : color.new(color.red, 0)
+
+color corQualidade =
+     qualidade == "EXCELENTE" or
+     qualidade == "MUITO ALTA"
+     ? color.new(color.green, 0)
+     : qualidade == "ALTA" or
+     qualidade == "BOA"
+     ? color.new(color.yellow, 0)
+     : color.new(color.red, 0)
+
+color corOportunidade =
+     oportunidadeAtual >= 75
+     ? color.new(color.green, 0)
+     : oportunidadeAtual >= 55
+     ? color.new(color.yellow, 0)
+     : color.new(color.red, 0)
+
+
+// ============================================================================
+// PAINEL MODO FÁCIL
+// ============================================================================
+//
+// POSIÇÃO:
+// MEIO À ESQUERDA
+//
+// TEXTO:
+// BRANCO
+//
+// NÃO HÁ SINAIS PLOTADOS NO GRÁFICO.
+// ============================================================================
+
+var table painel =
+     table.new(
+         position.middle_right,
+         2,
+         20,
+         border_width=1)
+
+if mostrarPainel
+
+    // ------------------------------------------------------------------------
+    // CABEÇALHO
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         0,
+         "V40.17",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 0),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         0,
+         "MODO FÁCIL",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 0),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // DECISÃO
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         1,
+         "DECISÃO",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         1,
+         direcao,
+         text_color=color.white,
+         bgcolor=corDirecao,
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // PRÓXIMA AÇÃO
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         2,
+         "PRÓXIMA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         2,
+         proximaAcao,
+         text_color=color.white,
+         bgcolor=corDirecao,
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // SCORE
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         3,
+         "SCORE",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         3,
+         str.tostring(scoreAtual, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // VANTAGEM
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         4,
+         "VANTAGEM",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         4,
+         str.tostring(vantagemAtual, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // FORÇA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         5,
+         "FORÇA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         5,
+         forcaTexto + " " + str.tostring(forcaFinal, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=corForca,
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // QUALIDADE
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         6,
+         "QUALIDADE",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         6,
+         qualidade,
+         text_color=color.white,
+         bgcolor=corQualidade,
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // OPORTUNIDADE
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         7,
+         "OPORTUNIDADE",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         7,
+         oportunidadeTexto + " " +
+         str.tostring(oportunidadeAtual, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=corOportunidade,
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // SCORE COMPRA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         8,
+         "SCORE COMPRA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         8,
+         str.tostring(scoreAltaD, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // SCORE VENDA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         9,
+         "SCORE VENDA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         9,
+         str.tostring(scoreBaixaD, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // PREVISÃO ALTA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         10,
+         "PREVISÃO ALTA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         10,
+         str.tostring(previsaoAltaD, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // PREVISÃO BAIXA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         11,
+         "PREVISÃO BAIXA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         11,
+         str.tostring(previsaoBaixaD, "#.0") + "%",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // PADRÃO
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         12,
+         "PADRÃO",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         12,
+         padraoTexto,
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // ESTRUTURA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         13,
+         "ESTRUTURA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         13,
+         estruturaTexto,
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // TENDÊNCIA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         14,
+         "TENDÊNCIA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         14,
+         tendenciaTexto,
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // SEMANAL
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         15,
+         "SEMANAL",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         15,
+         semanalTexto,
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // MOMENTUM
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         16,
+         "MOMENTUM",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         16,
+         momentumTexto,
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // SUPORTE
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         17,
+         "SUPORTE",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         17,
+         str.tostring(suporteD, format.mintick),
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // RESISTÊNCIA
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         18,
+         "RESISTÊNCIA",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         18,
+         str.tostring(resistenciaD, format.mintick),
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    // ------------------------------------------------------------------------
+    // DURAÇÃO
+    // ------------------------------------------------------------------------
+
+    table.cell(
+         painel,
+         0,
+         19,
+         "DURAÇÃO",
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         19,
+         duracaoTexto,
+         text_color=color.white,
+         bgcolor=color.new(color.black, 10),
+         text_size=size.small)
+
+else
+
+    for linha = 0 to 19
+        table.cell(
+             painel,
+             0,
+             linha,
+             "",
+             text_color=color.white,
+             bgcolor=color.new(color.black, 100))
+
+        table.cell(
+             painel,
+             1,
+             linha,
+             "",
+             text_color=color.white,
+             bgcolor=color.new(color.black, 100))
+
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+
+alertcondition(
+     entradaCompra,
+     "V40.17 COMPRA",
+     "V40.17 COMPRA - Previsão diária confirmada")
+
+alertcondition(
+     entradaVenda,
+     "V40.17 VENDA",
+     "V40.17 VENDA - Previsão diária confirmada")
+
+alertcondition(
+     preparacaoCompra,
+     "V40.17 PREPARAÇÃO COMPRA",
+     "V40.17 - Preparação para COMPRA")
+
+alertcondition(
+     preparacaoVenda,
+     "V40.17 PREPARAÇÃO VENDA",
+     "V40.17 - Preparação para VENDA")
+
+
+// ============================================================================
+// ALERTA DINÂMICO
+// ============================================================================
+
+if entradaCompra
+    alert(
+         "V40.17 | COMPRA | " +
+         "Score=" + str.tostring(scoreAltaD, "#.0") +
+         " | Vantagem=" + str.tostring(vantagemAtual, "#.0") +
+         " | Força=" + forcaTexto +
+         " | Qualidade=" + qualidade +
+         " | Oportunidade=" + oportunidadeTexto +
+         " | Padrão=" + padraoTexto +
+         " | Estrutura=" + estruturaTexto +
+         " | Duração=" + duracaoTexto,
+         alert.freq_once_per_bar)
+
+if entradaVenda
+    alert(
+         "V40.17 | VENDA | " +
+         "Score=" + str.tostring(scoreBaixaD, "#.0") +
+         " | Vantagem=" + str.tostring(vantagemAtual, "#.0") +
+         " | Força=" + forcaTexto +
+         " | Qualidade=" + qualidade +
+         " | Oportunidade=" + oportunidadeTexto +
+         " | Padrão=" + padraoTexto +
+         " | Estrutura=" + estruturaTexto +
+         " | Duração=" + duracaoTexto,
+         alert.freq_once_per_bar)
