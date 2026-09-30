@@ -1,0 +1,1434 @@
+//@version=6
+strategy("KVO PRO V40.10 - PREVISAO MICRO + ALVO + EXPIRACAO",
+     overlay=true,
+     max_labels_count=500,
+     max_bars_back=500,
+     dynamic_requests=true,
+     pyramiding=0,
+     process_orders_on_close=true,
+     calc_on_every_tick=true,
+     calc_on_order_fills=true,
+     initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=1)
+
+// ============================================================================
+// KVO PRO V40.10
+// PREVISAO DA PROXIMA VELA
+// MOTOR MICRO
+// ALVO CURTO
+// EXPIRACAO 1 / 2 / 5 / 15 BARRAS
+// OPERACAO CONGELADA DURANTE O HOLDING
+// PAINEL MODO FACIL
+// PAINEL NO LADO ESQUERDO / MEIO
+// SEM SINAIS GRAFICOS
+// ============================================================================
+
+
+// ============================================================================
+// 01 - CONFIGURACOES GERAIS
+// ============================================================================
+
+grupoGeral = "01 - CONFIGURACOES GERAIS"
+
+habilitarPrevisao = input.bool(true, "Habilitar previsao", group=grupoGeral)
+scoreMinimoPrevisao = input.float(58.0, "Score minimo previsao", minval=0, maxval=100, step=1, group=grupoGeral)
+vantagemMinima = input.float(6.0, "Vantagem minima", minval=0, maxval=50, step=1, group=grupoGeral)
+sensibilidade = input.float(1.10, "Sensibilidade", minval=0.50, maxval=3.00, step=0.05, group=grupoGeral)
+
+usarPadroes = input.bool(true, "Usar padroes", group=grupoGeral)
+pesoPadroes = input.float(10.0, "Peso padroes", minval=0, maxval=30, step=1, group=grupoGeral)
+
+
+// ============================================================================
+// 02 - TENDENCIA
+// ============================================================================
+
+grupoTendencia = "02 - TENDENCIA"
+
+emaRapidaPeriodo = input.int(9, "EMA rapida", minval=1, group=grupoTendencia)
+emaMediaPeriodo = input.int(21, "EMA media", minval=1, group=grupoTendencia)
+emaLentaPeriodo = input.int(50, "EMA lenta", minval=1, group=grupoTendencia)
+
+
+// ============================================================================
+// 03 - RSI
+// ============================================================================
+
+grupoRSI = "03 - RSI"
+
+rsiPeriodo = input.int(10, "RSI periodo", minval=2, group=grupoRSI)
+rsiSobreCompra = input.float(65.0, "RSI sobrecompra", minval=50, maxval=100, group=grupoRSI)
+rsiSobreVenda = input.float(35.0, "RSI sobrevenda", minval=0, maxval=50, group=grupoRSI)
+
+
+// ============================================================================
+// 04 - KVO
+// ============================================================================
+
+grupoKVO = "04 - KVO"
+
+kvoRapido = input.int(34, "KVO rapido", minval=2, group=grupoKVO)
+kvoLento = input.int(55, "KVO lento", minval=2, group=grupoKVO)
+kvoSinal = input.int(13, "KVO sinal", minval=2, group=grupoKVO)
+
+
+// ============================================================================
+// 05 - ATR
+// ============================================================================
+
+grupoATR = "05 - ATR"
+
+atrPeriodo = input.int(14, "ATR periodo", minval=2, group=grupoATR)
+atrMediaPeriodo = input.int(50, "ATR media", minval=5, group=grupoATR)
+
+
+// ============================================================================
+// 06 - ESTRUTURA
+// ============================================================================
+
+grupoEstrutura = "06 - ESTRUTURA"
+
+estruturaLookback = input.int(30, "Lookback estrutura", minval=5, group=grupoEstrutura)
+distanciaMaximaSR = input.float(1.50, "Distancia maxima SR em ATR", minval=0.10, maxval=10.0, step=0.05, group=grupoEstrutura)
+
+
+// ============================================================================
+// 07 - MICRO MOTOR
+// ============================================================================
+
+grupoMicro = "07 - MICRO MOTOR"
+
+usarMicro = input.bool(true, "Usar previsao micro", group=grupoMicro)
+microLookback = input.int(5, "Micro lookback", minval=2, maxval=20, group=grupoMicro)
+microEMARapida = input.int(3, "Micro EMA rapida", minval=1, group=grupoMicro)
+microEMALenta = input.int(8, "Micro EMA lenta", minval=2, group=grupoMicro)
+microScoreMinimo = input.float(55.0, "Micro score minimo", minval=0, maxval=100, step=1, group=grupoMicro)
+microVantagemMinima = input.float(5.0, "Micro vantagem minima", minval=0, maxval=50, step=1, group=grupoMicro)
+
+
+// ============================================================================
+// 08 - ALVO MICRO
+// ============================================================================
+
+grupoAlvo = "08 - ALVO MICRO"
+
+usarAlvoMicro = input.bool(true, "Usar alvo micro", group=grupoAlvo)
+alvoMicroATRMin = input.float(0.35, "Alvo minimo ATR", minval=0.05, maxval=5.0, step=0.05, group=grupoAlvo)
+alvoMicroATRBase = input.float(0.60, "Alvo base ATR", minval=0.05, maxval=5.0, step=0.05, group=grupoAlvo)
+alvoMicroATRMax = input.float(1.20, "Alvo maximo ATR", minval=0.10, maxval=10.0, step=0.05, group=grupoAlvo)
+espacoMinimoAlvo = input.float(0.25, "Espaco minimo alvo ATR", minval=0.05, maxval=5.0, step=0.05, group=grupoAlvo)
+filtroEspaco = input.bool(true, "Filtrar espaco", group=grupoAlvo)
+
+
+// ============================================================================
+// 09 - ENTRADA
+// ============================================================================
+
+grupoEntrada = "09 - ENTRADA"
+
+usarEntrada = input.bool(true, "Habilitar entrada", group=grupoEntrada)
+entradaScoreMinimo = input.float(65.0, "Score minimo entrada", minval=0, maxval=100, step=1, group=grupoEntrada)
+entradaVantagemMinima = input.float(10.0, "Vantagem minima entrada", minval=0, maxval=50, step=1, group=grupoEntrada)
+cooldownBarras = input.int(3, "Cooldown", minval=0, maxval=50, group=grupoEntrada)
+
+permitirCompra = input.bool(true, "Permitir compra", group=grupoEntrada)
+permitirVenda = input.bool(true, "Permitir venda", group=grupoEntrada)
+
+
+// ============================================================================
+// 10 - EXPIRACAO
+// ============================================================================
+
+grupoExpiracao = "10 - EXPIRACAO DA OPERACAO"
+
+usarExpiracao = input.bool(true, "Usar expiracao", group=grupoExpiracao)
+
+expiracaoSelecionada = input.string(
+     "5",
+     "Expiracao",
+     options=["1", "2", "5", "15"],
+     group=grupoExpiracao)
+
+
+// ============================================================================
+// 11 - EXECUCAO
+// ============================================================================
+
+grupoExecucao = "11 - EXECUCAO"
+
+usarOrdensStrategy = input.bool(false, "Executar ordens da estrategia", group=grupoExecucao)
+stopATR = input.float(1.50, "Stop ATR", minval=0.10, maxval=10.0, step=0.10, group=grupoExecucao)
+alvoStrategyATR = input.float(2.00, "Alvo estrategia ATR", minval=0.10, maxval=10.0, step=0.10, group=grupoExecucao)
+
+
+// ============================================================================
+// 12 - MULTI TIMEFRAME
+// ============================================================================
+
+grupoMTF = "12 - MULTI TIMEFRAME"
+
+usarMTF = input.bool(true, "Usar MTF", group=grupoMTF)
+
+tf1 = input.timeframe("5", "MTF 1", group=grupoMTF)
+tf2 = input.timeframe("15", "MTF 2", group=grupoMTF)
+tf3 = input.timeframe("30", "MTF 3", group=grupoMTF)
+tf4 = input.timeframe("60", "MTF 4", group=grupoMTF)
+tf5 = input.timeframe("240", "MTF 5", group=grupoMTF)
+
+
+// ============================================================================
+// 13 - FUNCOES
+// ============================================================================
+
+f_limitar(valor, minimo, maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+
+f_textoForca(valor) =>
+    string resultado = "SEM FORCA"
+    if valor >= 85
+        resultado := "EXTREMA"
+    else if valor >= 70
+        resultado := "MUITO FORTE"
+    else if valor >= 55
+        resultado := "FORTE"
+    else if valor >= 40
+        resultado := "MODERADA"
+    else if valor >= 25
+        resultado := "FRACA"
+    else if valor >= 10
+        resultado := "MUITO FRACA"
+    resultado
+
+
+f_textoQualidade(valor) =>
+    string resultado = "MUITO BAIXA"
+    if valor >= 85
+        resultado := "EXCELENTE"
+    else if valor >= 70
+        resultado := "MUITO BOA"
+    else if valor >= 55
+        resultado := "BOA"
+    else if valor >= 40
+        resultado := "REGULAR"
+    else if valor >= 25
+        resultado := "BAIXA"
+    resultado
+
+
+f_textoDirecao(direcao) =>
+    string resultado = "NEUTRO"
+    if direcao == 1
+        resultado := "COMPRA"
+    else if direcao == -1
+        resultado := "VENDA"
+    resultado
+
+
+f_corDirecao(direcao) =>
+    color resultado = color.white
+    if direcao == 1
+        resultado := color.lime
+    else if direcao == -1
+        resultado := color.red
+    resultado
+
+
+f_corQualidade(valor) =>
+    color resultado = color.white
+    if valor >= 70
+        resultado := color.lime
+    else if valor >= 50
+        resultado := color.yellow
+    else
+        resultado := color.red
+    resultado
+
+
+f_expiracaoBarras(opcao) =>
+    int resultado = 5
+    if opcao == "1"
+        resultado := 1
+    else if opcao == "2"
+        resultado := 2
+    else if opcao == "5"
+        resultado := 5
+    else
+        resultado := 15
+    resultado
+
+
+f_kvo(srcHigh, srcLow, srcClose, srcVolume, rapido, lento, sinal) =>
+    float mediaPreco = (srcHigh + srcLow + srcClose) / 3.0
+    float mediaAnterior = nz(mediaPreco[1], mediaPreco)
+    float tendencia = mediaPreco > mediaAnterior ? 1.0 : mediaPreco < mediaAnterior ? -1.0 : 0.0
+    float forca = srcVolume * tendencia * math.abs(mediaPreco - mediaAnterior)
+    float linhaRapida = ta.ema(forca, rapido)
+    float linhaLenta = ta.ema(forca, lento)
+    float linha = linhaRapida - linhaLenta
+    float sinalLinha = ta.ema(linha, sinal)
+    [linha, sinalLinha]
+
+
+f_scoreMTF(tf) =>
+    float fechamento = request.security(syminfo.tickerid, tf, close)
+    float ema9TF = request.security(syminfo.tickerid, tf, ta.ema(close, 9))
+    float ema21TF = request.security(syminfo.tickerid, tf, ta.ema(close, 21))
+    float rsiTF = request.security(syminfo.tickerid, tf, ta.rsi(close, 10))
+
+    float compra = 0.0
+    float venda = 0.0
+
+    if fechamento > ema9TF
+        compra += 35.0
+    else
+        venda += 35.0
+
+    if ema9TF > ema21TF
+        compra += 35.0
+    else
+        venda += 35.0
+
+    if rsiTF > 50.0
+        compra += 30.0
+    else
+        venda += 30.0
+
+    [compra, venda]
+
+
+// ============================================================================
+// 14 - CALCULOS PRINCIPAIS
+// ============================================================================
+
+emaRapida = ta.ema(close, emaRapidaPeriodo)
+emaMedia = ta.ema(close, emaMediaPeriodo)
+emaLenta = ta.ema(close, emaLentaPeriodo)
+
+rsi = ta.rsi(close, rsiPeriodo)
+
+atr = ta.atr(atrPeriodo)
+atrMedio = ta.sma(atr, atrMediaPeriodo)
+
+[linhaKVO, linhaKVOSinal] = f_kvo(
+     high,
+     low,
+     close,
+     volume,
+     kvoRapido,
+     kvoLento,
+     kvoSinal)
+
+histogramaKVO = linhaKVO - linhaKVOSinal
+
+volumeMedio = ta.sma(volume, 20)
+volumeRelativo = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+momento = ta.roc(close, 5)
+momentoNormalizado = f_limitar(50.0 + momento * 5.0, 0.0, 100.0)
+
+corpo = math.abs(close - open)
+amplitudeCandle = math.max(high - low, syminfo.mintick)
+forcaCandle = f_limitar((corpo / amplitudeCandle) * 100.0, 0.0, 100.0)
+
+pressaoCandle = close > open ? forcaCandle : close < open ? -forcaCandle : 0.0
+
+
+// ============================================================================
+// 15 - SUPORTE E RESISTENCIA
+// ============================================================================
+
+resistencia = ta.highest(high, estruturaLookback)
+suporte = ta.lowest(low, estruturaLookback)
+
+distanciaResistencia = math.max(resistencia - close, 0.0)
+distanciaSuporte = math.max(close - suporte, 0.0)
+
+resistenciaATR = atr > 0 ? distanciaResistencia / atr : 999.0
+suporteATR = atr > 0 ? distanciaSuporte / atr : 999.0
+
+proximoDaResistencia = resistenciaATR <= distanciaMaximaSR
+proximoDoSuporte = suporteATR <= distanciaMaximaSR
+
+
+// ============================================================================
+// 16 - PADROES
+// ============================================================================
+
+engolfoCompra = close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+engolfoVenda = close < open and close[1] > open[1] and close <= open[1] and open >= close[1]
+
+rejeicaoCompra = low < low[1] and close > open and close > (high + low) / 2.0
+rejeicaoVenda = high > high[1] and close < open and close < (high + low) / 2.0
+
+rompimentoCompra = close > ta.highest(high, microLookback)[1]
+rompimentoVenda = close < ta.lowest(low, microLookback)[1]
+
+padraoCompra = engolfoCompra or rejeicaoCompra or rompimentoCompra
+padraoVenda = engolfoVenda or rejeicaoVenda or rompimentoVenda
+
+
+// ============================================================================
+// 17 - MTF
+// ============================================================================
+
+[mtf1Compra, mtf1Venda] = f_scoreMTF(tf1)
+[mtf2Compra, mtf2Venda] = f_scoreMTF(tf2)
+[mtf3Compra, mtf3Venda] = f_scoreMTF(tf3)
+[mtf4Compra, mtf4Venda] = f_scoreMTF(tf4)
+[mtf5Compra, mtf5Venda] = f_scoreMTF(tf5)
+
+mtfCompra = (mtf1Compra + mtf2Compra + mtf3Compra + mtf4Compra + mtf5Compra) / 5.0
+mtfVenda = (mtf1Venda + mtf2Venda + mtf3Venda + mtf4Venda + mtf5Venda) / 5.0
+
+
+// ============================================================================
+// 18 - SCORE PRINCIPAL
+// ============================================================================
+
+float scoreCompra = 0.0
+float scoreVenda = 0.0
+
+if close > emaRapida
+    scoreCompra += 12.0
+else
+    scoreVenda += 12.0
+
+if emaRapida > emaMedia
+    scoreCompra += 12.0
+else
+    scoreVenda += 12.0
+
+if emaMedia > emaLenta
+    scoreCompra += 10.0
+else
+    scoreVenda += 10.0
+
+if pressaoCandle > 0
+    scoreCompra += 10.0
+else if pressaoCandle < 0
+    scoreVenda += 10.0
+
+if histogramaKVO > 0
+    scoreCompra += 10.0
+else
+    scoreVenda += 10.0
+
+if linhaKVO > linhaKVOSinal
+    scoreCompra += 8.0
+else
+    scoreVenda += 8.0
+
+if momentoNormalizado > 50.0
+    scoreCompra += 8.0
+else
+    scoreVenda += 8.0
+
+if rsi > 50.0
+    scoreCompra += 6.0
+else
+    scoreVenda += 6.0
+
+if volumeRelativo > 1.0
+    if close > open
+        scoreCompra += 5.0
+    else if close < open
+        scoreVenda += 5.0
+
+if proximoDoSuporte
+    scoreCompra += 5.0
+
+if proximoDaResistencia
+    scoreVenda += 5.0
+
+if usarPadroes
+    if padraoCompra
+        scoreCompra += pesoPadroes
+
+    if padraoVenda
+        scoreVenda += pesoPadroes
+
+if usarMTF
+    scoreCompra := scoreCompra * 0.65 + mtfCompra * 0.35
+    scoreVenda := scoreVenda * 0.65 + mtfVenda * 0.35
+
+scoreCompra := f_limitar(scoreCompra * sensibilidade, 0.0, 100.0)
+scoreVenda := f_limitar(scoreVenda * sensibilidade, 0.0, 100.0)
+
+vantagemPrincipal = math.abs(scoreCompra - scoreVenda)
+
+int direcaoPrincipal = 0
+
+if scoreCompra > scoreVenda
+    direcaoPrincipal := 1
+else if scoreVenda > scoreCompra
+    direcaoPrincipal := -1
+
+
+// ============================================================================
+// 19 - FORCA PRINCIPAL
+// ============================================================================
+
+forcaPrincipal = f_limitar(
+     math.max(scoreCompra, scoreVenda) * 0.65 +
+     forcaCandle * 0.15 +
+     math.min(volumeRelativo * 10.0, 10.0) +
+     math.min(math.abs(histogramaKVO) * 0.01, 10.0),
+     0.0,
+     100.0)
+
+
+// ============================================================================
+// 20 - CONFLUENCIA E QUALIDADE
+// ============================================================================
+
+float confluenciaPrincipal = 0.0
+
+if emaRapida > emaMedia and emaMedia > emaLenta
+    confluenciaPrincipal += 20.0
+
+if emaRapida < emaMedia and emaMedia < emaLenta
+    confluenciaPrincipal += 20.0
+
+if histogramaKVO > 0 and direcaoPrincipal == 1
+    confluenciaPrincipal += 20.0
+
+if histogramaKVO < 0 and direcaoPrincipal == -1
+    confluenciaPrincipal += 20.0
+
+if momentoNormalizado > 50.0 and direcaoPrincipal == 1
+    confluenciaPrincipal += 15.0
+
+if momentoNormalizado < 50.0 and direcaoPrincipal == -1
+    confluenciaPrincipal += 15.0
+
+if volumeRelativo > 1.0
+    confluenciaPrincipal += 10.0
+
+if vantagemPrincipal >= vantagemMinima
+    confluenciaPrincipal += 15.0
+
+qualidadePrincipal = f_limitar(
+     confluenciaPrincipal * 0.60 +
+     vantagemPrincipal * 2.0 +
+     forcaPrincipal * 0.10,
+     0.0,
+     100.0)
+
+
+// ============================================================================
+// 21 - OPORTUNIDADE
+// ============================================================================
+
+float oportunidadePrincipal = 0.0
+
+if direcaoPrincipal == 1
+    if distanciaResistencia > atr * espacoMinimoAlvo
+        oportunidadePrincipal += 45.0
+
+    if not proximoDaResistencia
+        oportunidadePrincipal += 20.0
+
+    if rsi < rsiSobreCompra
+        oportunidadePrincipal += 15.0
+
+    if padraoCompra
+        oportunidadePrincipal += 20.0
+
+else if direcaoPrincipal == -1
+    if distanciaSuporte > atr * espacoMinimoAlvo
+        oportunidadePrincipal += 45.0
+
+    if not proximoDoSuporte
+        oportunidadePrincipal += 20.0
+
+    if rsi > rsiSobreVenda
+        oportunidadePrincipal += 15.0
+
+    if padraoVenda
+        oportunidadePrincipal += 20.0
+
+oportunidadePrincipal := f_limitar(oportunidadePrincipal, 0.0, 100.0)
+
+
+// ============================================================================
+// 22 - MICRO MOTOR
+// ============================================================================
+
+microEMARapidaValor = ta.ema(close, microEMARapida)
+microEMALentaValor = ta.ema(close, microEMALenta)
+
+microROC1 = ta.roc(close, 1)
+microROC2 = ta.roc(close, 2)
+microROC3 = ta.roc(close, 3)
+
+microAceleracao = microROC1 - microROC2
+
+microVolume = volumeMedio > 0 ? volume / volumeMedio : 1.0
+
+float microScoreCompra = 0.0
+float microScoreVenda = 0.0
+
+if close > microEMARapidaValor
+    microScoreCompra += 15.0
+else
+    microScoreVenda += 15.0
+
+if microEMARapidaValor > microEMALentaValor
+    microScoreCompra += 15.0
+else
+    microScoreVenda += 15.0
+
+if microROC1 > 0
+    microScoreCompra += 10.0
+else
+    microScoreVenda += 10.0
+
+if microROC2 > 0
+    microScoreCompra += 10.0
+else
+    microScoreVenda += 10.0
+
+if microROC3 > 0
+    microScoreCompra += 10.0
+else
+    microScoreVenda += 10.0
+
+if microAceleracao > 0
+    microScoreCompra += 10.0
+else
+    microScoreVenda += 10.0
+
+if histogramaKVO > 0
+    microScoreCompra += 10.0
+else
+    microScoreVenda += 10.0
+
+if microVolume > 1.0
+    if close > open
+        microScoreCompra += 5.0
+    else if close < open
+        microScoreVenda += 5.0
+
+if rompimentoCompra or rejeicaoCompra
+    microScoreCompra += 10.0
+
+if rompimentoVenda or rejeicaoVenda
+    microScoreVenda += 10.0
+
+if forcaCandle >= 50.0
+    if close > open
+        microScoreCompra += 5.0
+    else if close < open
+        microScoreVenda += 5.0
+
+microScoreCompra := f_limitar(microScoreCompra, 0.0, 100.0)
+microScoreVenda := f_limitar(microScoreVenda, 0.0, 100.0)
+
+microVantagem = math.abs(microScoreCompra - microScoreVenda)
+
+int microDirecao = 0
+
+if microScoreCompra > microScoreVenda
+    microDirecao := 1
+else if microScoreVenda > microScoreCompra
+    microDirecao := -1
+
+microForca = f_limitar(
+     math.max(microScoreCompra, microScoreVenda) * 0.70 +
+     forcaCandle * 0.20 +
+     math.min(microVolume * 10.0, 10.0),
+     0.0,
+     100.0)
+
+microQualidade = f_limitar(
+     microForca * 0.50 +
+     microVantagem * 2.0 +
+     (
+         microAceleracao > 0 and microDirecao == 1 ?
+         10.0 :
+         microAceleracao < 0 and microDirecao == -1 ?
+         10.0 :
+         0.0
+     ),
+     0.0,
+     100.0)
+
+
+// ============================================================================
+// 23 - MICRO VALIDACAO
+// ============================================================================
+
+bool microValido = true
+
+if usarMicro
+    microValido := microDirecao != 0 and
+         math.max(microScoreCompra, microScoreVenda) >= microScoreMinimo and
+         microVantagem >= microVantagemMinima
+
+bool confluenciaDirecao = true
+
+if usarMicro and microValido
+    confluenciaDirecao := microDirecao == direcaoPrincipal
+
+previsaoValida = habilitarPrevisao and
+     direcaoPrincipal != 0 and
+     math.max(scoreCompra, scoreVenda) >= scoreMinimoPrevisao and
+     vantagemPrincipal >= vantagemMinima and
+     confluenciaDirecao
+
+
+// ============================================================================
+// 24 - CALCULO DO ALVO MICRO
+// ============================================================================
+
+float fatorAlvo = alvoMicroATRBase
+
+fatorAlvo += (microForca - 50.0) / 200.0
+fatorAlvo += (microQualidade - 50.0) / 250.0
+
+if atrMedio > 0
+    volatilidadeRelativa = atr / atrMedio
+
+    if volatilidadeRelativa > 1.20
+        fatorAlvo += 0.10
+    else if volatilidadeRelativa < 0.80
+        fatorAlvo -= 0.05
+
+fatorAlvo := f_limitar(
+     fatorAlvo,
+     alvoMicroATRMin,
+     alvoMicroATRMax)
+
+float espacoDisponivelPreco = 0.0
+
+if direcaoPrincipal == 1
+    espacoDisponivelPreco := distanciaResistencia
+else if direcaoPrincipal == -1
+    espacoDisponivelPreco := distanciaSuporte
+
+espacoDisponivelATR = atr > 0 ? espacoDisponivelPreco / atr : 0.0
+
+float fatorAlvoFinal = fatorAlvo
+
+if filtroEspaco and espacoDisponivelATR > 0
+    fatorAlvoFinal := math.min(fatorAlvoFinal, espacoDisponivelATR)
+
+alvoValido = usarAlvoMicro and
+     direcaoPrincipal != 0 and
+     fatorAlvoFinal >= alvoMicroATRMin
+
+float alvoCompraPrecoCalculado = na
+float alvoVendaPrecoCalculado = na
+
+if alvoValido
+    alvoCompraPrecoCalculado := close + atr * fatorAlvoFinal
+    alvoVendaPrecoCalculado := close - atr * fatorAlvoFinal
+
+
+// ============================================================================
+// 25 - QUALIDADE DO ALVO
+// ============================================================================
+
+float qualidadeAlvo = 0.0
+
+if alvoValido
+    qualidadeAlvo += 35.0
+
+if espacoDisponivelATR >= fatorAlvoFinal
+    qualidadeAlvo += 25.0
+
+if microForca >= 55.0
+    qualidadeAlvo += 15.0
+
+if microQualidade >= 55.0
+    qualidadeAlvo += 15.0
+
+if vantagemPrincipal >= vantagemMinima
+    qualidadeAlvo += 10.0
+
+qualidadeAlvo := f_limitar(qualidadeAlvo, 0.0, 100.0)
+
+
+// ============================================================================
+// 26 - SINAIS DE ENTRADA
+// ============================================================================
+
+sinalCompra = permitirCompra and
+     previsaoValida and
+     direcaoPrincipal == 1 and
+     scoreCompra >= entradaScoreMinimo and
+     vantagemPrincipal >= entradaVantagemMinima and
+     forcaPrincipal >= 40.0 and
+     qualidadePrincipal >= 45.0 and
+     oportunidadePrincipal >= 40.0 and
+     (not usarMicro or microDirecao == 1) and
+     (not usarAlvoMicro or alvoValido)
+
+sinalVenda = permitirVenda and
+     previsaoValida and
+     direcaoPrincipal == -1 and
+     scoreVenda >= entradaScoreMinimo and
+     vantagemPrincipal >= entradaVantagemMinima and
+     forcaPrincipal >= 40.0 and
+     qualidadePrincipal >= 45.0 and
+     oportunidadePrincipal >= 40.0 and
+     (not usarMicro or microDirecao == -1) and
+     (not usarAlvoMicro or alvoValido)
+
+
+// ============================================================================
+// 27 - COOLDOWN
+// ============================================================================
+
+var int ultimaEntradaBarra = na
+
+cooldownOK = na(ultimaEntradaBarra) or
+     bar_index - ultimaEntradaBarra >= cooldownBarras
+
+
+// ============================================================================
+// 28 - ESTADO PERSISTENTE DA OPERACAO
+// ============================================================================
+
+var bool operacaoAtiva = false
+var int operacaoDirecao = 0
+var int operacaoBarraEntrada = na
+var int operacaoBarraExpiracao = na
+var int operacaoBarrasDecorridas = 0
+var int operacaoBarrasRestantes = 0
+var float operacaoPrecoEntrada = na
+var float operacaoAlvo = na
+var float operacaoStop = na
+var string operacaoStatus = "AGUARDANDO"
+var string ultimoResultado = "NENHUM"
+
+expiracaoBarras = f_expiracaoBarras(expiracaoSelecionada)
+
+
+// ============================================================================
+// 29 - NOVA ENTRADA
+// ============================================================================
+
+novaEntradaCompra = usarEntrada and
+     cooldownOK and
+     not operacaoAtiva and
+     sinalCompra
+
+novaEntradaVenda = usarEntrada and
+     cooldownOK and
+     not operacaoAtiva and
+     sinalVenda
+
+
+// ============================================================================
+// 30 - CONGELAMENTO DA COMPRA
+// ============================================================================
+
+if barstate.isconfirmed and novaEntradaCompra
+    operacaoAtiva := true
+    operacaoDirecao := 1
+    operacaoBarraEntrada := bar_index
+    operacaoBarraExpiracao := bar_index + (usarExpiracao ? expiracaoBarras : 999999)
+    operacaoBarrasDecorridas := 0
+    operacaoBarrasRestantes := usarExpiracao ? expiracaoBarras : 999999
+    operacaoPrecoEntrada := close
+
+    if usarAlvoMicro and alvoValido
+        operacaoAlvo := alvoCompraPrecoCalculado
+    else
+        operacaoAlvo := close + atr * alvoStrategyATR
+
+    operacaoStop := close - atr * stopATR
+    operacaoStatus := "SEGURANDO COMPRA"
+    ultimoResultado := "ENTRADA COMPRA"
+    ultimaEntradaBarra := bar_index
+
+    if usarOrdensStrategy
+        strategy.entry("COMPRA", strategy.long)
+
+
+// ============================================================================
+// 31 - CONGELAMENTO DA VENDA
+// ============================================================================
+
+if barstate.isconfirmed and novaEntradaVenda
+    operacaoAtiva := true
+    operacaoDirecao := -1
+    operacaoBarraEntrada := bar_index
+    operacaoBarraExpiracao := bar_index + (usarExpiracao ? expiracaoBarras : 999999)
+    operacaoBarrasDecorridas := 0
+    operacaoBarrasRestantes := usarExpiracao ? expiracaoBarras : 999999
+    operacaoPrecoEntrada := close
+
+    if usarAlvoMicro and alvoValido
+        operacaoAlvo := alvoVendaPrecoCalculado
+    else
+        operacaoAlvo := close - atr * alvoStrategyATR
+
+    operacaoStop := close + atr * stopATR
+    operacaoStatus := "SEGURANDO VENDA"
+    ultimoResultado := "ENTRADA VENDA"
+    ultimaEntradaBarra := bar_index
+
+    if usarOrdensStrategy
+        strategy.entry("VENDA", strategy.short)
+
+
+// ============================================================================
+// 32 - CONTROLE DO HOLDING
+// ============================================================================
+
+bool alvoAtingido = false
+bool stopAtingido = false
+bool operacaoExpirada = false
+
+if operacaoAtiva
+    operacaoBarrasDecorridas := bar_index - operacaoBarraEntrada
+
+    if usarExpiracao
+        operacaoBarrasRestantes := math.max(
+             operacaoBarraExpiracao - bar_index,
+             0)
+    else
+        operacaoBarrasRestantes := 999999
+
+    if operacaoDirecao == 1
+        alvoAtingido := bar_index > operacaoBarraEntrada and
+             high >= operacaoAlvo
+
+        stopAtingido := bar_index > operacaoBarraEntrada and
+             low <= operacaoStop
+
+    else if operacaoDirecao == -1
+        alvoAtingido := bar_index > operacaoBarraEntrada and
+             low <= operacaoAlvo
+
+        stopAtingido := bar_index > operacaoBarraEntrada and
+             high >= operacaoStop
+
+    operacaoExpirada := usarExpiracao and
+         bar_index >= operacaoBarraExpiracao
+
+
+// ============================================================================
+// 33 - FINALIZACAO DA OPERACAO
+// ============================================================================
+
+if operacaoAtiva and alvoAtingido
+    operacaoAtiva := false
+    operacaoStatus := "ALVO ATINGIDO"
+    ultimoResultado := "ALVO ATINGIDO"
+
+    if usarOrdensStrategy
+        if operacaoDirecao == 1
+            strategy.close("COMPRA", comment="ALVO")
+        else if operacaoDirecao == -1
+            strategy.close("VENDA", comment="ALVO")
+
+else if operacaoAtiva and stopAtingido
+    operacaoAtiva := false
+    operacaoStatus := "STOP"
+    ultimoResultado := "STOP"
+
+    if usarOrdensStrategy
+        if operacaoDirecao == 1
+            strategy.close("COMPRA", comment="STOP")
+        else if operacaoDirecao == -1
+            strategy.close("VENDA", comment="STOP")
+
+else if operacaoAtiva and operacaoExpirada
+    operacaoAtiva := false
+    operacaoStatus := "EXPIRADA"
+    ultimoResultado := "EXPIRADA"
+
+    if usarOrdensStrategy
+        if operacaoDirecao == 1
+            strategy.close("COMPRA", comment="EXPIRACAO")
+        else if operacaoDirecao == -1
+            strategy.close("VENDA", comment="EXPIRACAO")
+
+
+// ============================================================================
+// 34 - ORDENS FIXAS
+// ============================================================================
+
+if usarOrdensStrategy and operacaoAtiva
+    if operacaoDirecao == 1
+        strategy.exit(
+             "SAIDA COMPRA",
+             from_entry="COMPRA",
+             stop=operacaoStop,
+             limit=operacaoAlvo)
+
+    else if operacaoDirecao == -1
+        strategy.exit(
+             "SAIDA VENDA",
+             from_entry="VENDA",
+             stop=operacaoStop,
+             limit=operacaoAlvo)
+
+
+// ============================================================================
+// 35 - TEXTOS DO PAINEL
+// ============================================================================
+
+direcaoOperacaoTexto = operacaoAtiva ?
+     f_textoDirecao(operacaoDirecao) :
+     "NENHUMA"
+
+precoEntradaTexto = operacaoAtiva and not na(operacaoPrecoEntrada) ?
+     str.tostring(operacaoPrecoEntrada, format.mintick) :
+     "-"
+
+alvoTexto = operacaoAtiva and not na(operacaoAlvo) ?
+     str.tostring(operacaoAlvo, format.mintick) :
+     "-"
+
+stopTexto = operacaoAtiva and not na(operacaoStop) ?
+     str.tostring(operacaoStop, format.mintick) :
+     "-"
+
+distanciaAlvoAtual = operacaoAtiva and not na(operacaoAlvo) ?
+     math.abs(operacaoAlvo - close) :
+     na
+
+distanciaAlvoATRAtual = operacaoAtiva and atr > 0 and not na(distanciaAlvoAtual) ?
+     distanciaAlvoAtual / atr :
+     na
+
+distanciaAlvoTexto = not na(distanciaAlvoATRAtual) ?
+     str.tostring(distanciaAlvoATRAtual, "#.##") + " ATR" :
+     "-"
+
+barrasTexto = operacaoAtiva ?
+     str.tostring(operacaoBarrasDecorridas) + "/" + str.tostring(expiracaoBarras) :
+     "-"
+
+restanteTexto = operacaoAtiva ?
+     str.tostring(operacaoBarrasRestantes) + " BARRAS" :
+     "-"
+
+expiracaoTexto = usarExpiracao ?
+     str.tostring(expiracaoBarras) + " BARRAS" :
+     "DESATIVADA"
+
+
+// ============================================================================
+// 36 - TEXTO DA PREVISAO
+// ============================================================================
+
+previsaoTexto = "AGUARDAR"
+
+if previsaoValida
+    if direcaoPrincipal == 1
+        previsaoTexto := "COMPRA"
+    else if direcaoPrincipal == -1
+        previsaoTexto := "VENDA"
+
+if operacaoAtiva
+    if operacaoDirecao == 1
+        previsaoTexto := "COMPRA SEGURANDO"
+    else if operacaoDirecao == -1
+        previsaoTexto := "VENDA SEGURANDO"
+
+
+// ============================================================================
+// 37 - TEXTO DO PADRAO
+// ============================================================================
+
+padraoTexto = "SEM PADRAO"
+
+if padraoCompra and padraoVenda
+    padraoTexto := "CONFLITO"
+else if padraoCompra
+    padraoTexto := "COMPRA"
+else if padraoVenda
+    padraoTexto := "VENDA"
+
+
+// ============================================================================
+// 38 - TEXTO MICRO
+// ============================================================================
+
+microTexto = "NEUTRO"
+
+if usarMicro
+    if microValido
+        if microDirecao == 1
+            microTexto := "COMPRA"
+        else if microDirecao == -1
+            microTexto := "VENDA"
+    else
+        microTexto := "SEM CONFIRMACAO"
+else
+    microTexto := "DESATIVADO"
+
+
+// ============================================================================
+// 39 - STATUS DO ALVO
+// ============================================================================
+
+alvoStatusTexto = "SEM ALVO"
+
+if operacaoAtiva
+    if not na(operacaoAlvo)
+        if operacaoDirecao == 1
+            if close >= operacaoAlvo
+                alvoStatusTexto := "ALVO"
+            else
+                alvoStatusTexto := "BUSCANDO"
+
+        else if operacaoDirecao == -1
+            if close <= operacaoAlvo
+                alvoStatusTexto := "ALVO"
+            else
+                alvoStatusTexto := "BUSCANDO"
+
+else if alvoValido
+    alvoStatusTexto := "DISPONIVEL"
+
+
+// ============================================================================
+// 40 - PAINEL
+// ============================================================================
+
+var table painel = table.new(
+     position.middle_left,
+     2,
+     31,
+     border_width=1,
+     frame_width=1)
+
+corFundo = color.new(color.black, 15)
+corCabecalho = color.new(color.black, 0)
+corTexto = color.white
+corCompra = color.lime
+corVenda = color.red
+corAviso = color.yellow
+
+if barstate.islast
+
+    table.cell(
+         painel,
+         0,
+         0,
+         "KVO PRO V40.10",
+         text_color=corTexto,
+         bgcolor=corCabecalho,
+         text_size=size.small)
+
+    table.cell(
+         painel,
+         1,
+         0,
+         "MODO FACIL",
+         text_color=corTexto,
+         bgcolor=corCabecalho,
+         text_size=size.small)
+
+    table.cell(painel, 0, 1, "PREVISAO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         1,
+         previsaoTexto,
+         text_color=f_corDirecao(direcaoPrincipal),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 2, "OPERACAO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         2,
+         direcaoOperacaoTexto,
+         text_color=f_corDirecao(operacaoDirecao),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 3, "STATUS", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         3,
+         operacaoStatus,
+         text_color=operacaoAtiva ? corAviso : corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 4, "EXPIRACAO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         4,
+         expiracaoTexto,
+         text_color=corAviso,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 5, "BARRAS", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         5,
+         barrasTexto,
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 6, "RESTANTE", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         6,
+         restanteTexto,
+         text_color=operacaoAtiva and operacaoBarrasRestantes <= 1 ? corAviso : corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 7, "ENTRADA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         7,
+         precoEntradaTexto,
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 8, "ALVO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         8,
+         alvoTexto,
+         text_color=corCompra,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 9, "STOP", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         9,
+         stopTexto,
+         text_color=corVenda,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 10, "DIST. ALVO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         10,
+         distanciaAlvoTexto,
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 11, "SCORE COMPRA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         11,
+         str.tostring(scoreCompra, "#.0"),
+         text_color=corCompra,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 12, "SCORE VENDA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         12,
+         str.tostring(scoreVenda, "#.0"),
+         text_color=corVenda,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 13, "VANTAGEM", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         13,
+         str.tostring(vantagemPrincipal, "#.0"),
+         text_color=corAviso,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 14, "FORCA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         14,
+         f_textoForca(forcaPrincipal),
+         text_color=f_corQualidade(forcaPrincipal),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 15, "QUALIDADE", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         15,
+         f_textoQualidade(qualidadePrincipal),
+         text_color=f_corQualidade(qualidadePrincipal),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 16, "OPORTUNIDADE", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         16,
+         str.tostring(oportunidadePrincipal, "#.0"),
+         text_color=f_corQualidade(oportunidadePrincipal),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 17, "MICRO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         17,
+         microTexto,
+         text_color=f_corDirecao(microDirecao),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 18, "MICRO COMPRA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         18,
+         str.tostring(microScoreCompra, "#.0"),
+         text_color=corCompra,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 19, "MICRO VENDA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         19,
+         str.tostring(microScoreVenda, "#.0"),
+         text_color=corVenda,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 20, "FORCA MICRO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         20,
+         f_textoForca(microForca),
+         text_color=f_corQualidade(microForca),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 21, "QUALIDADE MICRO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         21,
+         f_textoQualidade(microQualidade),
+         text_color=f_corQualidade(microQualidade),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 22, "ALVO STATUS", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         22,
+         alvoStatusTexto,
+         text_color=corAviso,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 23, "QUALIDADE ALVO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         23,
+         str.tostring(qualidadeAlvo, "#.0"),
+         text_color=f_corQualidade(qualidadeAlvo),
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 24, "PADRAO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         24,
+         padraoTexto,
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 25, "RESISTENCIA", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         25,
+         str.tostring(resistencia, format.mintick),
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 26, "SUPORTE", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         26,
+         str.tostring(suporte, format.mintick),
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 27, "KVO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         27,
+         linhaKVO > linhaKVOSinal ? "POSITIVO" : "NEGATIVO",
+         text_color=linhaKVO > linhaKVOSinal ? corCompra : corVenda,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 28, "RSI", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         28,
+         str.tostring(rsi, "#.0"),
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 29, "ULTIMO RESULTADO", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         29,
+         ultimoResultado,
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+    table.cell(painel, 0, 30, "MOTOR", text_color=corTexto, bgcolor=corFundo)
+    table.cell(
+         painel,
+         1,
+         30,
+         "V40.10",
+         text_color=corTexto,
+         bgcolor=corFundo)
+
+
+// ============================================================================
+// 41 - ALERTAS
+// ============================================================================
+
+alertcondition(
+     novaEntradaCompra,
+     title="KVO PRO V40.10 - ENTRADA COMPRA",
+     message="KVO PRO V40.10 - ENTRADA COMPRA")
+
+alertcondition(
+     novaEntradaVenda,
+     title="KVO PRO V40.10 - ENTRADA VENDA",
+     message="KVO PRO V40.10 - ENTRADA VENDA")
+
+alertcondition(
+     alvoAtingido,
+     title="KVO PRO V40.10 - ALVO ATINGIDO",
+     message="KVO PRO V40.10 - ALVO ATINGIDO")
+
+alertcondition(
+     stopAtingido,
+     title="KVO PRO V40.10 - STOP",
+     message="KVO PRO V40.10 - STOP")
+
+alertcondition(
+     operacaoExpirada,
+     title="KVO PRO V40.10 - EXPIRACAO",
+     message="KVO PRO V40.10 - OPERACAO EXPIRADA")
+
+
+// ============================================================================
+// FIM
+// ============================================================================
