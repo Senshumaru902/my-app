@@ -1,6 +1,5 @@
 //@version=6
-
-strategy("V40.18 - MICRO ROMPIMENTO + MICRO TENDÊNCIA + EXPIRAÇÃO",
+strategy("V40.19 - MICRO ROMPIMENTO + MICRO TENDÊNCIA + EXPIRAÇÃO - DAILY",
      overlay=true,
      pyramiding=0,
      process_orders_on_close=true,
@@ -11,20 +10,17 @@ strategy("V40.18 - MICRO ROMPIMENTO + MICRO TENDÊNCIA + EXPIRAÇÃO",
      default_qty_value=1)
 
 // ============================================================================
-// V40.18
+// V40.19
 //
-// MICRO ROMPIMENTO + MICRO TENDÊNCIA
-// EXPIRAÇÃO CONFIGURÁVEL
-// SINAIS: SOMENTE GRÁFICO DIÁRIO (1D)
+// CORREÇÃO DA V40.18
 //
-// COMPRA  = micro rompimento de alta + micro tendência de alta
-// VENDA   = micro rompimento de baixa + micro tendência de baixa
-// AGUARDA = ausência de confirmação suficiente
-//
-// PAINEL NO LADO ESQUERDO E CENTRALIZADO VERTICALMENTE
-//
-// LETRAS DO PAINEL = BRANCO
-// SINAIS HISTÓRICOS PERMANECEM NO GRÁFICO
+// - CÁLCULO E SINAIS NO GRÁFICO DIÁRIO
+// - COMPRA / VENDA / PRÉ SOMENTE NO 1D
+// - DECISÃO NÃO MOSTRA MAIS "1D"
+// - PREVISÃO NÃO MOSTRA MAIS "1D"
+// - TIMEFRAME SEPARADO DA DECISÃO
+// - PAINEL À ESQUERDA / CENTRO VERTICAL
+// - HISTÓRICO DE SINAIS PRESERVADO
 // ============================================================================
 
 
@@ -32,8 +28,8 @@ strategy("V40.18 - MICRO ROMPIMENTO + MICRO TENDÊNCIA + EXPIRAÇÃO",
 // FUNÇÕES
 // ============================================================================
 
-f_clamp(float x, float minimo, float maximo) =>
-    math.max(minimo, math.min(maximo, x))
+f_clamp(float valor, float minimo, float maximo) =>
+    math.max(minimo, math.min(maximo, valor))
 
 f_pts(bool condicao, float peso) =>
     condicao ? peso : 0.0
@@ -47,29 +43,32 @@ f_num(float valor) =>
 // ============================================================================
 
 string grupoModo =
-     "V40.18 - MODO FÁCIL"
+     "V40.19 - MODO FÁCIL"
 
 string grupoMicro =
-     "V40.18 - MICRO ROMPIMENTO"
+     "V40.19 - MICRO ROMPIMENTO"
 
 string grupoEntrada =
-     "V40.18 - ENTRADA"
+     "V40.19 - ENTRADA"
 
 string grupoExpiracao =
-     "V40.18 - EXPIRAÇÃO"
+     "V40.19 - EXPIRAÇÃO"
 
 string grupoGrafico =
-     "V40.18 - GRÁFICO"
+     "V40.19 - GRÁFICO"
 
 string grupoPainel =
-     "V40.18 - PAINEL"
+     "V40.19 - PAINEL"
 
 
 // ============================================================================
-// RESTRIÇÃO DE SINAL
+// RESTRIÇÃO DO ALGORITMO
+//
+// IMPORTANTE:
+// timeframe.isdaily identifica corretamente qualquer gráfico diário.
 // ============================================================================
 
-bool diario1D = timeframe.period == "D"
+bool diario1D = timeframe.isdaily
 
 
 // ============================================================================
@@ -329,8 +328,7 @@ bool microTendenciaBaixa =
 // ============================================================================
 // MICRO SUPORTE / RESISTÊNCIA
 //
-// O nível usado é formado pelas velas anteriores.
-// A vela atual não participa da formação do nível.
+// A vela atual não participa do cálculo.
 // ============================================================================
 
 float microResistencia =
@@ -532,17 +530,11 @@ bool filtroRSIVenda =
 
 bool filtroADXCompra =
      not usarADX or
-     (
-         adxForte and
-         dmiAlta
-     )
+     (adxForte and dmiAlta)
 
 bool filtroADXVenda =
      not usarADX or
-     (
-         adxForte and
-         dmiBaixa
-     )
+     (adxForte and dmiBaixa)
 
 bool filtroCandleCompra =
      not exigirCandleForca or
@@ -594,6 +586,7 @@ float scoreVenda =
 
 bool candidatoCompra =
      ativar and
+     diario1D and
      scoreCompra >= scoreMin and
      filtroTendenciaCompra and
      filtroMomentumCompra and
@@ -605,6 +598,7 @@ bool candidatoCompra =
 
 bool candidatoVenda =
      ativar and
+     diario1D and
      scoreVenda >= scoreMin and
      filtroTendenciaVenda and
      filtroMomentumVenda and
@@ -647,7 +641,9 @@ bool vendaMelhor =
 
 
 // ============================================================================
-// SINAL SOMENTE NO DIÁRIO 1D
+// SINAL CONFIRMADO
+//
+// SOMENTE NO FECHAMENTO DO CANDLE DIÁRIO.
 // ============================================================================
 
 bool sinalCompra =
@@ -729,8 +725,7 @@ int velasRestantes =
      not na(barraEntrada)
      ? math.max(
          0,
-         expiracao -
-         (bar_index - barraEntrada))
+         expiracao - (bar_index - barraEntrada))
      : na
 
 
@@ -754,6 +749,7 @@ if expiraCompra
     strategy.close(
          "COMPRA MICRO",
          comment="EXPIRAÇÃO")
+
     barraEntrada := na
     direcaoEntrada := 0
 
@@ -761,17 +757,20 @@ if expiraVenda
     strategy.close(
          "VENDA MICRO",
          comment="EXPIRAÇÃO")
+
     barraEntrada := na
     direcaoEntrada := 0
 
 
 // ============================================================================
 // SINAIS HISTÓRICOS
-// SOMENTE NO DIÁRIO 1D
+//
+// IMPORTANTE:
+// Estes sinais somente são desenhados no gráfico Diário.
 // ============================================================================
 
 plotshape(
-     mostrarSinais and diario1D and sinalCompra,
+     mostrarSinais and sinalCompra,
      title="COMPRA MICRO",
      style=shape.labelup,
      location=location.belowbar,
@@ -781,7 +780,7 @@ plotshape(
      textcolor=color.white)
 
 plotshape(
-     mostrarSinais and diario1D and sinalVenda,
+     mostrarSinais and sinalVenda,
      title="VENDA MICRO",
      style=shape.labeldown,
      location=location.abovebar,
@@ -793,7 +792,6 @@ plotshape(
 
 // ============================================================================
 // PRÉ-SINAIS
-// SOMENTE NO DIÁRIO 1D
 // ============================================================================
 
 bool preCompraVisual =
@@ -833,20 +831,17 @@ plotshape(
 
 // ============================================================================
 // CONTADOR VISUAL
-// SOMENTE NO DIÁRIO 1D
 // ============================================================================
 
 var label contadorLabel =
      na
 
 if barstate.islast
-    if not na(contadorLabel)
-        label.delete(
-             contadorLabel)
 
-    if mostrarContador and
-       diario1D and
-       not na(velasRestantes)
+    if not na(contadorLabel)
+        label.delete(contadorLabel)
+
+    if mostrarContador and diario1D and not na(velasRestantes)
 
         string textoContador =
              direcaoEntrada == 1
@@ -855,8 +850,7 @@ if barstate.islast
 
         textoContador +=
              "Expiração: " +
-             str.tostring(
-                 velasRestantes) +
+             str.tostring(velasRestantes) +
              " vela(s)"
 
         contadorLabel :=
@@ -874,18 +868,51 @@ if barstate.islast
 
 
 // ============================================================================
-// TEXTO DO ESTADO
+// TEXTO DA DECISÃO
+//
+// AQUI ESTÁ UMA DAS PRINCIPAIS CORREÇÕES DA V40.18.
+//
+// DECISÃO NÃO REPRESENTA O TIMEFRAME.
+// O TIMEFRAME FICA EM UMA LINHA SEPARADA.
 // ============================================================================
 
-string estadoTxt =
-     estado == 1
-     ? "COMPRA"
-     : estado == -1
-     ? "VENDA"
-     : "AGUARDA"
+string decisaoTxt =
+     "AGUARDA"
 
-if not diario1D
-    estadoTxt := "SOMENTE 1D"
+if diario1D
+
+    if sinalCompra
+        decisaoTxt := "COMPRA"
+
+    else if sinalVenda
+        decisaoTxt := "VENDA"
+
+    else if previsaoCompra >= previsaoVenda + vantagemMin
+        decisaoTxt := "COMPRA"
+
+    else if previsaoVenda >= previsaoCompra + vantagemMin
+        decisaoTxt := "VENDA"
+
+    else
+        decisaoTxt := "AGUARDA"
+
+else
+    decisaoTxt := "AGUARDA"
+
+
+// ============================================================================
+// TEXTO DO TIMEFRAME
+// ============================================================================
+
+string timeframeTxt =
+     diario1D
+     ? "DIÁRIO 1D"
+     : "USE O GRÁFICO 1D"
+
+
+// ============================================================================
+// MICRO TENDÊNCIA
+// ============================================================================
 
 string microTendenciaTxt =
      microTendenciaAlta
@@ -893,6 +920,11 @@ string microTendenciaTxt =
      : microTendenciaBaixa
      ? "BAIXA"
      : "MISTA"
+
+
+// ============================================================================
+// ROMPIMENTO
+// ============================================================================
 
 string rompimentoTxt =
      microRompimentoAlta
@@ -905,6 +937,11 @@ string rompimentoTxt =
      ? "PRÉ-BAIXA"
      : "NENHUM"
 
+
+// ============================================================================
+// MOMENTUM
+// ============================================================================
+
 string momentumTxt =
      momentumAlta
      ? "ALTA"
@@ -912,32 +949,72 @@ string momentumTxt =
      ? "BAIXA"
      : "NEUTRO"
 
+
+// ============================================================================
+// PREVISÃO
+//
+// A previsão continua sendo calculada mesmo quando ainda não existe
+// sinal confirmado.
+// ============================================================================
+
 string previsaoTxt =
-     previsaoCompra >
-     previsaoVenda
+     previsaoCompra > previsaoVenda
      ? "COMPRA " + f_num(previsaoCompra) + "%"
-     : previsaoVenda >
-       previsaoCompra
+     : previsaoVenda > previsaoCompra
      ? "VENDA " + f_num(previsaoVenda) + "%"
      : "EQUILÍBRIO"
 
-if not diario1D
-    previsaoTxt := "SOMENTE 1D"
+
+// ============================================================================
+// DIREÇÃO DA PREVISÃO
+// ============================================================================
+
+color corPrevisao =
+     previsaoCompra > previsaoVenda
+     ? color.green
+     : previsaoVenda > previsaoCompra
+     ? color.red
+     : color.white
+
+
+// ============================================================================
+// COR DA DECISÃO
+// ============================================================================
+
+color corDecisao =
+     decisaoTxt == "COMPRA"
+     ? color.green
+     : decisaoTxt == "VENDA"
+     ? color.red
+     : color.white
+
+
+// ============================================================================
+// SCORE PRINCIPAL
+//
+// Agora o painel mostra o maior score quando ainda não existe
+// um estado confirmado.
+// ============================================================================
+
+float scorePainel =
+     sinalCompra
+     ? scoreCompra
+     : sinalVenda
+     ? scoreVenda
+     : math.max(scoreCompra, scoreVenda)
 
 
 // ============================================================================
 // PAINEL
 //
-// position.middle_left = lado esquerdo, centralizado verticalmente.
-//
-// TODAS AS LETRAS PRINCIPAIS DO PAINEL SÃO BRANCAS.
+// position.middle_left = lado esquerdo / centro vertical.
 // ============================================================================
 
 var table painel =
      table.new(
          position.middle_left,
          2,
-         13,
+         15,
          border_width=1)
 
 if barstate.islast
@@ -945,7 +1022,7 @@ if barstate.islast
     if mostrarPainel
 
         // --------------------------------------------------------------------
-        // LINHA 0 = ESPAÇAMENTO
+        // ESPAÇAMENTO
         // --------------------------------------------------------------------
 
         table.cell(
@@ -973,7 +1050,7 @@ if barstate.islast
              painel,
              0,
              1,
-             "V40.18 1D",
+             "V40.19",
              text_color=color.white,
              bgcolor=color.black)
 
@@ -981,9 +1058,31 @@ if barstate.islast
              painel,
              1,
              1,
-             "MICRO",
+             "SWING",
              text_color=color.white,
              bgcolor=color.black)
+
+
+        // --------------------------------------------------------------------
+        // TIMEFRAME
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             2,
+             "TIMEFRAME",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             2,
+             timeframeTxt,
+             text_color=
+                 diario1D
+                 ? color.green
+                 : color.yellow)
 
 
         // --------------------------------------------------------------------
@@ -993,23 +1092,16 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             2,
+             3,
              "DECISÃO",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             2,
-             estadoTxt,
-             text_color=
-                 not diario1D
-                 ? color.yellow
-                 : estado == 1
-                 ? color.green
-                 : estado == -1
-                 ? color.red
-                 : color.white)
+             3,
+             decisaoTxt,
+             text_color=corDecisao)
 
 
         // --------------------------------------------------------------------
@@ -1019,14 +1111,14 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             3,
+             4,
              "ROMPIMENTO",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             3,
+             4,
              rompimentoTxt,
              text_color=color.white)
 
@@ -1038,14 +1130,14 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             4,
+             5,
              "MICRO TENDÊNCIA",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             4,
+             5,
              microTendenciaTxt,
              text_color=
                  microTendenciaAlta
@@ -1062,23 +1154,16 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             5,
+             6,
              "PREVISÃO",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             5,
+             6,
              previsaoTxt,
-             text_color=
-                 not diario1D
-                 ? color.yellow
-                 : previsaoCompra > previsaoVenda
-                 ? color.green
-                 : previsaoVenda > previsaoCompra
-                 ? color.red
-                 : color.white)
+             text_color=corPrevisao)
 
 
         // --------------------------------------------------------------------
@@ -1088,19 +1173,43 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             6,
+             7,
              "SCORE",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             6,
-             estado == 1
-             ? f_num(scoreCompra)
-             : estado == -1
-             ? f_num(scoreVenda)
-             : "--",
+             7,
+             f_num(scorePainel),
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // CONFLUÊNCIA
+        // --------------------------------------------------------------------
+
+        float confluenciaPainel =
+             previsaoCompra > previsaoVenda
+             ? confluenciaCompra
+             : previsaoVenda > previsaoCompra
+             ? confluenciaVenda
+             : math.max(
+                 confluenciaCompra,
+                 confluenciaVenda)
+
+        table.cell(
+             painel,
+             0,
+             8,
+             "CONFLUÊNCIA",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             8,
+             f_num(confluenciaPainel),
              text_color=color.white)
 
 
@@ -1111,14 +1220,14 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             7,
+             9,
              "RSI",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             7,
+             9,
              f_num(rsi),
              text_color=color.white)
 
@@ -1130,14 +1239,14 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             8,
+             10,
              "ADX",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             8,
+             10,
              f_num(adx),
              text_color=color.white)
 
@@ -1149,14 +1258,14 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             9,
+             11,
              "MOMENTUM",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             9,
+             11,
              momentumTxt,
              text_color=
                  momentumAlta
@@ -1173,16 +1282,15 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             10,
+             12,
              "EXPIRAÇÃO",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             10,
-             str.tostring(expiracao) +
-             " vela(s)",
+             12,
+             str.tostring(expiracao) + " vela(s)",
              text_color=color.yellow)
 
 
@@ -1193,19 +1301,17 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             11,
+             13,
              "CONTADOR",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             11,
+             13,
              na(velasRestantes)
              ? "--"
-             : str.tostring(
-                 velasRestantes) +
-               " vela(s)",
+             : str.tostring(velasRestantes) + " vela(s)",
              text_color=color.white)
 
 
@@ -1216,14 +1322,14 @@ if barstate.islast
         table.cell(
              painel,
              0,
-             12,
+             14,
              "EXECUÇÃO",
              text_color=color.white)
 
         table.cell(
              painel,
              1,
-             12,
+             14,
              executarStrategy
              ? "ATIVA"
              : "DESATIVADA",
@@ -1234,7 +1340,7 @@ if barstate.islast
 
     else
 
-        for linha = 0 to 12
+        for linha = 0 to 14
 
             table.cell(
                  painel,
@@ -1256,26 +1362,30 @@ if barstate.islast
 // ============================================================================
 
 if sinalCompra
-
     alert(
-         "V40.18 | COMPRA | MICRO ROMPIMENTO | " +
-         "Expiração=" +
+         "V40.19 | COMPRA | DIÁRIO 1D | MICRO ROMPIMENTO | " +
+         "Previsão=" +
+         str.tostring(previsaoCompra, "#.0") +
+         "% | Score=" +
+         str.tostring(scoreCompra, "#.0") +
+         " | Expiração=" +
          str.tostring(expiracao) +
-         " vela(s) | Score=" +
-         str.tostring(scoreCompra, "#.0"),
+         " vela(s)",
          alert.freq_once_per_bar_close)
 
 if sinalVenda
-
     alert(
-         "V40.18 | VENDA | MICRO ROMPIMENTO | " +
-         "Expiração=" +
+         "V40.19 | VENDA | DIÁRIO 1D | MICRO ROMPIMENTO | " +
+         "Previsão=" +
+         str.tostring(previsaoVenda, "#.0") +
+         "% | Score=" +
+         str.tostring(scoreVenda, "#.0") +
+         " | Expiração=" +
          str.tostring(expiracao) +
-         " vela(s) | Score=" +
-         str.tostring(scoreVenda, "#.0"),
+         " vela(s)",
          alert.freq_once_per_bar_close)
 
 
 // ============================================================================
-// FIM V40.18
+// FIM V40.19
 // ============================================================================
