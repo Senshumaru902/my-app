@@ -1,0 +1,1391 @@
+//@version=6
+strategy("V40.19 - MICRO ROMPIMENTO + MICRO TENDÊNCIA + EXPIRAÇÃO - DAILY",
+     overlay=true,
+     pyramiding=0,
+     process_orders_on_close=true,
+     calc_on_every_tick=true,
+     calc_on_order_fills=true,
+     initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=1)
+
+// ============================================================================
+// V40.19
+//
+// CORREÇÃO DA V40.18
+//
+// - CÁLCULO E SINAIS NO GRÁFICO DIÁRIO
+// - COMPRA / VENDA / PRÉ SOMENTE NO 1D
+// - DECISÃO NÃO MOSTRA MAIS "1D"
+// - PREVISÃO NÃO MOSTRA MAIS "1D"
+// - TIMEFRAME SEPARADO DA DECISÃO
+// - PAINEL À ESQUERDA / CENTRO VERTICAL
+// - HISTÓRICO DE SINAIS PRESERVADO
+// ============================================================================
+
+
+// ============================================================================
+// FUNÇÕES
+// ============================================================================
+
+f_clamp(float valor, float minimo, float maximo) =>
+    math.max(minimo, math.min(maximo, valor))
+
+f_pts(bool condicao, float peso) =>
+    condicao ? peso : 0.0
+
+f_num(float valor) =>
+    na(valor) ? "--" : str.tostring(valor, "#.0")
+
+
+// ============================================================================
+// GRUPOS
+// ============================================================================
+
+string grupoModo =
+     "V40.19 - MODO FÁCIL"
+
+string grupoMicro =
+     "V40.19 - MICRO ROMPIMENTO"
+
+string grupoEntrada =
+     "V40.19 - ENTRADA"
+
+string grupoExpiracao =
+     "V40.19 - EXPIRAÇÃO"
+
+string grupoGrafico =
+     "V40.19 - GRÁFICO"
+
+string grupoPainel =
+     "V40.19 - PAINEL"
+
+
+// ============================================================================
+// RESTRIÇÃO DO ALGORITMO
+//
+// IMPORTANTE:
+// timeframe.isdaily identifica corretamente qualquer gráfico diário.
+// ============================================================================
+
+bool diario1D = timeframe.isdaily
+
+
+// ============================================================================
+// MODO FÁCIL
+// ============================================================================
+
+bool ativar =
+     input.bool(
+         true,
+         "Ativar algoritmo",
+         group=grupoModo)
+
+string modo =
+     input.string(
+         "Equilibrado",
+         "Modo",
+         options=[
+             "Conservador",
+             "Equilibrado",
+             "Rápido"
+         ],
+         group=grupoModo)
+
+
+// ============================================================================
+// MICRO ROMPIMENTO
+// ============================================================================
+
+int periodoMicro =
+     input.int(
+         5,
+         "Janela do micro rompimento",
+         minval=2,
+         maxval=20,
+         group=grupoMicro)
+
+float margemATR =
+     input.float(
+         0.08,
+         "Margem mínima do rompimento ATR",
+         minval=0.0,
+         maxval=1.0,
+         step=0.01,
+         group=grupoMicro)
+
+bool exigirCandleForca =
+     input.bool(
+         true,
+         "Exigir candle de força",
+         group=grupoMicro)
+
+bool permitirPreRompimento =
+     input.bool(
+         true,
+         "Detectar pré-rompimento",
+         group=grupoMicro)
+
+
+// ============================================================================
+// ENTRADA
+// ============================================================================
+
+bool exigirTendencia =
+     input.bool(
+         true,
+         "Exigir micro tendência",
+         group=grupoEntrada)
+
+bool exigirMomentum =
+     input.bool(
+         true,
+         "Exigir momentum",
+         group=grupoEntrada)
+
+bool usarRSI =
+     input.bool(
+         true,
+         "Usar RSI",
+         group=grupoEntrada)
+
+bool usarADX =
+     input.bool(
+         true,
+         "Usar ADX/DMI",
+         group=grupoEntrada)
+
+int cooldownUsuario =
+     input.int(
+         2,
+         "Cooldown entre entradas",
+         minval=0,
+         maxval=20,
+         group=grupoEntrada)
+
+
+// ============================================================================
+// EXPIRAÇÃO
+// ============================================================================
+
+int expiracao =
+     input.int(
+         2,
+         "Expiração em velas",
+         minval=1,
+         maxval=10,
+         group=grupoExpiracao)
+
+bool executarStrategy =
+     input.bool(
+         true,
+         "Ativar execução",
+         group=grupoExpiracao)
+
+
+// ============================================================================
+// GRÁFICO
+// ============================================================================
+
+bool mostrarSinais =
+     input.bool(
+         true,
+         "Mostrar COMPRA/VENDA",
+         group=grupoGrafico)
+
+bool mostrarPreSinais =
+     input.bool(
+         true,
+         "Mostrar pré-sinais",
+         group=grupoGrafico)
+
+bool mostrarContador =
+     input.bool(
+         true,
+         "Mostrar contador",
+         group=grupoGrafico)
+
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+
+bool mostrarPainel =
+     input.bool(
+         true,
+         "Mostrar painel",
+         group=grupoPainel)
+
+
+// ============================================================================
+// PERFIL DINÂMICO
+// ============================================================================
+
+float scoreMin =
+     modo == "Conservador"
+     ? 76.0
+     : modo == "Rápido"
+     ? 60.0
+     : 68.0
+
+float vantagemMin =
+     modo == "Conservador"
+     ? 12.0
+     : modo == "Rápido"
+     ? 5.0
+     : 8.0
+
+int cooldownFinal =
+     modo == "Conservador"
+     ? math.max(cooldownUsuario, 4)
+     : modo == "Rápido"
+     ? math.min(cooldownUsuario, 1)
+     : cooldownUsuario
+
+
+// ============================================================================
+// INDICADORES
+// ============================================================================
+
+float ema5 =
+     ta.ema(close, 5)
+
+float ema9 =
+     ta.ema(close, 9)
+
+float ema21 =
+     ta.ema(close, 21)
+
+float rsi =
+     ta.rsi(close, 7)
+
+float atr =
+     ta.atr(14)
+
+[diPlus, diMinus, adx] =
+     ta.dmi(14, 14)
+
+float rangeAtual =
+     high - low
+
+float mediaRange =
+     ta.sma(rangeAtual, 20)
+
+float corpo =
+     math.abs(close - open)
+
+float corpoPercentual =
+     rangeAtual > 0
+     ? corpo / rangeAtual
+     : 0.0
+
+float impulso =
+     atr > 0
+     ? (close - close[1]) / atr
+     : 0.0
+
+float aceleracao =
+     impulso - nz(impulso[1], 0.0)
+
+
+// ============================================================================
+// MICRO TENDÊNCIA
+// ============================================================================
+
+bool microAlta =
+     ema5 > ema9 and
+     ema9 > ema21
+
+bool microBaixa =
+     ema5 < ema9 and
+     ema9 < ema21
+
+bool precoAlta =
+     close > ema5
+
+bool precoBaixa =
+     close < ema5
+
+bool inclinacaoAlta =
+     ema5 > ema5[1] and
+     ema9 > ema9[1]
+
+bool inclinacaoBaixa =
+     ema5 < ema5[1] and
+     ema9 < ema9[1]
+
+bool microTendenciaAlta =
+     microAlta and
+     precoAlta and
+     inclinacaoAlta
+
+bool microTendenciaBaixa =
+     microBaixa and
+     precoBaixa and
+     inclinacaoBaixa
+
+
+// ============================================================================
+// MICRO SUPORTE / RESISTÊNCIA
+//
+// A vela atual não participa do cálculo.
+// ============================================================================
+
+float microResistencia =
+     ta.highest(high, periodoMicro)[1]
+
+float microSuporte =
+     ta.lowest(low, periodoMicro)[1]
+
+
+// ============================================================================
+// MICRO ROMPIMENTO
+// ============================================================================
+
+float distanciaRompAlta =
+     atr > 0 and not na(microResistencia)
+     ? (close - microResistencia) / atr
+     : 0.0
+
+float distanciaRompBaixa =
+     atr > 0 and not na(microSuporte)
+     ? (microSuporte - close) / atr
+     : 0.0
+
+bool microRompimentoAlta =
+     not na(microResistencia) and
+     close > microResistencia and
+     distanciaRompAlta >= margemATR
+
+bool microRompimentoBaixa =
+     not na(microSuporte) and
+     close < microSuporte and
+     distanciaRompBaixa >= margemATR
+
+
+// ============================================================================
+// PRÉ-ROMPIMENTO
+// ============================================================================
+
+bool preRompimentoAlta =
+     permitirPreRompimento and
+     not na(microResistencia) and
+     atr > 0 and
+     high >= microResistencia - atr * 0.20 and
+     close > open and
+     close >= close[1]
+
+bool preRompimentoBaixa =
+     permitirPreRompimento and
+     not na(microSuporte) and
+     atr > 0 and
+     low <= microSuporte + atr * 0.20 and
+     close < open and
+     close <= close[1]
+
+
+// ============================================================================
+// CANDLE DE FORÇA
+// ============================================================================
+
+bool candleForcaAlta =
+     close > open and
+     corpoPercentual >= 0.55 and
+     rangeAtual >= mediaRange * 0.80
+
+bool candleForcaBaixa =
+     close < open and
+     corpoPercentual >= 0.55 and
+     rangeAtual >= mediaRange * 0.80
+
+
+// ============================================================================
+// MOMENTUM
+// ============================================================================
+
+bool momentumAlta =
+     impulso > 0 and
+     aceleracao >= -0.10
+
+bool momentumBaixa =
+     impulso < 0 and
+     aceleracao <= 0.10
+
+
+// ============================================================================
+// RSI
+// ============================================================================
+
+bool rsiAlta =
+     rsi >= 52
+
+bool rsiBaixa =
+     rsi <= 48
+
+
+// ============================================================================
+// DMI / ADX
+// ============================================================================
+
+bool dmiAlta =
+     diPlus > diMinus
+
+bool dmiBaixa =
+     diMinus > diPlus
+
+bool adxForte =
+     adx >= 18
+
+
+// ============================================================================
+// CONFLUÊNCIA
+// ============================================================================
+
+float confluenciaCompra =
+     f_clamp(
+         f_pts(microTendenciaAlta, 25.0) +
+         f_pts(microRompimentoAlta, 25.0) +
+         f_pts(momentumAlta, 15.0) +
+         f_pts(rsiAlta, 10.0) +
+         f_pts(dmiAlta, 10.0) +
+         f_pts(adxForte, 5.0) +
+         f_pts(candleForcaAlta, 10.0),
+         0.0,
+         100.0)
+
+float confluenciaVenda =
+     f_clamp(
+         f_pts(microTendenciaBaixa, 25.0) +
+         f_pts(microRompimentoBaixa, 25.0) +
+         f_pts(momentumBaixa, 15.0) +
+         f_pts(rsiBaixa, 10.0) +
+         f_pts(dmiBaixa, 10.0) +
+         f_pts(adxForte, 5.0) +
+         f_pts(candleForcaBaixa, 10.0),
+         0.0,
+         100.0)
+
+
+// ============================================================================
+// PREVISÃO DA PRÓXIMA MOVIMENTAÇÃO
+// ============================================================================
+
+float previsaoCompra =
+     f_clamp(
+         f_pts(microTendenciaAlta, 25.0) +
+         f_pts(microRompimentoAlta, 25.0) +
+         f_pts(close > ema5, 10.0) +
+         f_pts(ema5 > ema9, 10.0) +
+         f_pts(ema9 > ema21, 10.0) +
+         f_pts(momentumAlta, 10.0) +
+         f_pts(rsiAlta, 5.0) +
+         f_pts(dmiAlta, 5.0),
+         0.0,
+         100.0)
+
+float previsaoVenda =
+     f_clamp(
+         f_pts(microTendenciaBaixa, 25.0) +
+         f_pts(microRompimentoBaixa, 25.0) +
+         f_pts(close < ema5, 10.0) +
+         f_pts(ema5 < ema9, 10.0) +
+         f_pts(ema9 < ema21, 10.0) +
+         f_pts(momentumBaixa, 10.0) +
+         f_pts(rsiBaixa, 5.0) +
+         f_pts(dmiBaixa, 5.0),
+         0.0,
+         100.0)
+
+float vantagem =
+     previsaoCompra - previsaoVenda
+
+
+// ============================================================================
+// FILTROS
+// ============================================================================
+
+bool filtroTendenciaCompra =
+     not exigirTendencia or
+     microTendenciaAlta
+
+bool filtroTendenciaVenda =
+     not exigirTendencia or
+     microTendenciaBaixa
+
+bool filtroMomentumCompra =
+     not exigirMomentum or
+     momentumAlta
+
+bool filtroMomentumVenda =
+     not exigirMomentum or
+     momentumBaixa
+
+bool filtroRSICompra =
+     not usarRSI or
+     rsiAlta
+
+bool filtroRSIVenda =
+     not usarRSI or
+     rsiBaixa
+
+bool filtroADXCompra =
+     not usarADX or
+     (adxForte and dmiAlta)
+
+bool filtroADXVenda =
+     not usarADX or
+     (adxForte and dmiBaixa)
+
+bool filtroCandleCompra =
+     not exigirCandleForca or
+     candleForcaAlta
+
+bool filtroCandleVenda =
+     not exigirCandleForca or
+     candleForcaBaixa
+
+
+// ============================================================================
+// SCORE FINAL
+// ============================================================================
+
+float scoreCompra =
+     f_clamp(
+         f_pts(microTendenciaAlta, 20.0) +
+         f_pts(microRompimentoAlta, 25.0) +
+         f_pts(momentumAlta, 10.0) +
+         f_pts(rsiAlta, 10.0) +
+         f_pts(dmiAlta, 10.0) +
+         f_pts(adxForte, 5.0) +
+         f_pts(candleForcaAlta, 10.0) +
+         f_pts(
+             previsaoCompra >= previsaoVenda + vantagemMin,
+             10.0),
+         0.0,
+         100.0)
+
+float scoreVenda =
+     f_clamp(
+         f_pts(microTendenciaBaixa, 20.0) +
+         f_pts(microRompimentoBaixa, 25.0) +
+         f_pts(momentumBaixa, 10.0) +
+         f_pts(rsiBaixa, 10.0) +
+         f_pts(dmiBaixa, 10.0) +
+         f_pts(adxForte, 5.0) +
+         f_pts(candleForcaBaixa, 10.0) +
+         f_pts(
+             previsaoVenda >= previsaoCompra + vantagemMin,
+             10.0),
+         0.0,
+         100.0)
+
+
+// ============================================================================
+// CANDIDATOS
+// ============================================================================
+
+bool candidatoCompra =
+     ativar and
+     diario1D and
+     scoreCompra >= scoreMin and
+     filtroTendenciaCompra and
+     filtroMomentumCompra and
+     filtroRSICompra and
+     filtroADXCompra and
+     filtroCandleCompra and
+     microRompimentoAlta and
+     previsaoCompra >= previsaoVenda + vantagemMin
+
+bool candidatoVenda =
+     ativar and
+     diario1D and
+     scoreVenda >= scoreMin and
+     filtroTendenciaVenda and
+     filtroMomentumVenda and
+     filtroRSIVenda and
+     filtroADXVenda and
+     filtroCandleVenda and
+     microRompimentoBaixa and
+     previsaoVenda >= previsaoCompra + vantagemMin
+
+
+// ============================================================================
+// COOLDOWN
+// ============================================================================
+
+var int ultimaEntrada =
+     na
+
+bool cooldownLivre =
+     na(ultimaEntrada) or
+     bar_index - ultimaEntrada > cooldownFinal
+
+
+// ============================================================================
+// ESCOLHA FINAL
+// ============================================================================
+
+bool compraMelhor =
+     candidatoCompra and
+     (
+         not candidatoVenda or
+         scoreCompra > scoreVenda
+     )
+
+bool vendaMelhor =
+     candidatoVenda and
+     (
+         not candidatoCompra or
+         scoreVenda > scoreCompra
+     )
+
+
+// ============================================================================
+// SINAL CONFIRMADO
+//
+// SOMENTE NO FECHAMENTO DO CANDLE DIÁRIO.
+// ============================================================================
+
+bool sinalCompra =
+     diario1D and
+     compraMelhor and
+     cooldownLivre and
+     barstate.isconfirmed
+
+bool sinalVenda =
+     diario1D and
+     vendaMelhor and
+     cooldownLivre and
+     barstate.isconfirmed
+
+
+// ============================================================================
+// ESTADO
+// ============================================================================
+
+var int estado =
+     0
+
+if sinalCompra
+    estado := 1
+    ultimaEntrada := bar_index
+
+if sinalVenda
+    estado := -1
+    ultimaEntrada := bar_index
+
+
+// ============================================================================
+// EXECUÇÃO
+// ============================================================================
+
+bool executarCompra =
+     sinalCompra and
+     executarStrategy
+
+bool executarVenda =
+     sinalVenda and
+     executarStrategy
+
+if executarCompra
+    strategy.entry(
+         "COMPRA MICRO",
+         strategy.long)
+
+if executarVenda
+    strategy.entry(
+         "VENDA MICRO",
+         strategy.short)
+
+
+// ============================================================================
+// CONTROLE DA EXPIRAÇÃO
+// ============================================================================
+
+var int barraEntrada =
+     na
+
+var int direcaoEntrada =
+     0
+
+if executarCompra
+    barraEntrada := bar_index
+    direcaoEntrada := 1
+
+if executarVenda
+    barraEntrada := bar_index
+    direcaoEntrada := -1
+
+
+// ============================================================================
+// CONTADOR DE EXPIRAÇÃO
+// ============================================================================
+
+int velasRestantes =
+     not na(barraEntrada)
+     ? math.max(
+         0,
+         expiracao - (bar_index - barraEntrada))
+     : na
+
+
+// ============================================================================
+// EXPIRAÇÃO
+// ============================================================================
+
+bool expiraCompra =
+     strategy.position_size > 0 and
+     direcaoEntrada == 1 and
+     not na(barraEntrada) and
+     bar_index - barraEntrada >= expiracao
+
+bool expiraVenda =
+     strategy.position_size < 0 and
+     direcaoEntrada == -1 and
+     not na(barraEntrada) and
+     bar_index - barraEntrada >= expiracao
+
+if expiraCompra
+    strategy.close(
+         "COMPRA MICRO",
+         comment="EXPIRAÇÃO")
+
+    barraEntrada := na
+    direcaoEntrada := 0
+
+if expiraVenda
+    strategy.close(
+         "VENDA MICRO",
+         comment="EXPIRAÇÃO")
+
+    barraEntrada := na
+    direcaoEntrada := 0
+
+
+// ============================================================================
+// SINAIS HISTÓRICOS
+//
+// IMPORTANTE:
+// Estes sinais somente são desenhados no gráfico Diário.
+// ============================================================================
+
+plotshape(
+     mostrarSinais and sinalCompra,
+     title="COMPRA MICRO",
+     style=shape.labelup,
+     location=location.belowbar,
+     text="COMPRA",
+     size=size.small,
+     color=color.green,
+     textcolor=color.white)
+
+plotshape(
+     mostrarSinais and sinalVenda,
+     title="VENDA MICRO",
+     style=shape.labeldown,
+     location=location.abovebar,
+     text="VENDA",
+     size=size.small,
+     color=color.red,
+     textcolor=color.white)
+
+
+// ============================================================================
+// PRÉ-SINAIS
+// ============================================================================
+
+bool preCompraVisual =
+     diario1D and
+     mostrarPreSinais and
+     preRompimentoAlta and
+     microTendenciaAlta and
+     not sinalCompra
+
+bool preVendaVisual =
+     diario1D and
+     mostrarPreSinais and
+     preRompimentoBaixa and
+     microTendenciaBaixa and
+     not sinalVenda
+
+plotshape(
+     preCompraVisual,
+     title="PRÉ-COMPRA MICRO",
+     style=shape.triangleup,
+     location=location.belowbar,
+     text="PRÉ",
+     size=size.tiny,
+     color=color.new(color.green, 35),
+     textcolor=color.white)
+
+plotshape(
+     preVendaVisual,
+     title="PRÉ-VENDA MICRO",
+     style=shape.triangledown,
+     location=location.abovebar,
+     text="PRÉ",
+     size=size.tiny,
+     color=color.new(color.red, 35),
+     textcolor=color.white)
+
+
+// ============================================================================
+// CONTADOR VISUAL
+// ============================================================================
+
+var label contadorLabel =
+     na
+
+if barstate.islast
+
+    if not na(contadorLabel)
+        label.delete(contadorLabel)
+
+    if mostrarContador and diario1D and not na(velasRestantes)
+
+        string textoContador =
+             direcaoEntrada == 1
+             ? "COMPRA\n"
+             : "VENDA\n"
+
+        textoContador +=
+             "Expiração: " +
+             str.tostring(velasRestantes) +
+             " vela(s)"
+
+        contadorLabel :=
+             label.new(
+                 bar_index,
+                 high + atr * 0.30,
+                 textoContador,
+                 style=label.style_label_down,
+                 color=
+                     direcaoEntrada == 1
+                     ? color.green
+                     : color.red,
+                 textcolor=color.white,
+                 size=size.small)
+
+
+// ============================================================================
+// TEXTO DA DECISÃO
+//
+// AQUI ESTÁ UMA DAS PRINCIPAIS CORREÇÕES DA V40.18.
+//
+// DECISÃO NÃO REPRESENTA O TIMEFRAME.
+// O TIMEFRAME FICA EM UMA LINHA SEPARADA.
+// ============================================================================
+
+string decisaoTxt =
+     "AGUARDA"
+
+if diario1D
+
+    if sinalCompra
+        decisaoTxt := "COMPRA"
+
+    else if sinalVenda
+        decisaoTxt := "VENDA"
+
+    else if previsaoCompra >= previsaoVenda + vantagemMin
+        decisaoTxt := "COMPRA"
+
+    else if previsaoVenda >= previsaoCompra + vantagemMin
+        decisaoTxt := "VENDA"
+
+    else
+        decisaoTxt := "AGUARDA"
+
+else
+    decisaoTxt := "AGUARDA"
+
+
+// ============================================================================
+// TEXTO DO TIMEFRAME
+// ============================================================================
+
+string timeframeTxt =
+     diario1D
+     ? "DIÁRIO 1D"
+     : "USE O GRÁFICO 1D"
+
+
+// ============================================================================
+// MICRO TENDÊNCIA
+// ============================================================================
+
+string microTendenciaTxt =
+     microTendenciaAlta
+     ? "ALTA"
+     : microTendenciaBaixa
+     ? "BAIXA"
+     : "MISTA"
+
+
+// ============================================================================
+// ROMPIMENTO
+// ============================================================================
+
+string rompimentoTxt =
+     microRompimentoAlta
+     ? "ALTA ↑"
+     : microRompimentoBaixa
+     ? "BAIXA ↓"
+     : preRompimentoAlta
+     ? "PRÉ-ALTA"
+     : preRompimentoBaixa
+     ? "PRÉ-BAIXA"
+     : "NENHUM"
+
+
+// ============================================================================
+// MOMENTUM
+// ============================================================================
+
+string momentumTxt =
+     momentumAlta
+     ? "ALTA"
+     : momentumBaixa
+     ? "BAIXA"
+     : "NEUTRO"
+
+
+// ============================================================================
+// PREVISÃO
+//
+// A previsão continua sendo calculada mesmo quando ainda não existe
+// sinal confirmado.
+// ============================================================================
+
+string previsaoTxt =
+     previsaoCompra > previsaoVenda
+     ? "COMPRA " + f_num(previsaoCompra) + "%"
+     : previsaoVenda > previsaoCompra
+     ? "VENDA " + f_num(previsaoVenda) + "%"
+     : "EQUILÍBRIO"
+
+
+// ============================================================================
+// DIREÇÃO DA PREVISÃO
+// ============================================================================
+
+color corPrevisao =
+     previsaoCompra > previsaoVenda
+     ? color.green
+     : previsaoVenda > previsaoCompra
+     ? color.red
+     : color.white
+
+
+// ============================================================================
+// COR DA DECISÃO
+// ============================================================================
+
+color corDecisao =
+     decisaoTxt == "COMPRA"
+     ? color.green
+     : decisaoTxt == "VENDA"
+     ? color.red
+     : color.white
+
+
+// ============================================================================
+// SCORE PRINCIPAL
+//
+// Agora o painel mostra o maior score quando ainda não existe
+// um estado confirmado.
+// ============================================================================
+
+float scorePainel =
+     sinalCompra
+     ? scoreCompra
+     : sinalVenda
+     ? scoreVenda
+     : math.max(scoreCompra, scoreVenda)
+
+
+// ============================================================================
+// PAINEL
+//
+// position.middle_left = lado esquerdo / centro vertical.
+// ============================================================================
+
+var table painel =
+     table.new(
+         position.middle_left,
+         2,
+         15,
+         border_width=1)
+
+if barstate.islast
+
+    if mostrarPainel
+
+        // --------------------------------------------------------------------
+        // ESPAÇAMENTO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             0,
+             "",
+             text_color=color.white,
+             bgcolor=color.new(color.black, 100))
+
+        table.cell(
+             painel,
+             1,
+             0,
+             "",
+             text_color=color.white,
+             bgcolor=color.new(color.black, 100))
+
+
+        // --------------------------------------------------------------------
+        // CABEÇALHO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             1,
+             "V40.19",
+             text_color=color.white,
+             bgcolor=color.black)
+
+        table.cell(
+             painel,
+             1,
+             1,
+             "SWING",
+             text_color=color.white,
+             bgcolor=color.black)
+
+
+        // --------------------------------------------------------------------
+        // TIMEFRAME
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             2,
+             "TIMEFRAME",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             2,
+             timeframeTxt,
+             text_color=
+                 diario1D
+                 ? color.green
+                 : color.yellow)
+
+
+        // --------------------------------------------------------------------
+        // DECISÃO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             3,
+             "DECISÃO",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             3,
+             decisaoTxt,
+             text_color=corDecisao)
+
+
+        // --------------------------------------------------------------------
+        // ROMPIMENTO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             4,
+             "ROMPIMENTO",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             4,
+             rompimentoTxt,
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // MICRO TENDÊNCIA
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             5,
+             "MICRO TENDÊNCIA",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             5,
+             microTendenciaTxt,
+             text_color=
+                 microTendenciaAlta
+                 ? color.green
+                 : microTendenciaBaixa
+                 ? color.red
+                 : color.white)
+
+
+        // --------------------------------------------------------------------
+        // PREVISÃO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             6,
+             "PREVISÃO",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             6,
+             previsaoTxt,
+             text_color=corPrevisao)
+
+
+        // --------------------------------------------------------------------
+        // SCORE
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             7,
+             "SCORE",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             7,
+             f_num(scorePainel),
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // CONFLUÊNCIA
+        // --------------------------------------------------------------------
+
+        float confluenciaPainel =
+             previsaoCompra > previsaoVenda
+             ? confluenciaCompra
+             : previsaoVenda > previsaoCompra
+             ? confluenciaVenda
+             : math.max(
+                 confluenciaCompra,
+                 confluenciaVenda)
+
+        table.cell(
+             painel,
+             0,
+             8,
+             "CONFLUÊNCIA",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             8,
+             f_num(confluenciaPainel),
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // RSI
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             9,
+             "RSI",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             9,
+             f_num(rsi),
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // ADX
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             10,
+             "ADX",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             10,
+             f_num(adx),
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // MOMENTUM
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             11,
+             "MOMENTUM",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             11,
+             momentumTxt,
+             text_color=
+                 momentumAlta
+                 ? color.green
+                 : momentumBaixa
+                 ? color.red
+                 : color.white)
+
+
+        // --------------------------------------------------------------------
+        // EXPIRAÇÃO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             12,
+             "EXPIRAÇÃO",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             12,
+             str.tostring(expiracao) + " vela(s)",
+             text_color=color.yellow)
+
+
+        // --------------------------------------------------------------------
+        // CONTADOR
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             13,
+             "CONTADOR",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             13,
+             na(velasRestantes)
+             ? "--"
+             : str.tostring(velasRestantes) + " vela(s)",
+             text_color=color.white)
+
+
+        // --------------------------------------------------------------------
+        // EXECUÇÃO
+        // --------------------------------------------------------------------
+
+        table.cell(
+             painel,
+             0,
+             14,
+             "EXECUÇÃO",
+             text_color=color.white)
+
+        table.cell(
+             painel,
+             1,
+             14,
+             executarStrategy
+             ? "ATIVA"
+             : "DESATIVADA",
+             text_color=
+                 executarStrategy
+                 ? color.green
+                 : color.white)
+
+    else
+
+        for linha = 0 to 14
+
+            table.cell(
+                 painel,
+                 0,
+                 linha,
+                 "",
+                 text_color=color.white)
+
+            table.cell(
+                 painel,
+                 1,
+                 linha,
+                 "",
+                 text_color=color.white)
+
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+
+if sinalCompra
+    alert(
+         "V40.19 | COMPRA | DIÁRIO 1D | MICRO ROMPIMENTO | " +
+         "Previsão=" +
+         str.tostring(previsaoCompra, "#.0") +
+         "% | Score=" +
+         str.tostring(scoreCompra, "#.0") +
+         " | Expiração=" +
+         str.tostring(expiracao) +
+         " vela(s)",
+         alert.freq_once_per_bar_close)
+
+if sinalVenda
+    alert(
+         "V40.19 | VENDA | DIÁRIO 1D | MICRO ROMPIMENTO | " +
+         "Previsão=" +
+         str.tostring(previsaoVenda, "#.0") +
+         "% | Score=" +
+         str.tostring(scoreVenda, "#.0") +
+         " | Expiração=" +
+         str.tostring(expiracao) +
+         " vela(s)",
+         alert.freq_once_per_bar_close)
+
+
+// ============================================================================
+// FIM V40.19
+// ============================================================================
