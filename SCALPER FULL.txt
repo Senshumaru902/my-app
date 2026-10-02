@@ -1,0 +1,1674 @@
+//@version=6
+
+strategy("KVO  PRO V41.6 - BREAKOUT PATTERN", overlay=true, pyramiding=0,  process_orders_on_close=true, calc_on_every_tick=true,  calc_on_order_fills=false, initial_capital=100,  default_qty_type=strategy.percent_of_equity, default_qty_value=1, max_labels_count=500)
+
+//====================================================
+
+// FUNCOES
+
+//====================================================
+
+f_clamp(float x, float mn, float mx) =>
+
+    x < mn ? mn : x > mx ? mx : x
+
+f_abs(float x) =>
+
+    x < 0.0 ? -x : x
+
+f_max(float a, float b) =>
+
+    a > b ? a : b
+
+f_min(float a, float b) =>
+
+    a < b ? a : b
+
+f_div(float a, float b) =>
+
+    b == 0.0 ? 0.0 : a / b
+
+//====================================================
+
+// EXECUCAO
+
+//====================================================
+
+gExec = "EXECUCAO"
+
+ativar = input.bool(true, "Ativar algoritmo", group=gExec)
+
+modo = input.string("Equilibrado", "Modo", options=["Conservador", "Equilibrado", "Facil"], group=gExec)
+
+executarOrdens = input.bool(false, "Executar ordens", group=gExec)
+
+expiracao = input.int(1, "Expiracao em barras", minval=1, maxval=20, group=gExec)
+
+cooldownInput = input.int(3, "Cooldown", minval=0, maxval=20, group=gExec)
+
+somenteConfirmada = input.bool(true, "Somente candle confirmado", group=gExec)
+
+//====================================================
+
+// QUALIDADE
+
+//====================================================
+
+gQual = "QUALIDADE"
+
+scoreBase = input.float(65.0, "Score minimo", minval=40.0, maxval=100.0, step=1.0, group=gQual)
+
+vantagemBase = input.float(8.0, "Vantagem minima", minval=0.0, maxval=50.0, step=1.0, group=gQual)
+
+//====================================================
+
+// ROMPIMENTO
+
+//====================================================
+
+gBreak = "ROMPIMENTO"
+
+periodoBreak = input.int(20, "Periodo estrutural", minval=5, maxval=100, group=gBreak)
+
+margemATR = input.float(0.05, "Margem ATR", minval=0.0, maxval=1.0, step=0.01, group=gBreak)
+
+forcaMinBreak = input.float(0.15, "Forca minima", minval=0.0, maxval=5.0, step=0.05, group=gBreak)
+
+usarReteste = input.bool(true, "Usar reteste", group=gBreak)
+
+janelaReteste = input.int(5, "Janela reteste", minval=1, maxval=20, group=gBreak)
+
+toleranciaReteste = input.float(0.20, "Tolerancia reteste ATR", minval=0.0, maxval=1.0, step=0.01, group=gBreak)
+
+//====================================================
+
+// FIGURAS
+
+//====================================================
+
+gFig = "FIGURAS"
+
+usarFiguras = input.bool(true, "Usar figuras", group=gFig)
+
+exigirFigura = input.bool(false, "Exigir figura compativel", group=gFig)
+
+pivotLeft = input.int(3, "Pivot esquerda", minval=1, maxval=10, group=gFig)
+
+pivotRight = input.int(3, "Pivot direita", minval=1, maxval=10, group=gFig)
+
+toleranciaFiguraATR = input.float(0.30, "Tolerancia geometrica ATR", minval=0.05, maxval=2.0, step=0.05, group=gFig)
+
+//====================================================
+
+// CANDLE
+
+//====================================================
+
+gCandle = "CANDLE"
+
+exigirCandle = input.bool(false, "Exigir candle compativel", group=gCandle)
+
+wickMultiplier = input.float(1.5, "Multiplicador wick", minval=0.5, maxval=5.0, step=0.1, group=gCandle)
+
+//====================================================
+
+// INDICADORES
+
+//====================================================
+
+gInd = "INDICADORES"
+
+usarEMA = input.bool(true, "Usar EMA", group=gInd)
+
+usarRSI = input.bool(true, "Usar RSI", group=gInd)
+
+usarDMI = input.bool(true, "Usar DMI / ADX", group=gInd)
+
+usarVolume = input.bool(true, "Usar volume", group=gInd)
+
+usarATR = input.bool(true, "Usar ATR", group=gInd)
+
+bloquearLateral = input.bool(true, "Bloquear lateralizacao", group=gInd)
+
+//====================================================
+
+// MOMENTUM
+
+//====================================================
+
+gMom = "MOMENTUM"
+
+usarMomentum = input.bool(true, "Usar momentum", group=gMom)
+
+momentumObrigatorio = input.bool(false, "Momentum obrigatorio", group=gMom)
+
+periodoMomentum = input.int(5, "Periodo momentum", minval=1, maxval=30, group=gMom)
+
+momentumMinATR = input.float(0.05, "Momentum minimo ATR", minval=0.0, maxval=2.0, step=0.01, group=gMom)
+
+//====================================================
+
+// KVO
+
+//====================================================
+
+gKVO = "KVO"
+
+usarKVO = input.bool(true, "Usar KVO", group=gKVO)
+
+kvoObrigatorio = input.bool(false, "KVO obrigatorio", group=gKVO)
+
+kvoFast = input.int(34, "KVO rapido", minval=2, maxval=100, group=gKVO)
+
+kvoSlow = input.int(55, "KVO lento", minval=3, maxval=150, group=gKVO)
+
+kvoSignal = input.int(13, "KVO sinal", minval=2, maxval=50, group=gKVO)
+
+//====================================================
+
+// DIVERGENCIA
+
+//====================================================
+
+gDiv = "DIVERGENCIA"
+
+usarDivergencia = input.bool(true, "Usar divergencias", group=gDiv)
+
+usarDivRSI = input.bool(true, "Divergencia RSI", group=gDiv)
+
+usarDivKVO = input.bool(true, "Divergencia KVO", group=gDiv)
+
+usarDivMomentum = input.bool(true, "Divergencia Momentum", group=gDiv)
+
+minDivConfluencia = input.int(1, "Minimo divergencias", minval=0, maxval=3, group=gDiv)
+
+//====================================================
+
+// ML
+
+//====================================================
+
+gML = "ML ADAPTATIVO"
+
+usarML = input.bool(true, "Usar ML adaptativo", group=gML)
+
+taxaML = input.float(0.05, "Taxa aprendizado", minval=0.01, maxval=0.50, step=0.01, group=gML)
+
+mlMin = input.float(0.55, "ML minimo", minval=0.50, maxval=0.95, step=0.01, group=gML)
+
+//====================================================
+
+// PAINEL
+
+//====================================================
+
+gPainel = "PAINEL"
+
+mostrarPainel = input.bool(true, "Mostrar painel", group=gPainel)
+
+//====================================================
+
+// AJUSTES
+
+//====================================================
+
+float scoreMinFinal = scoreBase
+
+float vantagemMinFinal = vantagemBase
+
+float forcaBreakFinal = forcaMinBreak
+
+float adxMinFinal = 18.0
+
+int cooldownFinal = cooldownInput
+
+if modo == "Conservador"
+
+    scoreMinFinal := scoreBase + 8.0
+
+    vantagemMinFinal := vantagemBase + 4.0
+
+    forcaBreakFinal := forcaMinBreak + 0.10
+
+    adxMinFinal := 22.0
+
+    if cooldownInput > 5
+
+        cooldownFinal := cooldownInput
+
+    else
+
+        cooldownFinal := 5
+
+if modo == "Equilibrado"
+
+    scoreMinFinal := scoreBase
+
+    vantagemMinFinal := vantagemBase
+
+    forcaBreakFinal := forcaMinBreak
+
+    adxMinFinal := 18.0
+
+    if cooldownInput > 3
+
+        cooldownFinal := cooldownInput
+
+    else
+
+        cooldownFinal := 3
+
+if modo == "Facil"
+
+    scoreMinFinal := scoreBase - 8.0
+
+    vantagemMinFinal := vantagemBase - 3.0
+
+    forcaBreakFinal := forcaMinBreak - 0.05
+
+    adxMinFinal := 15.0
+
+    if cooldownInput > 1
+
+        cooldownFinal := cooldownInput
+
+    else
+
+        cooldownFinal := 1
+
+scoreMinFinal := f_clamp(scoreMinFinal, 40.0, 100.0)
+
+vantagemMinFinal := f_clamp(vantagemMinFinal, 0.0, 50.0)
+
+forcaBreakFinal := f_clamp(forcaBreakFinal, 0.0, 5.0)
+
+//====================================================
+
+// INDICADORES
+
+//====================================================
+
+float ema5 = ta.ema(close, 5)
+
+float ema9 = ta.ema(close, 9)
+
+float ema13 = ta.ema(close, 13)
+
+float ema21 = ta.ema(close, 21)
+
+float ema50 = ta.ema(close, 50)
+
+float rsi7 = ta.rsi(close, 7)
+
+float atr7 = ta.atr(7)
+
+float atr14 = ta.atr(14)
+
+float atrSafe = f_max(nz(atr14), syminfo.mintick)
+
+[diPlus, diMinus, adx] = ta.dmi(14, 14)
+
+float volumeSMA20 = ta.sma(volume, 20)
+
+float atrSMA20 = ta.sma(atr14, 20)
+
+float volumeRatio = f_div(volume, f_max(volumeSMA20, 1.0))
+
+float atrRatio = f_div(atr14, f_max(atrSMA20, syminfo.mintick))
+
+//====================================================
+
+// TENDENCIA
+
+//====================================================
+
+bool tendenciaAlta = ema5 > ema9 and ema9 > ema13 and ema13 > ema21 and ema21 > ema50
+
+bool tendenciaBaixa = ema5 < ema9 and ema9 < ema13 and ema13 < ema21 and ema21 < ema50
+
+bool estruturaAlta = close > ema21 and ema21 > ema50
+
+bool estruturaBaixa = close < ema21 and ema21 < ema50
+
+bool lateral = f_abs(ema9 - ema21) <= atrSafe * 0.08 and f_abs(ema21 - ema50) <= atrSafe * 0.12
+
+bool mercadoOperavel = not bloquearLateral or not lateral
+
+//====================================================
+
+// MOMENTUM
+
+//====================================================
+
+float momentum = close - close[periodoMomentum]
+
+float momentumNorm = f_div(momentum, atrSafe)
+
+bool momentumAlta = momentumNorm >= momentumMinATR
+
+bool momentumBaixa = momentumNorm <= -momentumMinATR
+
+//====================================================
+
+// KVO
+
+//====================================================
+
+float kvoHlc3 = (high + low + close) / 3.0
+
+float kvoDm = high - low
+
+var float kvoCm = na
+
+var float kvoTrend = 1.0
+
+if bar_index == 0
+
+    kvoCm := kvoDm
+
+    kvoTrend := 1.0
+
+else
+
+    if kvoHlc3 > nz(kvoHlc3[1])
+
+        kvoTrend := 1.0
+
+    else if kvoHlc3 < nz(kvoHlc3[1])
+
+        kvoTrend := -1.0
+
+    else
+
+        kvoTrend := nz(kvoTrend[1], 1.0)
+
+    kvoCm := nz(kvoCm[1], kvoDm) + kvoDm
+
+float kvoRatio = f_div(kvoDm, f_max(kvoCm, syminfo.mintick))
+
+float kvoVF = volume * kvoRatio * 100.0 * kvoTrend
+
+float linhaKVO = ta.ema(kvoVF, kvoFast) - ta.ema(kvoVF, kvoSlow)
+
+float linhaKVOSinal = ta.ema(linhaKVO, kvoSignal)
+
+float histogramaKVO = linhaKVO - linhaKVOSinal
+
+bool kvoAlta = linhaKVO > linhaKVOSinal and histogramaKVO > 0.0
+
+bool kvoBaixa = linhaKVO < linhaKVOSinal and histogramaKVO < 0.0
+
+//====================================================
+
+// CONFIRMACOES
+
+//====================================================
+
+bool rsiAlta = rsi7 >= 50.0 and rsi7 <= 78.0
+
+bool rsiBaixa = rsi7 <= 50.0 and rsi7 >= 22.0
+
+bool dmiAlta = diPlus > diMinus and adx >= adxMinFinal
+
+bool dmiBaixa = diMinus > diPlus and adx >= adxMinFinal
+
+bool volumeConfirmado = volumeRatio >= 0.90
+
+bool volumeForte = volumeRatio >= 1.10
+
+bool volatilidadeOK = atrRatio >= 0.70 and atrRatio <= 2.50
+
+//====================================================
+
+// PIVOTS
+
+//====================================================
+
+float pivotHigh = ta.pivothigh(high, pivotLeft, pivotRight)
+
+float pivotLow = ta.pivotlow(low, pivotLeft, pivotRight)
+
+var float ph1 = na
+
+var float ph2 = na
+
+var float ph3 = na
+
+var float pl1 = na
+
+var float pl2 = na
+
+var float pl3 = na
+
+var int phBar1 = na
+
+var int phBar2 = na
+
+var int phBar3 = na
+
+var int plBar1 = na
+
+var int plBar2 = na
+
+var int plBar3 = na
+
+if not na(pivotHigh)
+
+    ph3 := ph2
+
+    ph2 := ph1
+
+    ph1 := pivotHigh
+
+    phBar3 := phBar2
+
+    phBar2 := phBar1
+
+    phBar1 := bar_index - pivotRight
+
+if not na(pivotLow)
+
+    pl3 := pl2
+
+    pl2 := pl1
+
+    pl1 := pivotLow
+
+    plBar3 := plBar2
+
+    plBar2 := plBar1
+
+    plBar1 := bar_index - pivotRight
+
+//====================================================
+
+// ESTRUTURA
+
+//====================================================
+
+bool hh = not na(ph1) and not na(ph2) and ph1 > ph2
+
+bool lh = not na(ph1) and not na(ph2) and ph1 < ph2
+
+bool hl = not na(pl1) and not na(pl2) and pl1 > pl2
+
+bool ll = not na(pl1) and not na(pl2) and pl1 < pl2
+
+float slopeHigh = 0.0
+
+float slopeLow = 0.0
+
+if not na(ph1) and not na(ph2) and phBar1 != phBar2
+
+    slopeHigh := f_div(ph1 - ph2, float(phBar1 - phBar2))
+
+if not na(pl1) and not na(pl2) and plBar1 != plBar2
+
+    slopeLow := f_div(pl1 - pl2, float(plBar1 - plBar2))
+
+float slopeHighAbs = f_abs(slopeHigh)
+
+float slopeLowAbs = f_abs(slopeLow)
+
+float toleranciaGeo = atrSafe * toleranciaFiguraATR
+
+//====================================================
+
+// FIGURAS
+
+//====================================================
+
+bool resistenciaHorizontal = not na(ph1) and not na(ph2) and f_abs(ph1 - ph2) <= toleranciaGeo
+
+bool suporteHorizontal = not na(pl1) and not na(pl2) and f_abs(pl1 - pl2) <= toleranciaGeo
+
+bool trianguloAscendente = usarFiguras and resistenciaHorizontal and hl and slopeLow > 0.0
+
+bool trianguloDescendente = usarFiguras and suporteHorizontal and lh and slopeHigh < 0.0
+
+bool  trianguloSimetrico = usarFiguras and slopeHigh < 0.0 and slopeLow  > 0.0 and not resistenciaHorizontal and not suporteHorizontal
+
+bool cunhaAscendente = usarFiguras and hh and hl and slopeHigh > 0.0 and slopeLow > 0.0 and slopeLowAbs < slopeHighAbs
+
+bool cunhaDescendente = usarFiguras and lh and ll and slopeHigh < 0.0 and slopeLow < 0.0 and slopeHighAbs < slopeLowAbs
+
+bool  canalAlta = usarFiguras and hh and hl and slopeHigh > 0.0 and  slopeLow > 0.0 and f_abs(slopeHigh - slopeLow) <=  f_max(slopeHighAbs, slopeLowAbs) * 0.60
+
+bool  canalBaixa = usarFiguras and lh and ll and slopeHigh < 0.0 and  slopeLow < 0.0 and f_abs(slopeHigh - slopeLow) <=  f_max(slopeHighAbs, slopeLowAbs) * 0.60
+
+bool topoDuplo = usarFiguras and not na(ph1) and not na(ph2) and f_abs(ph1 - ph2) <= toleranciaGeo
+
+bool fundoDuplo = usarFiguras and not na(pl1) and not na(pl2) and f_abs(pl1 - pl2) <= toleranciaGeo
+
+//====================================================
+
+// HIGHEST / LOWEST - SEM WARNING
+
+//====================================================
+
+float faixaAltaBase = ta.highest(high, periodoBreak)
+
+float faixaBaixaBase = ta.lowest(low, periodoBreak)
+
+float faixaAltaAnterior = faixaAltaBase[1]
+
+float faixaBaixaAnterior = faixaBaixaBase[1]
+
+float faixaEstrutural = faixaAltaAnterior - faixaBaixaAnterior
+
+bool consolidacao = usarFiguras and faixaEstrutural <= atrSafe * 3.0
+
+bool bandeiraAlta = usarFiguras and tendenciaAlta and slopeLow < 0.0
+
+bool bandeiraBaixa = usarFiguras and tendenciaBaixa and slopeHigh > 0.0
+
+bool figuraAlta = trianguloAscendente or cunhaDescendente or canalAlta or fundoDuplo or bandeiraAlta
+
+bool figuraBaixa = trianguloDescendente or cunhaAscendente or canalBaixa or topoDuplo or bandeiraBaixa
+
+bool figuraNeutra = trianguloSimetrico or consolidacao
+
+string figuraAtual = "SEM FIGURA"
+
+if trianguloAscendente
+
+    figuraAtual := "TRIANGULO ASC."
+
+else if trianguloDescendente
+
+    figuraAtual := "TRIANGULO DESC."
+
+else if trianguloSimetrico
+
+    figuraAtual := "TRIANGULO SIM."
+
+else if cunhaAscendente
+
+    figuraAtual := "CUNHA ASC."
+
+else if cunhaDescendente
+
+    figuraAtual := "CUNHA DESC."
+
+else if canalAlta
+
+    figuraAtual := "CANAL ALTA"
+
+else if canalBaixa
+
+    figuraAtual := "CANAL BAIXA"
+
+else if topoDuplo
+
+    figuraAtual := "TOPO DUPLO"
+
+else if fundoDuplo
+
+    figuraAtual := "FUNDO DUPLO"
+
+else if bandeiraAlta
+
+    figuraAtual := "BANDEIRA ALTA"
+
+else if bandeiraBaixa
+
+    figuraAtual := "BANDEIRA BAIXA"
+
+else if consolidacao
+
+    figuraAtual := "CONSOLIDACAO"
+
+string direcaoFigura = "NEUTRA"
+
+if figuraAlta
+
+    direcaoFigura := "ALTA"
+
+else if figuraBaixa
+
+    direcaoFigura := "BAIXA"
+
+//====================================================
+
+// ROMPIMENTO
+
+//====================================================
+
+float resistenciaGenerica = faixaAltaAnterior
+
+float suporteGenerico = faixaBaixaAnterior
+
+float nivelResistencia = resistenciaGenerica
+
+float nivelSuporte = suporteGenerico
+
+if not na(ph1)
+
+    nivelResistencia := ph1
+
+if not na(pl1)
+
+    nivelSuporte := pl1
+
+bool  rompeAlta = not na(nivelResistencia) and close > nivelResistencia +  atrSafe * margemATR and close[1] <= nivelResistencia
+
+bool rompeBaixa = not na(nivelSuporte) and close < nivelSuporte - atrSafe * margemATR and close[1] >= nivelSuporte
+
+float forcaAlta = f_div(close - nivelResistencia, atrSafe)
+
+float forcaBaixa = f_div(nivelSuporte - close, atrSafe)
+
+bool rompimentoAlta = rompeAlta and forcaAlta >= forcaBreakFinal
+
+bool rompimentoBaixa = rompeBaixa and forcaBaixa >= forcaBreakFinal
+
+bool estruturaCompraOK = true
+
+bool estruturaVendaOK = true
+
+if exigirFigura
+
+    estruturaCompraOK := figuraAlta or figuraNeutra
+
+    estruturaVendaOK := figuraBaixa or figuraNeutra
+
+bool rompimentoCompraOK = rompimentoAlta and estruturaCompraOK
+
+bool rompimentoVendaOK = rompimentoBaixa and estruturaVendaOK
+
+//====================================================
+
+// CANDLE
+
+//====================================================
+
+float candleRange = high - low
+
+float candleBody = f_abs(close - open)
+
+float candleUpper = high - f_max(open, close)
+
+float candleLower = f_min(open, close) - low
+
+bool candleAlta = close > open
+
+bool candleBaixa = close < open
+
+bool hammer = candleLower >= candleBody * wickMultiplier and candleUpper <= candleBody and candleBody > 0.0
+
+bool shootingStar = candleUpper >= candleBody * wickMultiplier and candleLower <= candleBody and candleBody > 0.0
+
+bool bullEngulf = close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+
+bool bearEngulf = close < open and close[1] > open[1] and open >= close[1] and close <= open[1]
+
+bool bullPin = candleLower >= candleBody * wickMultiplier and close > open
+
+bool bearPin = candleUpper >= candleBody * wickMultiplier and close < open
+
+bool bullHarami = close > open and close[1] < open[1] and open >= close[1] and close <= open[1]
+
+bool bearHarami = close < open and close[1] > open[1] and open <= close[1] and close >= open[1]
+
+bool candleForte = candleRange > 0.0 and candleBody / candleRange >= 0.60
+
+bool candleCompraOK = not exigirCandle or bullEngulf or hammer or bullPin or bullHarami or (candleAlta and candleForte)
+
+bool candleVendaOK = not exigirCandle or bearEngulf or shootingStar or bearPin or bearHarami or (candleBaixa and candleForte)
+
+string padraoCandlePainel = "SEM PADRAO"
+
+if bullEngulf
+
+    padraoCandlePainel := "ENGOLFO ALTA"
+
+else if bearEngulf
+
+    padraoCandlePainel := "ENGOLFO BAIXA"
+
+else if hammer
+
+    padraoCandlePainel := "HAMMER"
+
+else if shootingStar
+
+    padraoCandlePainel := "SHOOTING STAR"
+
+else if bullPin
+
+    padraoCandlePainel := "PIN ALTA"
+
+else if bearPin
+
+    padraoCandlePainel := "PIN BAIXA"
+
+else if bullHarami
+
+    padraoCandlePainel := "HARAMI ALTA"
+
+else if bearHarami
+
+    padraoCandlePainel := "HARAMI BAIXA"
+
+string direcaoCandlePainel = "NEUTRO"
+
+if candleAlta
+
+    direcaoCandlePainel := "ALTA"
+
+else if candleBaixa
+
+    direcaoCandlePainel := "BAIXA"
+
+//====================================================
+
+// RETESTE
+
+//====================================================
+
+var int ultimoBreakAlta = na
+
+var int ultimoBreakBaixa = na
+
+if rompimentoAlta
+
+    ultimoBreakAlta := bar_index
+
+if rompimentoBaixa
+
+    ultimoBreakBaixa := bar_index
+
+bool dentroRetesteAlta = not na(ultimoBreakAlta) and bar_index - ultimoBreakAlta <= janelaReteste
+
+bool dentroRetesteBaixa = not na(ultimoBreakBaixa) and bar_index - ultimoBreakBaixa <= janelaReteste
+
+bool  retesteAlta = usarReteste and dentroRetesteAlta and low <=  nivelResistencia + atrSafe * toleranciaReteste and close >  nivelResistencia
+
+bool retesteBaixa = usarReteste  and dentroRetesteBaixa and high >= nivelSuporte - atrSafe *  toleranciaReteste and close < nivelSuporte
+
+//====================================================
+
+// DIVERGENCIAS
+
+//====================================================
+
+bool divRSIAlta = usarDivRSI and not na(pl1) and not na(pl2) and pl1 < pl2 and rsi7 > nz(rsi7[1])
+
+bool divRSIBaixa = usarDivRSI and not na(ph1) and not na(ph2) and ph1 > ph2 and rsi7 < nz(rsi7[1])
+
+bool divKVOAlta = usarDivKVO and not na(pl1) and not na(pl2) and pl1 < pl2 and linhaKVO > nz(linhaKVO[1])
+
+bool divKVOBaixa = usarDivKVO and not na(ph1) and not na(ph2) and ph1 > ph2 and linhaKVO < nz(linhaKVO[1])
+
+bool divMomentumAlta = usarDivMomentum and not na(pl1) and not na(pl2) and pl1 < pl2 and momentum > nz(momentum[1])
+
+bool divMomentumBaixa = usarDivMomentum and not na(ph1) and not na(ph2) and ph1 > ph2 and momentum < nz(momentum[1])
+
+int divAltaCount = (divRSIAlta ? 1 : 0) + (divKVOAlta ? 1 : 0) + (divMomentumAlta ? 1 : 0)
+
+int divBaixaCount = (divRSIBaixa ? 1 : 0) + (divKVOBaixa ? 1 : 0) + (divMomentumBaixa ? 1 : 0)
+
+bool divergenciaAltaOK = not usarDivergencia or divAltaCount >= minDivConfluencia
+
+bool divergenciaBaixaOK = not usarDivergencia or divBaixaCount >= minDivConfluencia
+
+//====================================================
+
+// ML
+
+//====================================================
+
+var float pesoTrend = 1.0
+
+var float pesoMomentum = 1.0
+
+var float pesoDMI = 1.0
+
+var float pesoVolume = 1.0
+
+var float pesoEstrutura = 1.0
+
+var float pesoCandle = 1.0
+
+var float pesoFigura = 1.0
+
+float mlAlta = 0.0
+
+float mlBaixa = 0.0
+
+if tendenciaAlta
+
+    mlAlta += pesoTrend
+
+if tendenciaBaixa
+
+    mlBaixa += pesoTrend
+
+if momentumAlta
+
+    mlAlta += pesoMomentum
+
+if momentumBaixa
+
+    mlBaixa += pesoMomentum
+
+if dmiAlta
+
+    mlAlta += pesoDMI
+
+if dmiBaixa
+
+    mlBaixa += pesoDMI
+
+if volumeConfirmado
+
+    mlAlta += pesoVolume
+
+    mlBaixa += pesoVolume
+
+if estruturaAlta
+
+    mlAlta += pesoEstrutura
+
+if estruturaBaixa
+
+    mlBaixa += pesoEstrutura
+
+if candleCompraOK
+
+    mlAlta += pesoCandle
+
+if candleVendaOK
+
+    mlBaixa += pesoCandle
+
+if figuraAlta
+
+    mlAlta += pesoFigura
+
+else if figuraNeutra
+
+    mlAlta += pesoFigura * 0.5
+
+if figuraBaixa
+
+    mlBaixa += pesoFigura
+
+else if figuraNeutra
+
+    mlBaixa += pesoFigura * 0.5
+
+float mlMax = pesoTrend + pesoMomentum + pesoDMI + pesoVolume + pesoEstrutura + pesoCandle + pesoFigura
+
+mlMax := f_max(mlMax, syminfo.mintick)
+
+float probMLAlta = 0.50 + 0.50 * f_div(mlAlta, mlMax)
+
+float probMLBaixa = 0.50 + 0.50 * f_div(mlBaixa, mlMax)
+
+bool mlCompraOK = not usarML or probMLAlta >= mlMin
+
+bool mlVendaOK = not usarML or probMLBaixa >= mlMin
+
+//====================================================
+
+// SCORE
+
+//====================================================
+
+float scoreCompra = 0.0
+
+float scoreVenda = 0.0
+
+if tendenciaAlta
+
+    scoreCompra += 12.0
+
+if tendenciaBaixa
+
+    scoreVenda += 12.0
+
+if estruturaAlta
+
+    scoreCompra += 10.0
+
+if estruturaBaixa
+
+    scoreVenda += 10.0
+
+if momentumAlta
+
+    scoreCompra += 12.0
+
+if momentumBaixa
+
+    scoreVenda += 12.0
+
+if kvoAlta
+
+    scoreCompra += 10.0
+
+if kvoBaixa
+
+    scoreVenda += 10.0
+
+if dmiAlta
+
+    scoreCompra += 10.0
+
+if dmiBaixa
+
+    scoreVenda += 10.0
+
+if volumeConfirmado
+
+    scoreCompra += 7.0
+
+    scoreVenda += 7.0
+
+if volumeForte
+
+    scoreCompra += 3.0
+
+    scoreVenda += 3.0
+
+if candleCompraOK
+
+    scoreCompra += 8.0
+
+if candleVendaOK
+
+    scoreVenda += 8.0
+
+if figuraAlta
+
+    scoreCompra += 8.0
+
+if figuraBaixa
+
+    scoreVenda += 8.0
+
+if figuraNeutra
+
+    scoreCompra += 3.0
+
+    scoreVenda += 3.0
+
+if rompimentoAlta
+
+    scoreCompra += 15.0
+
+if rompimentoBaixa
+
+    scoreVenda += 15.0
+
+if retesteAlta
+
+    scoreCompra += 5.0
+
+if retesteBaixa
+
+    scoreVenda += 5.0
+
+scoreCompra += probMLAlta * 8.0
+
+scoreVenda += probMLBaixa * 8.0
+
+scoreCompra := f_clamp(scoreCompra, 0.0, 100.0)
+
+scoreVenda := f_clamp(scoreVenda, 0.0, 100.0)
+
+//====================================================
+
+// VANTAGEM
+
+//====================================================
+
+float vantagemCompra = scoreCompra - scoreVenda
+
+float vantagemVenda = scoreVenda - scoreCompra
+
+string vantagemPainel = "NEUTRA"
+
+if vantagemCompra >= vantagemMinFinal
+
+    vantagemPainel := "ALTA"
+
+else if vantagemVenda >= vantagemMinFinal
+
+    vantagemPainel := "BAIXA"
+
+//====================================================
+
+// SCORE TEXTUAL
+
+//====================================================
+
+float scoreDirecional = scoreCompra
+
+if scoreVenda > scoreCompra
+
+    scoreDirecional := scoreVenda
+
+string scorePainel = "NEUTRO"
+
+if scoreDirecional >= 80.0
+
+    scorePainel := "FORTE"
+
+else if scoreDirecional >= 65.0
+
+    scorePainel := "MEDIO"
+
+else if scoreDirecional > 0.0
+
+    scorePainel := "FRACO"
+
+//====================================================
+
+// FILTROS
+
+//====================================================
+
+bool emaCompraOK = not usarEMA or estruturaAlta
+
+bool emaVendaOK = not usarEMA or estruturaBaixa
+
+bool rsiCompraOK = not usarRSI or rsiAlta
+
+bool rsiVendaOK = not usarRSI or rsiBaixa
+
+bool dmiCompraOK = not usarDMI or dmiAlta
+
+bool dmiVendaOK = not usarDMI or dmiBaixa
+
+bool volumeCompraOK = not usarVolume or volumeConfirmado
+
+bool volumeVendaOK = not usarVolume or volumeConfirmado
+
+bool atrCompraOK = not usarATR or volatilidadeOK
+
+bool atrVendaOK = not usarATR or volatilidadeOK
+
+bool momentumCompraOK = not usarMomentum or momentumAlta
+
+bool momentumVendaOK = not usarMomentum or momentumBaixa
+
+bool momentumCompraObrigatorioOK = not momentumObrigatorio or momentumAlta
+
+bool momentumVendaObrigatorioOK = not momentumObrigatorio or momentumBaixa
+
+bool kvoCompraOK = not usarKVO or kvoAlta
+
+bool kvoVendaOK = not usarKVO or kvoBaixa
+
+bool kvoCompraObrigatorioOK = not kvoObrigatorio or kvoAlta
+
+bool kvoVendaObrigatorioOK = not kvoObrigatorio or kvoBaixa
+
+//====================================================
+
+// CANDIDATOS
+
+//====================================================
+
+bool  candidatoCall = ativar and estruturaCompraOK and rompimentoCompraOK and  candleCompraOK and momentumCompraOK and momentumCompraObrigatorioOK and  kvoCompraOK and kvoCompraObrigatorioOK and emaCompraOK and rsiCompraOK  and dmiCompraOK and volumeCompraOK and atrCompraOK and divergenciaAltaOK  and mlCompraOK and mercadoOperavel and scoreCompra >= scoreMinFinal  and vantagemCompra >= vantagemMinFinal
+
+bool  candidatoPut = ativar and estruturaVendaOK and rompimentoVendaOK and  candleVendaOK and momentumVendaOK and momentumVendaObrigatorioOK and  kvoVendaOK and kvoVendaObrigatorioOK and emaVendaOK and rsiVendaOK and  dmiVendaOK and volumeVendaOK and atrVendaOK and divergenciaBaixaOK and  mlVendaOK and mercadoOperavel and scoreVenda >= scoreMinFinal and  vantagemVenda >= vantagemMinFinal
+
+bool conflito = candidatoCall and candidatoPut
+
+bool candidatoCallFinal = candidatoCall and not conflito
+
+bool candidatoPutFinal = candidatoPut and not conflito
+
+//====================================================
+
+// COOLDOWN
+
+//====================================================
+
+var int ultimaBarraSinal = na
+
+bool barraOK = not somenteConfirmada or barstate.isconfirmed
+
+bool cooldownOK = na(ultimaBarraSinal) or bar_index - ultimaBarraSinal >= cooldownFinal
+
+bool sinalCompra = candidatoCallFinal and barraOK and cooldownOK
+
+bool sinalVenda = candidatoPutFinal and barraOK and cooldownOK
+
+if sinalCompra or sinalVenda
+
+    ultimaBarraSinal := bar_index
+
+//====================================================
+
+// CONFIRMACAO
+
+//====================================================
+
+string confPainel = "BAIXA"
+
+if candidatoCallFinal or candidatoPutFinal
+
+    confPainel := "ALTA"
+
+else if scoreDirecional >= 60.0
+
+    confPainel := "MEDIA"
+
+//====================================================
+
+// ADX / RSI
+
+//====================================================
+
+string adxRsiPainel = "NEUTRO"
+
+if dmiAlta and rsiAlta
+
+    adxRsiPainel := "COMPRA"
+
+else if dmiBaixa and rsiBaixa
+
+    adxRsiPainel := "VENDA"
+
+//====================================================
+
+// MOM / KVO / VOLUME
+
+//====================================================
+
+string momPainel = "NEUTRO"
+
+if momentumAlta
+
+    momPainel := "ALTA"
+
+else if momentumBaixa
+
+    momPainel := "BAIXA"
+
+string kvoPainel = "NEUTRO"
+
+if kvoAlta
+
+    kvoPainel := "ALTA"
+
+else if kvoBaixa
+
+    kvoPainel := "BAIXA"
+
+string volumePainel = "FRACO"
+
+if volumeForte
+
+    volumePainel := "FORTE"
+
+else if volumeConfirmado
+
+    volumePainel := "NORMAL"
+
+//====================================================
+
+// EVENTO
+
+//====================================================
+
+string eventoPainel = "SEM EVENTO"
+
+if rompimentoAlta
+
+    eventoPainel := "ROMPIMENTO ALTA"
+
+else if rompimentoBaixa
+
+    eventoPainel := "ROMPIMENTO BAIXA"
+
+else if retesteAlta
+
+    eventoPainel := "RETESTE ALTA"
+
+else if retesteBaixa
+
+    eventoPainel := "RETESTE BAIXA"
+
+else if consolidacao
+
+    eventoPainel := "CONSOLIDACAO"
+
+//====================================================
+
+// DIV / ML
+
+//====================================================
+
+string divMLPainel = "SEM CONF"
+
+if usarML and probMLAlta >= mlMin and divAltaCount > 0
+
+    divMLPainel := "CONFIRMADO"
+
+else if usarML and probMLBaixa >= mlMin and divBaixaCount > 0
+
+    divMLPainel := "CONFIRMADO"
+
+else if usarML and (probMLAlta >= mlMin or probMLBaixa >= mlMin)
+
+    divMLPainel := "ML OK"
+
+else if divAltaCount > 0 or divBaixaCount > 0
+
+    divMLPainel := "DIV"
+
+//====================================================
+
+// DIRECAO
+
+//====================================================
+
+string direcaoPainel = "NEUTRA"
+
+if tendenciaAlta and estruturaAlta
+
+    direcaoPainel := "ALTA"
+
+else if tendenciaBaixa and estruturaBaixa
+
+    direcaoPainel := "BAIXA"
+
+//====================================================
+
+// STATUS
+
+//====================================================
+
+string statusPainel = "AGUARDANDO"
+
+if sinalCompra
+
+    statusPainel := "ENTRADA COMPRA"
+
+else if sinalVenda
+
+    statusPainel := "ENTRADA VENDA"
+
+else if not figuraAlta and not figuraBaixa and not figuraNeutra
+
+    statusPainel := "PROCURANDO FIGURA"
+
+else if padraoCandlePainel == "SEM PADRAO"
+
+    statusPainel := "FIGURA ENCONTRADA"
+
+else if direcaoCandlePainel == "NEUTRO"
+
+    statusPainel := "LENDO CANDLE"
+
+else if direcaoPainel == "NEUTRA"
+
+    statusPainel := "LENDO DIRECAO"
+
+else if momPainel == "NEUTRO"
+
+    statusPainel := "LENDO MOM"
+
+else if kvoPainel == "NEUTRO"
+
+    statusPainel := "LENDO KVO"
+
+else if volumePainel == "FRACO"
+
+    statusPainel := "LENDO VOLUME"
+
+else if adxRsiPainel == "NEUTRO"
+
+    statusPainel := "LENDO ADX / RSI"
+
+else if eventoPainel == "SEM EVENTO"
+
+    statusPainel := "AGUARDANDO EVENTO"
+
+else if vantagemPainel == "NEUTRA"
+
+    statusPainel := "AVALIANDO VANTAGEM"
+
+else if confPainel == "BAIXA"
+
+    statusPainel := "VALIDANDO"
+
+else if scorePainel == "FRACO"
+
+    statusPainel := "SCORE BAIXO"
+
+else
+
+    statusPainel := "FINALIZANDO"
+
+//====================================================
+
+// DECISAO
+
+//====================================================
+
+string decisaoPainel = "AGUARDAR"
+
+if sinalCompra
+
+    decisaoPainel := "COMPRA"
+
+else if sinalVenda
+
+    decisaoPainel := "VENDA"
+
+else if vantagemPainel == "ALTA"
+
+    decisaoPainel := "AGUARDAR COMPRA"
+
+else if vantagemPainel == "BAIXA"
+
+    decisaoPainel := "AGUARDAR VENDA"
+
+//====================================================
+
+// ML APRENDIZADO
+
+//====================================================
+
+if barraOK
+
+    if rompimentoAlta
+
+        if tendenciaAlta
+
+            pesoTrend += taxaML
+
+        if momentumAlta
+
+            pesoMomentum += taxaML
+
+        if dmiAlta
+
+            pesoDMI += taxaML
+
+        if volumeConfirmado
+
+            pesoVolume += taxaML
+
+        if estruturaAlta
+
+            pesoEstrutura += taxaML
+
+        if candleCompraOK
+
+            pesoCandle += taxaML
+
+        if figuraAlta or figuraNeutra
+
+            pesoFigura += taxaML
+
+    if rompimentoBaixa
+
+        if tendenciaBaixa
+
+            pesoTrend += taxaML
+
+        if momentumBaixa
+
+            pesoMomentum += taxaML
+
+        if dmiBaixa
+
+            pesoDMI += taxaML
+
+        if volumeConfirmado
+
+            pesoVolume += taxaML
+
+        if estruturaBaixa
+
+            pesoEstrutura += taxaML
+
+        if candleVendaOK
+
+            pesoCandle += taxaML
+
+        if figuraBaixa or figuraNeutra
+
+            pesoFigura += taxaML
+
+pesoTrend := f_clamp(pesoTrend, 0.50, 3.00)
+
+pesoMomentum := f_clamp(pesoMomentum, 0.50, 3.00)
+
+pesoDMI := f_clamp(pesoDMI, 0.50, 3.00)
+
+pesoVolume := f_clamp(pesoVolume, 0.50, 3.00)
+
+pesoEstrutura := f_clamp(pesoEstrutura, 0.50, 3.00)
+
+pesoCandle := f_clamp(pesoCandle, 0.50, 3.00)
+
+pesoFigura := f_clamp(pesoFigura, 0.50, 3.00)
+
+//====================================================
+
+// ORDENS
+
+//====================================================
+
+var int barraEntrada = na
+
+if executarOrdens
+
+    if sinalCompra
+
+        strategy.entry("CALL", strategy.long)
+
+        barraEntrada := bar_index
+
+    if sinalVenda
+
+        strategy.entry("PUT", strategy.short)
+
+        barraEntrada := bar_index
+
+    if strategy.position_size != 0 and not na(barraEntrada)
+
+        if bar_index - barraEntrada >= expiracao
+
+            strategy.close_all()
+
+            barraEntrada := na
+
+//====================================================
+
+// ALERTAS
+
+//====================================================
+
+if sinalCompra
+
+    alert("V41.6 CALL | " + figuraAtual + " | " + eventoPainel, alert.freq_once_per_bar_close)
+
+if sinalVenda
+
+    alert("V41.6 PUT | " + figuraAtual + " | " + eventoPainel, alert.freq_once_per_bar_close)
+
+//====================================================
+
+// SETAS
+
+//====================================================
+
+plotshape(sinalCompra,  title="V41.6 CALL", style=shape.arrowup, location=location.belowbar,  color=color.lime, size=size.small, text="CALL", textcolor=color.lime)
+
+plotshape(sinalVenda,  title="V41.6 PUT", style=shape.arrowdown, location=location.abovebar,  color=color.red, size=size.small, text="PUT", textcolor=color.red)
+
+//====================================================
+// PAINEL - DIREITA CENTRAL / COMPUTADOR
+//====================================================
+
+//====================================================
+// PAINEL TECH PRO - COMPUTADOR / DIREITA CENTRAL
+//====================================================
+
+var table painel = table.new(position.middle_right, 2, 16, border_width=1, frame_width=2)
+
+if mostrarPainel and barstate.islast
+    table.clear(painel, 0, 0, 1, 15)
+
+    // PALETA TECH PRO
+    color fundoPainel = color.rgb(8, 12, 20)
+    color fundoLabel = color.rgb(14, 21, 32)
+    color fundoHeader = color.rgb(10, 18, 30)
+    color cCyan = color.rgb(0, 210, 255)
+    color cBlue = color.rgb(35, 110, 220)
+    color cGreen = color.rgb(0, 185, 120)
+    color cRed = color.rgb(220, 55, 75)
+    color cOrange = color.rgb(235, 150, 35)
+    color cYellow = color.rgb(225, 195, 45)
+    color cGray = color.rgb(110, 125, 145)
+    color branco = color.white
+    color preto = color.black
+
+    color corStatus = cGray
+    if statusPainel == "ENTRADA COMPRA"
+        corStatus := cGreen
+    else if statusPainel == "ENTRADA VENDA"
+        corStatus := cRed
+
+    color corFigura = cGray
+    if figuraAlta
+        corFigura := cGreen
+    else if figuraBaixa
+        corFigura := cRed
+
+    color corCandle = cGray
+    if candleAlta
+        corCandle := cGreen
+    else if candleBaixa
+        corCandle := cRed
+
+    color corDirecao = cGray
+    if direcaoPainel == "ALTA"
+        corDirecao := cGreen
+    else if direcaoPainel == "BAIXA"
+        corDirecao := cRed
+
+    color corMom = cGray
+    if momPainel == "ALTA"
+        corMom := cGreen
+    else if momPainel == "BAIXA"
+        corMom := cRed
+
+    color corKVO = cGray
+    if kvoPainel == "ALTA"
+        corKVO := cGreen
+    else if kvoPainel == "BAIXA"
+        corKVO := cRed
+
+    color corVolume = cGray
+    if volumePainel == "FORTE"
+        corVolume := cGreen
+    else if volumePainel == "NORMAL"
+        corVolume := cBlue
+
+    color corADXRSI = cGray
+    if adxRsiPainel == "COMPRA"
+        corADXRSI := cGreen
+    else if adxRsiPainel == "VENDA"
+        corADXRSI := cRed
+
+    color corEvento = cGray
+    if eventoPainel == "ROMPIMENTO ALTA"
+        corEvento := cGreen
+    else if eventoPainel == "ROMPIMENTO BAIXA"
+        corEvento := cRed
+
+    color corVant = cGray
+    if vantagemPainel == "ALTA"
+        corVant := cGreen
+    else if vantagemPainel == "BAIXA"
+        corVant := cRed
+
+    color corConf = cGray
+    if confPainel == "ALTA"
+        corConf := cGreen
+    else if confPainel == "MEDIA"
+        corConf := cOrange
+
+    color corScore = cGray
+    if scorePainel == "FORTE"
+        corScore := cOrange
+    else if scorePainel == "MEDIO"
+        corScore := cYellow
+
+    color corDivML = cGray
+    if divMLPainel == "CONFIRMADO"
+        corDivML := cGreen
+    else if divMLPainel == "ML OK"
+        corDivML := cBlue
+
+    color corDecisao = cGray
+    if decisaoPainel == "COMPRA" or decisaoPainel == "AGUARDAR COMPRA"
+        corDecisao := cGreen
+    else if decisaoPainel == "VENDA" or decisaoPainel == "AGUARDAR VENDA"
+        corDecisao := cRed
+
+    //================================================
+    // CABECALHO TECH PRO
+    //================================================
+    table.cell(painel, 0, 0, "KVO PRO // V41.6", text_color=cCyan, bgcolor=fundoHeader, text_size=size.small)
+    table.cell(painel, 1, 0, "● ONLINE", text_color=cGreen, bgcolor=fundoHeader, text_size=size.small)
+
+    //================================================
+    // LINHAS - VISUAL TECH COM ALTERNANCIA DISCRETA
+    //================================================
+    table.cell(painel, 0, 1, "STATUS", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 1, statusPainel, text_color=branco, bgcolor=corStatus, text_size=size.small)
+
+    table.cell(painel, 0, 2, "FIGURA", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 2, figuraAtual, text_color=branco, bgcolor=corFigura, text_size=size.small)
+
+    table.cell(painel, 0, 3, "CANDLE", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 3, padraoCandlePainel, text_color=branco, bgcolor=corCandle, text_size=size.small)
+
+    table.cell(painel, 0, 4, "CANDLE DIR", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 4, direcaoCandlePainel, text_color=branco, bgcolor=corCandle, text_size=size.small)
+
+    table.cell(painel, 0, 5, "DIRECAO", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 5, direcaoPainel, text_color=branco, bgcolor=corDirecao, text_size=size.small)
+
+    table.cell(painel, 0, 6, "MOM", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 6, momPainel, text_color=branco, bgcolor=corMom, text_size=size.small)
+
+    table.cell(painel, 0, 7, "KVO", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 7, kvoPainel, text_color=branco, bgcolor=corKVO, text_size=size.small)
+
+    table.cell(painel, 0, 8, "VOLUME", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 8, volumePainel, text_color=branco, bgcolor=corVolume, text_size=size.small)
+
+    table.cell(painel, 0, 9, "ADX / RSI", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 9, adxRsiPainel, text_color=branco, bgcolor=corADXRSI, text_size=size.small)
+
+    table.cell(painel, 0, 10, "EVENTO", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 10, eventoPainel, text_color=branco, bgcolor=corEvento, text_size=size.small)
+
+    table.cell(painel, 0, 11, "VANT", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 11, vantagemPainel, text_color=branco, bgcolor=corVant, text_size=size.small)
+
+    table.cell(painel, 0, 12, "CONF", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 12, confPainel, text_color=branco, bgcolor=corConf, text_size=size.small)
+
+    table.cell(painel, 0, 13, "SCORE", text_color=cCyan, bgcolor=fundoLabel, text_size=size.small)
+    table.cell(painel, 1, 13, scorePainel, text_color=branco, bgcolor=corScore, text_size=size.small)
+
+    table.cell(painel, 0, 14, "DIV / ML", text_color=cCyan, bgcolor=fundoPainel, text_size=size.small)
+    table.cell(painel, 1, 14, divMLPainel, text_color=branco, bgcolor=corDivML, text_size=size.small)
+
+    // DECISAO - DESTAQUE FINAL TECH PRO
+    table.cell(painel, 0, 15, "DECISAO", text_color=cCyan, bgcolor=fundoHeader, text_size=size.small)
+    table.cell(painel, 1, 15, decisaoPainel, text_color=branco, bgcolor=corDecisao, text_size=size.small)
+
