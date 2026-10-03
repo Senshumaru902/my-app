@@ -1,0 +1,2972 @@
+//@version=6
+
+strategy(
+     "KVO PRO V42.0 - ULTRA FAST MICRO BREAKOUT",
+     overlay = true,
+     pyramiding = 0,
+     process_orders_on_close = true,
+     calc_on_every_tick = true,
+     calc_on_order_fills = false,
+     initial_capital = 100,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 1,
+     max_labels_count = 500)
+
+//====================================================
+// V42.0
+// ULTRA FAST MICRO BREAKOUT
+//
+// INDICADORES = FILTROS
+// ESTRUTURA   = CONTEXTO
+// PRE-BREAK   = PREPARAÇÃO
+// ROMPIMENTO  = GATILHO
+// SCORE       = QUALIDADE
+// RISCO       = BLOQUEIO
+// DECISÃO     = ENTRADA
+//====================================================
+
+
+//====================================================
+// 01 - GRUPOS
+//====================================================
+
+grupoGeral  = "01 - GERAL"
+grupoMacro  = "02 - MACRO"
+grupoMicro  = "03 - MICRO"
+grupoBreak  = "04 - MICRO ROMPIMENTO"
+grupoFig    = "05 - MICRO FIGURAS"
+grupoCandle = "06 - MICRO CANDLE"
+grupoIndic  = "07 - MICRO INDICADORES"
+grupoKvo    = "08 - MICRO KVO"
+grupoDiv    = "09 - MICRO DIVERGÊNCIA"
+grupoRisco  = "10 - RISCO"
+grupoPainel = "11 - PAINEL"
+
+
+//====================================================
+// 02 - GERAL
+//====================================================
+
+ativar = input.bool(
+     true,
+     "Ativar algoritmo",
+     group = grupoGeral)
+
+modoOperacao = input.string(
+     "Equilibrado",
+     "Modo",
+     options = ["Conservador", "Equilibrado", "Fácil"],
+     group = grupoGeral)
+
+executarOrdens = input.bool(
+     false,
+     "Executar ordens",
+     group = grupoGeral)
+
+somenteConfirmada = input.bool(
+     true,
+     "Somente confirmação no fechamento",
+     group = grupoGeral)
+
+cooldownInput = input.int(
+     3,
+     "Cooldown",
+     minval = 0,
+     maxval = 20,
+     group = grupoGeral)
+
+expiracaoVelas = input.int(
+     1,
+     "Expiração em velas",
+     minval = 1,
+     maxval = 20,
+     group = grupoGeral)
+
+
+//====================================================
+// 03 - MACRO
+//====================================================
+
+macroEmaFast = input.int(
+     5,
+     "EMA macro rápida",
+     minval = 2,
+     maxval = 50,
+     group = grupoMacro)
+
+macroEmaMid = input.int(
+     13,
+     "EMA macro média",
+     minval = 3,
+     maxval = 100,
+     group = grupoMacro)
+
+macroEmaSlow = input.int(
+     21,
+     "EMA macro lenta",
+     minval = 5,
+     maxval = 150,
+     group = grupoMacro)
+
+macroEmaLong = input.int(
+     50,
+     "EMA macro longa",
+     minval = 10,
+     maxval = 300,
+     group = grupoMacro)
+
+
+//====================================================
+// 04 - MICRO
+//====================================================
+
+microFastLen = input.int(
+     3,
+     "Micro EMA rápida",
+     minval = 2,
+     maxval = 10,
+     group = grupoMicro)
+
+microMidLen = input.int(
+     5,
+     "Micro EMA média",
+     minval = 2,
+     maxval = 15,
+     group = grupoMicro)
+
+microSlowLen = input.int(
+     8,
+     "Micro EMA lenta",
+     minval = 3,
+     maxval = 20,
+     group = grupoMicro)
+
+microLookback = input.int(
+     3,
+     "Estrutura micro",
+     minval = 2,
+     maxval = 10,
+     group = grupoMicro)
+
+microMinConfluence = input.int(
+     5,
+     "Confluência mínima",
+     minval = 2,
+     maxval = 9,
+     group = grupoMicro)
+
+
+//====================================================
+// 05 - MICRO ROMPIMENTO
+//====================================================
+
+microBreakLen = input.int(
+     2,
+     "Janela rompimento",
+     minval = 1,
+     maxval = 10,
+     group = grupoBreak)
+
+margemATR = input.float(
+     0.03,
+     "Margem ATR",
+     minval = 0.0,
+     maxval = 1.0,
+     step = 0.01,
+     group = grupoBreak)
+
+forcaMinBreak = input.float(
+     0.08,
+     "Força mínima do rompimento",
+     minval = 0.0,
+     maxval = 2.0,
+     step = 0.01,
+     group = grupoBreak)
+
+proximidadeATR = input.float(
+     0.35,
+     "Proximidade do rompimento",
+     minval = 0.05,
+     maxval = 2.0,
+     step = 0.05,
+     group = grupoBreak)
+
+usarReteste = input.bool(
+     true,
+     "Usar reteste",
+     group = grupoBreak)
+
+janelaReteste = input.int(
+     4,
+     "Janela do reteste",
+     minval = 1,
+     maxval = 15,
+     group = grupoBreak)
+
+toleranciaReteste = input.float(
+     0.15,
+     "Tolerância reteste ATR",
+     minval = 0.03,
+     maxval = 1.0,
+     step = 0.01,
+     group = grupoBreak)
+
+
+//====================================================
+// 06 - MICRO FIGURAS
+//====================================================
+
+usarFiguras = input.bool(
+     true,
+     "Usar figuras",
+     group = grupoFig)
+
+exigirFigura = input.bool(
+     false,
+     "Exigir figura",
+     group = grupoFig)
+
+toleranciaFiguraATR = input.float(
+     0.20,
+     "Tolerância figura ATR",
+     minval = 0.05,
+     maxval = 1.0,
+     step = 0.05,
+     group = grupoFig)
+
+
+//====================================================
+// 07 - MICRO CANDLE
+//====================================================
+
+usarCandles = input.bool(
+     true,
+     "Usar candles",
+     group = grupoCandle)
+
+exigirCandle = input.bool(
+     false,
+     "Exigir padrão candle",
+     group = grupoCandle)
+
+wickMultiplier = input.float(
+     1.5,
+     "Força do pavio",
+     minval = 0.5,
+     maxval = 5.0,
+     step = 0.1,
+     group = grupoCandle)
+
+
+//====================================================
+// 08 - MICRO INDICADORES
+//====================================================
+
+usarEMA = input.bool(
+     true,
+     "Micro EMA",
+     group = grupoIndic)
+
+usarRSI = input.bool(
+     true,
+     "Micro RSI",
+     group = grupoIndic)
+
+usarDMI = input.bool(
+     true,
+     "Micro DMI / ADX",
+     group = grupoIndic)
+
+usarVolume = input.bool(
+     true,
+     "Micro volume",
+     group = grupoIndic)
+
+usarATR = input.bool(
+     true,
+     "Micro ATR",
+     group = grupoIndic)
+
+usarMomentum = input.bool(
+     true,
+     "Micro momentum",
+     group = grupoIndic)
+
+usarKVO = input.bool(
+     true,
+     "Micro KVO",
+     group = grupoIndic)
+
+microRSILen = input.int(
+     3,
+     "RSI micro",
+     minval = 2,
+     maxval = 10,
+     group = grupoIndic)
+
+microDMILen = input.int(
+     5,
+     "DMI micro",
+     minval = 2,
+     maxval = 10,
+     group = grupoIndic)
+
+microVolumeLen = input.int(
+     5,
+     "Volume micro",
+     minval = 2,
+     maxval = 20,
+     group = grupoIndic)
+
+microATRLen = input.int(
+     3,
+     "ATR micro",
+     minval = 2,
+     maxval = 10,
+     group = grupoIndic)
+
+microMomentumLen = input.int(
+     2,
+     "Momentum micro",
+     minval = 1,
+     maxval = 10,
+     group = grupoIndic)
+
+adxMicroMin = input.float(
+     10.0,
+     "ADX mínimo",
+     minval = 5.0,
+     maxval = 40.0,
+     step = 1.0,
+     group = grupoIndic)
+
+
+//====================================================
+// 09 - KVO
+//====================================================
+
+microKvoFast = input.int(
+     5,
+     "KVO rápido",
+     minval = 2,
+     maxval = 20,
+     group = grupoKvo)
+
+microKvoSlow = input.int(
+     8,
+     "KVO lento",
+     minval = 3,
+     maxval = 30,
+     group = grupoKvo)
+
+microKvoSignal = input.int(
+     3,
+     "KVO sinal",
+     minval = 2,
+     maxval = 10,
+     group = grupoKvo)
+
+
+//====================================================
+// 10 - DIVERGÊNCIA
+//====================================================
+
+usarDivRSI = input.bool(
+     true,
+     "Divergência RSI",
+     group = grupoDiv)
+
+usarDivKVO = input.bool(
+     true,
+     "Divergência KVO",
+     group = grupoDiv)
+
+microDivLen = input.int(
+     4,
+     "Janela divergência",
+     minval = 2,
+     maxval = 10,
+     group = grupoDiv)
+
+
+//====================================================
+// 11 - RISCO
+//====================================================
+
+bloquearLateral = input.bool(
+     true,
+     "Bloquear mercado lateral",
+     group = grupoRisco)
+
+lateralATR = input.float(
+     0.25,
+     "Lateralidade ATR",
+     minval = 0.05,
+     maxval = 2.0,
+     step = 0.05,
+     group = grupoRisco)
+
+volumeMinimo = input.float(
+     0.70,
+     "Volume mínimo",
+     minval = 0.1,
+     maxval = 2.0,
+     step = 0.05,
+     group = grupoRisco)
+
+
+//====================================================
+// 12 - PAINEL
+//====================================================
+
+mostrarPainel = input.bool(
+     true,
+     "Mostrar painel",
+     group = grupoPainel)
+
+
+//====================================================
+// 13 - MODO
+//====================================================
+
+float ajusteScore = 0.0
+float ajusteBreak = 0.0
+float ajusteADX = 0.0
+int cooldownFinal = cooldownInput
+
+if modoOperacao == "Conservador"
+    ajusteScore := 8.0
+    ajusteBreak := 0.05
+    ajusteADX := 3.0
+    cooldownFinal := math.max(cooldownInput, 5)
+else if modoOperacao == "Fácil"
+    ajusteScore := -8.0
+    ajusteBreak := -0.03
+    ajusteADX := -2.0
+    cooldownFinal := math.max(cooldownInput, 1)
+else
+    ajusteScore := 0.0
+    ajusteBreak := 0.0
+    ajusteADX := 0.0
+    cooldownFinal := math.max(cooldownInput, 3)
+
+scoreMinimo = 65.0 + ajusteScore
+forcaBreakFinal = math.max(0.03, forcaMinBreak + ajusteBreak)
+adxMinFinal = math.max(5.0, adxMicroMin + ajusteADX)
+
+
+//====================================================
+// 14 - MACRO
+//====================================================
+
+ema5 = ta.ema(close, macroEmaFast)
+ema13 = ta.ema(close, macroEmaMid)
+ema21 = ta.ema(close, macroEmaSlow)
+ema50 = ta.ema(close, macroEmaLong)
+
+rsiMacro = ta.rsi(close, 7)
+atrMacro = ta.atr(7)
+atrMacroSafe = math.max(atrMacro, syminfo.mintick)
+
+volumeMacroSMA = ta.sma(volume, 20)
+
+float volumeMacroRatio = 1.0
+
+if volumeMacroSMA > 0
+    volumeMacroRatio := volume / volumeMacroSMA
+
+[diPlusMacro, diMinusMacro, adxMacro] = ta.dmi(14, 14)
+
+
+//====================================================
+// 15 - ATR MICRO
+//====================================================
+
+atrMicro = ta.atr(microATRLen)
+atrMicroSafe = math.max(atrMicro, syminfo.mintick)
+atrMicroMedia = ta.sma(atrMicro, 10)
+
+float atrMicroRatio = 1.0
+
+if atrMicroMedia > 0
+    atrMicroRatio := atrMicro / atrMicroMedia
+
+atrMicroExpansao = atrMicro > atrMicro[1]
+atrMicroAcelerando = atrMicro > atrMicro[1] and atrMicro[1] > atrMicro[2]
+
+
+//====================================================
+// 16 - EMA MICRO
+//====================================================
+
+emaMicroFast = ta.ema(close, microFastLen)
+emaMicroMid = ta.ema(close, microMidLen)
+emaMicroSlow = ta.ema(close, microSlowLen)
+
+emaMicroUp =
+     emaMicroFast > emaMicroMid and
+     emaMicroMid > emaMicroSlow
+
+emaMicroDown =
+     emaMicroFast < emaMicroMid and
+     emaMicroMid < emaMicroSlow
+
+emaMicroSlope =
+     emaMicroFast - emaMicroFast[1]
+
+emaMicroSlopePrev =
+     emaMicroFast[1] - emaMicroFast[2]
+
+emaMicroAcceleration =
+     emaMicroSlope - emaMicroSlopePrev
+
+emaMicroVelocityUp = emaMicroSlope > 0
+emaMicroVelocityDown = emaMicroSlope < 0
+
+emaMicroAccelUp = emaMicroAcceleration > 0
+emaMicroAccelDown = emaMicroAcceleration < 0
+
+emaMicroSpread =
+     math.abs(emaMicroFast - emaMicroSlow)
+
+emaMicroSpreadPrev =
+     math.abs(emaMicroFast[1] - emaMicroSlow[1])
+
+emaMicroConvergencia =
+     emaMicroSpread < emaMicroSpreadPrev
+
+emaMicroExpansao =
+     emaMicroSpread > emaMicroSpreadPrev
+
+
+//====================================================
+// 17 - RSI MICRO
+//====================================================
+
+rsiMicro = ta.rsi(close, microRSILen)
+
+rsiMicroVelocity =
+     rsiMicro - rsiMicro[1]
+
+rsiMicroVelocityPrev =
+     rsiMicro[1] - rsiMicro[2]
+
+rsiMicroAcceleration =
+     rsiMicroVelocity - rsiMicroVelocityPrev
+
+rsiMicroUp = rsiMicro > 50
+rsiMicroDown = rsiMicro < 50
+
+rsiMicroVelocityUp =
+     rsiMicroVelocity > 0
+
+rsiMicroVelocityDown =
+     rsiMicroVelocity < 0
+
+rsiMicroAccelUp =
+     rsiMicroAcceleration > 0
+
+rsiMicroAccelDown =
+     rsiMicroAcceleration < 0
+
+
+//====================================================
+// 18 - DMI MICRO
+//====================================================
+
+[diPlusMicro, diMinusMicro, adxMicro] =
+     ta.dmi(
+         microDMILen,
+         microDMILen)
+
+dmiMicroUp =
+     diPlusMicro > diMinusMicro
+
+dmiMicroDown =
+     diMinusMicro > diPlusMicro
+
+dmiMicroSpread =
+     diPlusMicro - diMinusMicro
+
+dmiMicroSpreadPrev =
+     dmiMicroSpread[1]
+
+dmiMicroAcceleration =
+     dmiMicroSpread - dmiMicroSpreadPrev
+
+dmiMicroAccelUp =
+     dmiMicroAcceleration > 0
+
+dmiMicroAccelDown =
+     dmiMicroAcceleration < 0
+
+adxMicroRising =
+     adxMicro > adxMicro[1]
+
+
+//====================================================
+// 19 - VOLUME MICRO
+//====================================================
+
+volumeMicroSMA =
+     ta.sma(volume, microVolumeLen)
+
+float volumeMicroRatio = 1.0
+float volumeMicroPrevRatio = 1.0
+float volumeMicroRatio2 = 1.0
+
+if volumeMicroSMA > 0
+    volumeMicroRatio := volume / volumeMicroSMA
+
+if volumeMicroSMA[1] > 0
+    volumeMicroPrevRatio :=
+         volume[1] / volumeMicroSMA[1]
+
+if volumeMicroSMA[2] > 0
+    volumeMicroRatio2 :=
+         volume[2] / volumeMicroSMA[2]
+
+volumeMicroVelocity =
+     volumeMicroRatio -
+     volumeMicroPrevRatio
+
+volumeMicroAcceleration =
+     volumeMicroVelocity -
+     (volumeMicroPrevRatio - volumeMicroRatio2)
+
+volumeMicroUp =
+     volumeMicroRatio >= volumeMinimo
+
+volumeMicroStrong =
+     volumeMicroRatio >= 1.0
+
+volumeMicroAccelUp =
+     volumeMicroAcceleration > 0
+
+
+//====================================================
+// 20 - MOMENTUM MICRO
+//====================================================
+
+momentumMicro =
+     close - close[microMomentumLen]
+
+momentumMicroNorm =
+     momentumMicro / atrMicroSafe
+
+momentumMicroUp =
+     momentumMicroNorm > 0
+
+momentumMicroDown =
+     momentumMicroNorm < 0
+
+momentumMicroStrongUp =
+     momentumMicroNorm >= 0.05
+
+momentumMicroStrongDown =
+     momentumMicroNorm <= -0.05
+
+momentumMicroVelocity =
+     momentumMicroNorm -
+     momentumMicroNorm[1]
+
+momentumMicroVelocityPrev =
+     momentumMicroNorm[1] -
+     momentumMicroNorm[2]
+
+momentumMicroAcceleration =
+     momentumMicroVelocity -
+     momentumMicroVelocityPrev
+
+momentumMicroAccelUp =
+     momentumMicroAcceleration > 0
+
+momentumMicroAccelDown =
+     momentumMicroAcceleration < 0
+
+
+//====================================================
+// 21 - KVO MICRO
+//====================================================
+
+dmMicroKVO =
+     math.max(
+         high - low,
+         syminfo.mintick)
+
+var float cmMicroKVO = 0.0
+
+if bar_index == 0
+    cmMicroKVO := dmMicroKVO
+else
+    if hlc3 > hlc3[1]
+        cmMicroKVO := cmMicroKVO[1] + dmMicroKVO
+    else if hlc3 < hlc3[1]
+        cmMicroKVO := cmMicroKVO[1] - dmMicroKVO
+    else
+        cmMicroKVO := cmMicroKVO[1]
+
+cmMicroSafe =
+     math.max(
+         math.abs(cmMicroKVO),
+         syminfo.mintick)
+
+float trendMicroKVO = 0.0
+
+if hlc3 > hlc3[1]
+    trendMicroKVO := 1.0
+else if hlc3 < hlc3[1]
+    trendMicroKVO := -1.0
+
+vfMicroKVO =
+     volume *
+     math.abs(
+         2.0 *
+         (dmMicroKVO / cmMicroSafe) -
+         1.0) *
+     trendMicroKVO *
+     100.0
+
+kvoMicroFast =
+     ta.ema(
+         vfMicroKVO,
+         microKvoFast)
+
+kvoMicroSlow =
+     ta.ema(
+         vfMicroKVO,
+         microKvoSlow)
+
+kvoMicroLine =
+     kvoMicroFast -
+     kvoMicroSlow
+
+kvoMicroSignalLine =
+     ta.ema(
+         kvoMicroLine,
+         microKvoSignal)
+
+kvoMicroHist =
+     kvoMicroLine -
+     kvoMicroSignalLine
+
+kvoMicroUp =
+     kvoMicroLine >
+     kvoMicroSignalLine
+
+kvoMicroDown =
+     kvoMicroLine <
+     kvoMicroSignalLine
+
+kvoMicroVelocity =
+     kvoMicroLine -
+     kvoMicroLine[1]
+
+kvoMicroVelocityPrev =
+     kvoMicroLine[1] -
+     kvoMicroLine[2]
+
+kvoMicroAcceleration =
+     kvoMicroVelocity -
+     kvoMicroVelocityPrev
+
+kvoMicroAccelUp =
+     kvoMicroAcceleration > 0
+
+kvoMicroAccelDown =
+     kvoMicroAcceleration < 0
+
+kvoMicroStrongUp =
+     kvoMicroHist > 0 and
+     kvoMicroVelocity > 0
+
+kvoMicroStrongDown =
+     kvoMicroHist < 0 and
+     kvoMicroVelocity < 0
+
+
+//====================================================
+// 22 - CANDLE BASE
+//====================================================
+
+microRange =
+     math.max(
+         high - low,
+         syminfo.mintick)
+
+microBody =
+     math.abs(close - open)
+
+microBodyRatio =
+     microBody / microRange
+
+microUpperWick =
+     high - math.max(open, close)
+
+microLowerWick =
+     math.min(open, close) - low
+
+microClosePosition =
+     (close - low) / microRange
+
+microBullBody =
+     close > open
+
+microBearBody =
+     close < open
+
+microStrongBullCandle =
+     microBullBody and
+     microBodyRatio >= 0.45 and
+     microClosePosition >= 0.65
+
+microStrongBearCandle =
+     microBearBody and
+     microBodyRatio >= 0.45 and
+     microClosePosition <= 0.35
+
+microBullPressure =
+     microBullBody and
+     microClosePosition >= 0.55
+
+microBearPressure =
+     microBearBody and
+     microClosePosition <= 0.45
+
+microCandleVelocity =
+     (close - open) / microRange
+
+microCandleVelocityPrev =
+     (close[1] - open[1]) /
+     math.max(
+         high[1] - low[1],
+         syminfo.mintick)
+
+microCandleAcceleration =
+     microCandleVelocity -
+     microCandleVelocityPrev
+
+microCandleAccelUp =
+     microCandleAcceleration > 0
+
+microCandleAccelDown =
+     microCandleAcceleration < 0
+
+
+//====================================================
+// 23 - PADRÕES MICRO
+//====================================================
+
+microDoji =
+     microBodyRatio <= 0.15
+
+microSpinningTop =
+     microBodyRatio > 0.15 and
+     microBodyRatio <= 0.30
+
+microHammer =
+     microLowerWick >= microBody * wickMultiplier and
+     microUpperWick <= microBody
+
+microShootingStar =
+     microUpperWick >= microBody * wickMultiplier and
+     microLowerWick <= microBody
+
+microPinCompra =
+     microLowerWick >= microBody * wickMultiplier and
+     close > open
+
+microPinVenda =
+     microUpperWick >= microBody * wickMultiplier and
+     close < open
+
+microEngolfoAlta =
+     close > open and
+     close[1] < open[1] and
+     open <= close[1] and
+     close >= open[1]
+
+microEngolfoBaixa =
+     close < open and
+     close[1] > open[1] and
+     open >= close[1] and
+     close <= open[1]
+
+microHaramiAlta =
+     close > open and
+     close[1] < open[1] and
+     open >= close[1] and
+     close <= open[1]
+
+microHaramiBaixa =
+     close < open and
+     close[1] > open[1] and
+     open <= close[1] and
+     close >= open[1]
+
+microPiercing =
+     close > open and
+     close > (open[1] + close[1]) / 2.0 and
+     close < open[1] and
+     close[1] < open[1]
+
+microDarkCloud =
+     close < open and
+     close < (open[1] + close[1]) / 2.0 and
+     close > open[1] and
+     close[1] > open[1]
+
+microMorningStar =
+     close[2] < open[2] and
+     microBodyRatio[1] < 0.30 and
+     close > open and
+     close > (open[2] + close[2]) / 2.0
+
+microEveningStar =
+     close[2] > open[2] and
+     microBodyRatio[1] < 0.30 and
+     close < open and
+     close < (open[2] + close[2]) / 2.0
+
+microTresSoldados =
+     close > open and
+     close[1] > open[1] and
+     close[2] > open[2] and
+     close > close[1] and
+     close[1] > close[2]
+
+microTresCorvos =
+     close < open and
+     close[1] < open[1] and
+     close[2] < open[2] and
+     close < close[1] and
+     close[1] < close[2]
+
+microCandleCompra =
+     microStrongBullCandle or
+     microHammer or
+     microPinCompra or
+     microEngolfoAlta or
+     microHaramiAlta or
+     microPiercing or
+     microMorningStar or
+     microTresSoldados
+
+microCandleVenda =
+     microStrongBearCandle or
+     microShootingStar or
+     microPinVenda or
+     microEngolfoBaixa or
+     microHaramiBaixa or
+     microDarkCloud or
+     microEveningStar or
+     microTresCorvos
+
+
+//====================================================
+// 24 - SUPORTE / RESISTÊNCIA
+//====================================================
+
+microResistencia =
+     ta.highest(
+         high[1],
+         microBreakLen)
+
+microSuporte =
+     ta.lowest(
+         low[1],
+         microBreakLen)
+
+microResistenciaEstrutural =
+     ta.highest(
+         high[1],
+         microLookback)
+
+microSuporteEstrutural =
+     ta.lowest(
+         low[1],
+         microLookback)
+
+distanciaMicroResistencia =
+     math.max(
+         microResistencia - close,
+         0) / atrMicroSafe
+
+distanciaMicroSuporte =
+     math.max(
+         close - microSuporte,
+         0) / atrMicroSafe
+
+microPertoResistencia =
+     distanciaMicroResistencia <= proximidadeATR
+
+microPertoSuporte =
+     distanciaMicroSuporte <= proximidadeATR
+
+
+//====================================================
+// 25 - ESTRUTURA MICRO
+//====================================================
+
+microHighAnterior =
+     ta.highest(
+         high[1],
+         microLookback)
+
+microLowAnterior =
+     ta.lowest(
+         low[1],
+         microLookback)
+
+microHH =
+     high > high[1] and
+     high >= microHighAnterior
+
+microLL =
+     low < low[1] and
+     low <= microLowAnterior
+
+microHL =
+     low > low[1]
+
+microLH =
+     high < high[1]
+
+microEstruturaAlta =
+     (microHH or microHL) and
+     close >= emaMicroMid
+
+microEstruturaBaixa =
+     (microLL or microLH) and
+     close <= emaMicroMid
+
+microEstruturaForteAlta =
+     microHH and
+     microHL and
+     emaMicroUp
+
+microEstruturaForteBaixa =
+     microLL and
+     microLH and
+     emaMicroDown
+
+
+//====================================================
+// 26 - FIGURAS MICRO
+//====================================================
+
+microTolFigura =
+     atrMicroSafe *
+     toleranciaFiguraATR
+
+microTopoA =
+     ta.highest(
+         high[1],
+         microLookback)
+
+microTopoB =
+     ta.highest(
+         high[2],
+         microLookback)
+
+microFundoA =
+     ta.lowest(
+         low[1],
+         microLookback)
+
+microFundoB =
+     ta.lowest(
+         low[2],
+         microLookback)
+
+microTopoDuplo =
+     math.abs(
+         microTopoA -
+         microTopoB) <=
+     microTolFigura
+
+microFundoDuplo =
+     math.abs(
+         microFundoA -
+         microFundoB) <=
+     microTolFigura
+
+microTrianguloAsc =
+     microTopoA <=
+     microTopoB +
+     microTolFigura and
+     microFundoA >
+     microFundoB
+
+microTrianguloDesc =
+     microTopoA <
+     microTopoB and
+     microFundoA >=
+     microFundoB -
+     microTolFigura
+
+microTrianguloSimetrico =
+     microTopoA <
+     microTopoB and
+     microFundoA >
+     microFundoB
+
+microRangeAtual =
+     microResistenciaEstrutural -
+     microSuporteEstrutural
+
+microConsolidacao =
+     microRangeAtual <=
+     atrMicroSafe * 1.50
+
+microCanalAlta =
+     microConsolidacao and
+     close >= emaMicroMid and
+     emaMicroUp
+
+microCanalBaixa =
+     microConsolidacao and
+     close <= emaMicroMid and
+     emaMicroDown
+
+microBandeiraAlta =
+     microConsolidacao and
+     emaMicroUp and
+     momentumMicroUp
+
+microBandeiraBaixa =
+     microConsolidacao and
+     emaMicroDown and
+     momentumMicroDown
+
+microFiguraAlta =
+     microFundoDuplo or
+     microTrianguloAsc or
+     microCanalAlta or
+     microBandeiraAlta
+
+microFiguraBaixa =
+     microTopoDuplo or
+     microTrianguloDesc or
+     microCanalBaixa or
+     microBandeiraBaixa
+
+microFiguraNeutra =
+     microTrianguloSimetrico or
+     microConsolidacao
+
+
+//====================================================
+// 27 - DIVERGÊNCIA MICRO
+//====================================================
+
+microPriceLow =
+     ta.lowest(
+         low[1],
+         microDivLen)
+
+microPriceHigh =
+     ta.highest(
+         high[1],
+         microDivLen)
+
+microRsiLow =
+     ta.lowest(
+         rsiMicro[1],
+         microDivLen)
+
+microRsiHigh =
+     ta.highest(
+         rsiMicro[1],
+         microDivLen)
+
+microKvoLow =
+     ta.lowest(
+         kvoMicroLine[1],
+         microDivLen)
+
+microKvoHigh =
+     ta.highest(
+         kvoMicroLine[1],
+         microDivLen)
+
+microDivRSICompra =
+     usarDivRSI and
+     low < microPriceLow and
+     rsiMicro > microRsiLow
+
+microDivRSIVenda =
+     usarDivRSI and
+     high > microPriceHigh and
+     rsiMicro < microRsiHigh
+
+microDivKVOCompra =
+     usarDivKVO and
+     low < microPriceLow and
+     kvoMicroLine > microKvoLow
+
+microDivKVOVenda =
+     usarDivKVO and
+     high > microPriceHigh and
+     kvoMicroLine < microKvoHigh
+
+microDivergenciaCompra =
+     microDivRSICompra or
+     microDivKVOCompra
+
+microDivergenciaVenda =
+     microDivRSIVenda or
+     microDivKVOVenda
+
+
+//====================================================
+// 28 - VELOCIDADE
+//====================================================
+
+microVelocidadeCompra =
+     (emaMicroVelocityUp ? 1 : 0) +
+     (rsiMicroVelocityUp ? 1 : 0) +
+     (dmiMicroUp ? 1 : 0) +
+     (kvoMicroVelocity > 0 ? 1 : 0) +
+     (momentumMicroVelocity > 0 ? 1 : 0) +
+     (volumeMicroRatio >= volumeMicroPrevRatio ? 1 : 0) +
+     (microCandleVelocity > 0 ? 1 : 0)
+
+microVelocidadeVenda =
+     (emaMicroVelocityDown ? 1 : 0) +
+     (rsiMicroVelocityDown ? 1 : 0) +
+     (dmiMicroDown ? 1 : 0) +
+     (kvoMicroVelocity < 0 ? 1 : 0) +
+     (momentumMicroVelocity < 0 ? 1 : 0) +
+     (volumeMicroRatio <= volumeMicroPrevRatio ? 1 : 0) +
+     (microCandleVelocity < 0 ? 1 : 0)
+
+
+//====================================================
+// 29 - ACELERAÇÃO
+//====================================================
+
+microAceleracaoCompra =
+     (emaMicroAccelUp ? 1 : 0) +
+     (rsiMicroAccelUp ? 1 : 0) +
+     (dmiMicroAccelUp ? 1 : 0) +
+     (kvoMicroAccelUp ? 1 : 0) +
+     (momentumMicroAccelUp ? 1 : 0) +
+     (volumeMicroAccelUp ? 1 : 0) +
+     (microCandleAccelUp ? 1 : 0)
+
+microAceleracaoVenda =
+     (emaMicroAccelDown ? 1 : 0) +
+     (rsiMicroAccelDown ? 1 : 0) +
+     (dmiMicroAccelDown ? 1 : 0) +
+     (kvoMicroAccelDown ? 1 : 0) +
+     (momentumMicroAccelDown ? 1 : 0) +
+     (volumeMicroAcceleration < 0 ? 1 : 0) +
+     (microCandleAccelDown ? 1 : 0)
+
+
+//====================================================
+// 30 - CONFLUÊNCIA
+//====================================================
+
+microConfluenciaCompra =
+     (emaMicroUp ? 1 : 0) +
+     (rsiMicroUp ? 1 : 0) +
+     (dmiMicroUp ? 1 : 0) +
+     (kvoMicroUp ? 1 : 0) +
+     (momentumMicroUp ? 1 : 0) +
+     (volumeMicroUp ? 1 : 0) +
+     (microBullPressure ? 1 : 0) +
+     (microEstruturaAlta ? 1 : 0) +
+     (microDivergenciaCompra ? 1 : 0)
+
+microConfluenciaVenda =
+     (emaMicroDown ? 1 : 0) +
+     (rsiMicroDown ? 1 : 0) +
+     (dmiMicroDown ? 1 : 0) +
+     (kvoMicroDown ? 1 : 0) +
+     (momentumMicroDown ? 1 : 0) +
+     (volumeMicroUp ? 1 : 0) +
+     (microBearPressure ? 1 : 0) +
+     (microEstruturaBaixa ? 1 : 0) +
+     (microDivergenciaVenda ? 1 : 0)
+
+
+//====================================================
+// 31 - PRESSÃO
+//====================================================
+
+pressaoMicroCompra =
+     microConfluenciaCompra >= microMinConfluence and
+     microVelocidadeCompra >= 4 and
+     microAceleracaoCompra >= 3
+
+pressaoMicroVenda =
+     microConfluenciaVenda >= microMinConfluence and
+     microVelocidadeVenda >= 4 and
+     microAceleracaoVenda >= 3
+
+
+//====================================================
+// 32 - CONTEXTO MACRO
+//====================================================
+
+tendenciaMacroAlta =
+     ema5 > ema13 and
+     ema13 > ema21 and
+     ema21 > ema50
+
+tendenciaMacroBaixa =
+     ema5 < ema13 and
+     ema13 < ema21 and
+     ema21 < ema50
+
+estruturaMacroAlta =
+     close > ema21 and
+     ema21 > ema50
+
+estruturaMacroBaixa =
+     close < ema21 and
+     ema21 < ema50
+
+distEMAMacro =
+     math.abs(
+         ema21 -
+         ema50)
+
+lateralEMA =
+     distEMAMacro <
+     atrMacroSafe *
+     lateralATR
+
+lateralADX =
+     adxMacro <
+     adxMinFinal
+
+mercadoLateral =
+     lateralEMA or
+     lateralADX
+
+mercadoOperavel =
+     not bloquearLateral or
+     not mercadoLateral
+
+
+//====================================================
+// 33 - ROMPIMENTO
+//====================================================
+
+microBreakAltaBruta =
+     close >
+     microResistencia +
+     atrMicroSafe *
+     margemATR
+
+microBreakBaixaBruta =
+     close <
+     microSuporte -
+     atrMicroSafe *
+     margemATR
+
+microForcaBreakAlta =
+     (close - microResistencia) /
+     atrMicroSafe
+
+microForcaBreakBaixa =
+     (microSuporte - close) /
+     atrMicroSafe
+
+microBreakAlta =
+     microBreakAltaBruta and
+     close[1] <= microResistencia and
+     microForcaBreakAlta >= forcaBreakFinal
+
+microBreakBaixa =
+     microBreakBaixaBruta and
+     close[1] >= microSuporte and
+     microForcaBreakBaixa >= forcaBreakFinal
+
+
+//====================================================
+// 34 - QUALIDADE DO BREAK
+//====================================================
+
+qualidadeBreakCompra =
+     microBreakAlta and
+     microStrongBullCandle and
+     (not usarVolume or volumeMicroRatio >= volumeMinimo) and
+     (not usarDMI or adxMicro >= adxMinFinal)
+
+qualidadeBreakVenda =
+     microBreakBaixa and
+     microStrongBearCandle and
+     (not usarVolume or volumeMicroRatio >= volumeMinimo) and
+     (not usarDMI or adxMicro >= adxMinFinal)
+
+
+//====================================================
+// 35 - PRÉ-BREAK
+//====================================================
+
+preBreakCompra =
+     ativar and
+     microPertoResistencia and
+     pressaoMicroCompra and
+     microVelocidadeCompra >= 4 and
+     microAceleracaoCompra >= 3 and
+     (
+         microEstruturaAlta or
+         microFiguraAlta or
+         microCandleCompra or
+         microDivergenciaCompra
+     ) and
+     not mercadoLateral
+
+preBreakVenda =
+     ativar and
+     microPertoSuporte and
+     pressaoMicroVenda and
+     microVelocidadeVenda >= 4 and
+     microAceleracaoVenda >= 3 and
+     (
+         microEstruturaBaixa or
+         microFiguraBaixa or
+         microCandleVenda or
+         microDivergenciaVenda
+     ) and
+     not mercadoLateral
+
+
+//====================================================
+// 36 - RETESTE
+//====================================================
+
+var int ultimoMicroBreakAltaBar = na
+var int ultimoMicroBreakBaixaBar = na
+
+var float ultimoMicroNivelAlta = na
+var float ultimoMicroNivelBaixa = na
+
+if microBreakAlta
+    ultimoMicroBreakAltaBar := bar_index
+    ultimoMicroNivelAlta := microResistencia
+
+if microBreakBaixa
+    ultimoMicroBreakBaixaBar := bar_index
+    ultimoMicroNivelBaixa := microSuporte
+
+dentroMicroRetesteAlta =
+     not na(ultimoMicroBreakAltaBar) and
+     bar_index > ultimoMicroBreakAltaBar and
+     bar_index - ultimoMicroBreakAltaBar <= janelaReteste
+
+dentroMicroRetesteBaixa =
+     not na(ultimoMicroBreakBaixaBar) and
+     bar_index > ultimoMicroBreakBaixaBar and
+     bar_index - ultimoMicroBreakBaixaBar <= janelaReteste
+
+microRetesteAlta =
+     usarReteste and
+     dentroMicroRetesteAlta and
+     not na(ultimoMicroNivelAlta) and
+     low <= ultimoMicroNivelAlta +
+     atrMicroSafe * toleranciaReteste and
+     close > ultimoMicroNivelAlta
+
+microRetesteBaixa =
+     usarReteste and
+     dentroMicroRetesteBaixa and
+     not na(ultimoMicroNivelBaixa) and
+     high >= ultimoMicroNivelBaixa -
+     atrMicroSafe * toleranciaReteste and
+     close < ultimoMicroNivelBaixa
+
+microRetestePerdidoAlta =
+     usarReteste and
+     dentroMicroRetesteAlta and
+     not na(ultimoMicroNivelAlta) and
+     close <
+     ultimoMicroNivelAlta -
+     atrMicroSafe * toleranciaReteste
+
+microRetestePerdidoBaixa =
+     usarReteste and
+     dentroMicroRetesteBaixa and
+     not na(ultimoMicroNivelBaixa) and
+     close >
+     ultimoMicroNivelBaixa +
+     atrMicroSafe * toleranciaReteste
+
+
+//====================================================
+// 37 - ANTI-FALSO BREAK
+//====================================================
+
+microFalsoBreakAlta =
+     microBreakAlta[1] and
+     close < microResistencia[1]
+
+microFalsoBreakBaixa =
+     microBreakBaixa[1] and
+     close > microSuporte[1]
+
+microExaustaoCompra =
+     microBreakAlta and
+     microUpperWick >
+     microBody * wickMultiplier and
+     microCandleAcceleration < 0
+
+microExaustaoVenda =
+     microBreakBaixa and
+     microLowerWick >
+     microBody * wickMultiplier and
+     microCandleAcceleration > 0
+
+
+//====================================================
+// 38 - SCORE
+//====================================================
+
+float scoreMicroCompra = 0.0
+
+if emaMicroUp
+    scoreMicroCompra += 10
+
+if emaMicroVelocityUp
+    scoreMicroCompra += 8
+
+if emaMicroAccelUp
+    scoreMicroCompra += 7
+
+if rsiMicroUp
+    scoreMicroCompra += 8
+
+if rsiMicroVelocityUp
+    scoreMicroCompra += 7
+
+if rsiMicroAccelUp
+    scoreMicroCompra += 5
+
+if dmiMicroUp
+    scoreMicroCompra += 8
+
+if dmiMicroAccelUp
+    scoreMicroCompra += 6
+
+if kvoMicroStrongUp
+    scoreMicroCompra += 8
+
+if kvoMicroAccelUp
+    scoreMicroCompra += 6
+
+if volumeMicroStrong
+    scoreMicroCompra += 7
+
+if momentumMicroStrongUp
+    scoreMicroCompra += 7
+
+if microStrongBullCandle
+    scoreMicroCompra += 7
+
+if microEstruturaForteAlta
+    scoreMicroCompra += 8
+
+if microFiguraAlta
+    scoreMicroCompra += 5
+
+if microDivergenciaCompra
+    scoreMicroCompra += 5
+
+
+float scoreMicroVenda = 0.0
+
+if emaMicroDown
+    scoreMicroVenda += 10
+
+if emaMicroVelocityDown
+    scoreMicroVenda += 8
+
+if emaMicroAccelDown
+    scoreMicroVenda += 7
+
+if rsiMicroDown
+    scoreMicroVenda += 8
+
+if rsiMicroVelocityDown
+    scoreMicroVenda += 7
+
+if rsiMicroAccelDown
+    scoreMicroVenda += 5
+
+if dmiMicroDown
+    scoreMicroVenda += 8
+
+if dmiMicroAccelDown
+    scoreMicroVenda += 6
+
+if kvoMicroStrongDown
+    scoreMicroVenda += 8
+
+if kvoMicroAccelDown
+    scoreMicroVenda += 6
+
+if volumeMicroStrong
+    scoreMicroVenda += 7
+
+if momentumMicroStrongDown
+    scoreMicroVenda += 7
+
+if microStrongBearCandle
+    scoreMicroVenda += 7
+
+if microEstruturaForteBaixa
+    scoreMicroVenda += 8
+
+if microFiguraBaixa
+    scoreMicroVenda += 5
+
+if microDivergenciaVenda
+    scoreMicroVenda += 5
+
+scoreMicroCompraFinal =
+     math.min(
+         100.0,
+         scoreMicroCompra)
+
+scoreMicroVendaFinal =
+     math.min(
+         100.0,
+         scoreMicroVenda)
+
+vantagemMicroCompra =
+     scoreMicroCompraFinal -
+     scoreMicroVendaFinal
+
+vantagemMicroVenda =
+     scoreMicroVendaFinal -
+     scoreMicroCompraFinal
+
+
+//====================================================
+// 39 - PREVISÃO
+//====================================================
+
+previsaoMicroCompra =
+     (
+         pressaoMicroCompra or
+         microEstruturaForteAlta or
+         microFiguraAlta or
+         microDivergenciaCompra
+     ) and
+     microVelocidadeCompra >= 4
+
+previsaoMicroVenda =
+     (
+         pressaoMicroVenda or
+         microEstruturaForteBaixa or
+         microFiguraBaixa or
+         microDivergenciaVenda
+     ) and
+     microVelocidadeVenda >= 4
+
+
+//====================================================
+// 40 - FILTROS
+//====================================================
+
+figuraCompraOK =
+     not usarFiguras or
+     not exigirFigura or
+     microFiguraAlta
+
+figuraVendaOK =
+     not usarFiguras or
+     not exigirFigura or
+     microFiguraBaixa
+
+emaCompraOK =
+     not usarEMA or
+     emaMicroUp or
+     microEstruturaAlta
+
+emaVendaOK =
+     not usarEMA or
+     emaMicroDown or
+     microEstruturaBaixa
+
+rsiCompraOK =
+     not usarRSI or
+     rsiMicroUp
+
+rsiVendaOK =
+     not usarRSI or
+     rsiMicroDown
+
+dmiCompraOK =
+     not usarDMI or
+     dmiMicroUp
+
+dmiVendaOK =
+     not usarDMI or
+     dmiMicroDown
+
+adxOK =
+     not usarDMI or
+     adxMicro >= adxMinFinal
+
+volumeCompraOK =
+     not usarVolume or
+     volumeMicroRatio >= volumeMinimo
+
+volumeVendaOK =
+     not usarVolume or
+     volumeMicroRatio >= volumeMinimo
+
+atrOK =
+     not usarATR or
+     atrMicroRatio >= 0.50
+
+momentumCompraOK =
+     not usarMomentum or
+     momentumMicroUp
+
+momentumVendaOK =
+     not usarMomentum or
+     momentumMicroDown
+
+kvoCompraOK =
+     not usarKVO or
+     kvoMicroUp
+
+kvoVendaOK =
+     not usarKVO or
+     kvoMicroDown
+
+candleCompraOK =
+     not usarCandles or
+     not exigirCandle or
+     microCandleCompra
+
+candleVendaOK =
+     not usarCandles or
+     not exigirCandle or
+     microCandleVenda
+
+
+//====================================================
+// 41 - CANDIDATOS
+//====================================================
+
+bool candidatoCompra =
+     ativar and
+     microBreakAlta and
+     qualidadeBreakCompra and
+     figuraCompraOK and
+     emaCompraOK and
+     rsiCompraOK and
+     dmiCompraOK and
+     adxOK and
+     volumeCompraOK and
+     atrOK and
+     momentumCompraOK and
+     kvoCompraOK and
+     candleCompraOK and
+     mercadoOperavel and
+     previsaoMicroCompra and
+     scoreMicroCompraFinal >= scoreMinimo and
+     vantagemMicroCompra >= 5 and
+     not microFalsoBreakAlta and
+     not microExaustaoCompra and
+     not microRetestePerdidoAlta
+
+bool candidatoVenda =
+     ativar and
+     microBreakBaixa and
+     qualidadeBreakVenda and
+     figuraVendaOK and
+     emaVendaOK and
+     rsiVendaOK and
+     dmiVendaOK and
+     adxOK and
+     volumeVendaOK and
+     atrOK and
+     momentumVendaOK and
+     kvoVendaOK and
+     candleVendaOK and
+     mercadoOperavel and
+     previsaoMicroVenda and
+     scoreMicroVendaFinal >= scoreMinimo and
+     vantagemMicroVenda >= 5 and
+     not microFalsoBreakBaixa and
+     not microExaustaoVenda and
+     not microRetestePerdidoBaixa
+
+
+//====================================================
+// 42 - CONFLITO
+//====================================================
+
+bool conflito =
+     candidatoCompra and
+     candidatoVenda
+
+if conflito
+    if scoreMicroCompraFinal > scoreMicroVendaFinal
+        candidatoVenda := false
+    else if scoreMicroVendaFinal > scoreMicroCompraFinal
+        candidatoCompra := false
+    else
+        candidatoCompra := false
+        candidatoVenda := false
+
+
+//====================================================
+// 43 - ARMAMENTO
+//====================================================
+
+var bool armadoCompra = true
+var bool armadoVenda = true
+
+if close <= microResistencia
+    armadoCompra := true
+
+if close >= microSuporte
+    armadoVenda := true
+
+novoBreakCompra =
+     candidatoCompra and
+     armadoCompra
+
+novoBreakVenda =
+     candidatoVenda and
+     armadoVenda
+
+if novoBreakCompra
+    armadoCompra := false
+
+if novoBreakVenda
+    armadoVenda := false
+
+
+//====================================================
+// 44 - COOLDOWN
+//====================================================
+
+var int ultimoSinalBar = na
+var int ultimaDirecao = 0
+
+cooldownOK =
+     na(ultimoSinalBar) or
+     bar_index - ultimoSinalBar >= cooldownFinal
+
+
+//====================================================
+// 45 - CONFIRMAÇÃO
+//====================================================
+
+confirmacaoOK =
+     not somenteConfirmada or
+     barstate.isconfirmed
+
+
+//====================================================
+// 46 - ENTRADA
+//====================================================
+
+bool entradaCompraMotor =
+     novoBreakCompra and
+     cooldownOK and
+     confirmacaoOK
+
+bool entradaVendaMotor =
+     novoBreakVenda and
+     cooldownOK and
+     confirmacaoOK
+
+if entradaCompraMotor and entradaVendaMotor
+    entradaCompraMotor := false
+    entradaVendaMotor := false
+
+
+//====================================================
+// 47 - MEMÓRIA
+//====================================================
+
+if entradaCompraMotor
+    ultimoSinalBar := bar_index
+    ultimaDirecao := 1
+
+if entradaVendaMotor
+    ultimoSinalBar := bar_index
+    ultimaDirecao := -1
+
+
+//====================================================
+// 48 - ESTADO
+//====================================================
+
+string estado = "AGUARDAR"
+string direcaoTexto = "SEM SINAL"
+
+bool estadoCompra = false
+bool estadoVenda = false
+bool estadoPreparacao = false
+bool estadoFalso = false
+
+if entradaCompraMotor
+    estado := "COMPRA MICRO BREAK"
+    direcaoTexto := "COMPRA"
+    estadoCompra := true
+
+else if entradaVendaMotor
+    estado := "VENDA MICRO BREAK"
+    direcaoTexto := "VENDA"
+    estadoVenda := true
+
+else if microFalsoBreakAlta or microFalsoBreakBaixa
+    estado := "FALSO MICRO BREAK"
+    direcaoTexto := "SEM ENTRADA"
+    estadoFalso := true
+
+else if preBreakCompra
+    estado := "MICRO PRE-BREAK"
+    direcaoTexto := "COMPRA"
+    estadoPreparacao := true
+
+else if preBreakVenda
+    estado := "MICRO PRE-BREAK"
+    direcaoTexto := "VENDA"
+    estadoPreparacao := true
+
+
+//====================================================
+// 49 - CONTINUAÇÃO
+//====================================================
+
+continuarCompra =
+     ultimaDirecao == 1 and
+     emaMicroUp and
+     kvoMicroUp and
+     momentumMicroUp and
+     microEstruturaAlta and
+     not mercadoLateral
+
+continuarVenda =
+     ultimaDirecao == -1 and
+     emaMicroDown and
+     kvoMicroDown and
+     momentumMicroDown and
+     microEstruturaBaixa and
+     not mercadoLateral
+
+if not estadoCompra and
+   not estadoVenda and
+   not estadoFalso and
+   not estadoPreparacao
+
+    if continuarCompra
+        estado := "CONTINUAR COMPRA"
+        direcaoTexto := "COMPRA"
+        estadoCompra := true
+
+    else if continuarVenda
+        estado := "CONTINUAR VENDA"
+        direcaoTexto := "VENDA"
+        estadoVenda := true
+
+
+//====================================================
+// 50 - SINAIS
+//====================================================
+
+sinalCompra = entradaCompraMotor
+sinalVenda = entradaVendaMotor
+
+
+//====================================================
+// 51 - ORDENS
+//====================================================
+
+if executarOrdens
+
+    if sinalCompra
+        strategy.entry(
+             "COMPRA",
+             strategy.long)
+
+    if sinalVenda
+        strategy.entry(
+             "VENDA",
+             strategy.short)
+
+
+//====================================================
+// 52 - EXPIRAÇÃO
+//====================================================
+
+var int barraEntrada = na
+var int direcaoEntrada = 0
+
+if executarOrdens and sinalCompra
+    barraEntrada := bar_index
+    direcaoEntrada := 1
+
+if executarOrdens and sinalVenda
+    barraEntrada := bar_index
+    direcaoEntrada := -1
+
+expirou =
+     executarOrdens and
+     not na(barraEntrada) and
+     bar_index - barraEntrada >= expiracaoVelas
+
+if expirou
+
+    strategy.close_all(
+         comment = "EXPIRAÇÃO")
+
+    barraEntrada := na
+    direcaoEntrada := 0
+
+
+//====================================================
+// 53 - ALERTAS
+//====================================================
+
+if sinalCompra
+    alert(
+         "KVO PRO V42.0 - MICRO BREAK - COMPRA",
+         alert.freq_once_per_bar_close)
+
+if sinalVenda
+    alert(
+         "KVO PRO V42.0 - MICRO BREAK - VENDA",
+         alert.freq_once_per_bar_close)
+
+
+//====================================================
+// 54 - SINAIS NO GRÁFICO
+//====================================================
+
+plotshape(
+     sinalCompra,
+     title = "Micro Compra",
+     style = shape.labelup,
+     location = location.belowbar,
+     text = "COMPRA",
+     size = size.tiny,
+     color = color.green,
+     textcolor = color.white)
+
+plotshape(
+     sinalVenda,
+     title = "Micro Venda",
+     style = shape.labeldown,
+     location = location.abovebar,
+     text = "VENDA",
+     size = size.tiny,
+     color = color.red,
+     textcolor = color.white)
+
+plotshape(
+     preBreakCompra and not sinalCompra,
+     title = "Pré Compra",
+     style = shape.circle,
+     location = location.belowbar,
+     text = "PRE",
+     size = size.tiny,
+     color = color.yellow,
+     textcolor = color.black)
+
+plotshape(
+     preBreakVenda and not sinalVenda,
+     title = "Pré Venda",
+     style = shape.circle,
+     location = location.abovebar,
+     text = "PRE",
+     size = size.tiny,
+     color = color.orange,
+     textcolor = color.black)
+
+
+//====================================================
+// 55 - NÍVEIS
+//====================================================
+
+plot(
+     microResistencia,
+     title = "Micro Resistência",
+     color = color.new(color.red, 75),
+     linewidth = 1)
+
+plot(
+     microSuporte,
+     title = "Micro Suporte",
+     color = color.new(color.green, 75),
+     linewidth = 1)
+
+
+//====================================================
+// 56 - POSIÇÃO PAINEL
+//====================================================
+
+// FIXO:
+// CANTO ESQUERDO / MEIO
+
+var panelPosition = position.middle_left
+
+
+//====================================================
+// 57 - CORES PAINEL
+//====================================================
+
+color corCompra = color.green
+color corVenda = color.red
+color corNeutra = color.gray
+color corPreparacao = color.orange
+
+color corDirecao = corNeutra
+color corFundo = color.new(color.gray, 85)
+color corTexto = color.white
+
+if estadoCompra
+    corDirecao := corCompra
+    corFundo := color.new(color.green, 82)
+    corTexto := color.white
+
+else if estadoVenda
+    corDirecao := corVenda
+    corFundo := color.new(color.red, 82)
+    corTexto := color.white
+
+else if estadoPreparacao
+    corDirecao := corPreparacao
+    corFundo := color.new(color.orange, 82)
+    corTexto := color.white
+
+
+//====================================================
+// 58 - FUNÇÕES PAINEL
+//====================================================
+
+f_estado(bool compra, bool venda) =>
+    string resultado = "NEUTRO"
+
+    if compra
+        resultado := "COMPRA"
+
+    else if venda
+        resultado := "VENDA"
+
+    resultado
+
+
+f_velocidade(int compra, int venda) =>
+    string resultado = "NEUTRA"
+
+    if compra > venda
+        resultado := "ALTA"
+
+    else if venda > compra
+        resultado := "BAIXA"
+
+    resultado
+
+
+f_aceleracao(int compra, int venda) =>
+    string resultado = "NEUTRA"
+
+    if compra > venda
+        resultado := "ALTA"
+
+    else if venda > compra
+        resultado := "BAIXA"
+
+    resultado
+
+
+f_corDirecao(bool compra, bool venda) =>
+    color resultado = color.gray
+
+    if compra
+        resultado := color.green
+
+    else if venda
+        resultado := color.red
+
+    resultado
+
+
+//====================================================
+// 59 - PAINEL
+//====================================================
+
+var table painel = na
+
+if mostrarPainel and na(painel)
+
+    painel := table.new(
+         position.middle_left,
+         2,
+         22,
+         border_width = 1,
+         frame_width = 2,
+         frame_color = color.gray)
+
+
+//====================================================
+// 60 - ATUALIZAÇÃO DO PAINEL
+//====================================================
+
+if barstate.islast and mostrarPainel and not na(painel)
+
+    //================================================
+    // VARIÁVEIS DO PAINEL
+    //================================================
+
+    string painelDirecao =
+         f_estado(
+             estadoCompra,
+             estadoVenda)
+
+    string textoBreak = "AGUARDANDO"
+    color corBreak = corNeutra
+
+    if microBreakAlta
+        textoBreak := "ROMPEU ALTA"
+        corBreak := corCompra
+
+    else if microBreakBaixa
+        textoBreak := "ROMPEU BAIXA"
+        corBreak := corVenda
+
+    else if preBreakCompra
+        textoBreak := "PRE COMPRA"
+        corBreak := corPreparacao
+
+    else if preBreakVenda
+        textoBreak := "PRE VENDA"
+        corBreak := corPreparacao
+
+
+    string textoTendencia = "NEUTRA"
+    color corTendencia = corNeutra
+
+    if emaMicroUp
+        textoTendencia := "ALTA"
+        corTendencia := corCompra
+
+    else if emaMicroDown
+        textoTendencia := "BAIXA"
+        corTendencia := corVenda
+
+
+    string textoVelocidade =
+         f_velocidade(
+             microVelocidadeCompra,
+             microVelocidadeVenda)
+
+    color corVelocidade =
+         f_corDirecao(
+             microVelocidadeCompra >
+             microVelocidadeVenda,
+             microVelocidadeVenda >
+             microVelocidadeCompra)
+
+
+    string textoAceleracao =
+         f_aceleracao(
+             microAceleracaoCompra,
+             microAceleracaoVenda)
+
+    color corAceleracao =
+         f_corDirecao(
+             microAceleracaoCompra >
+             microAceleracaoVenda,
+             microAceleracaoVenda >
+             microAceleracaoCompra)
+
+
+    string textoEstrutura = "NEUTRA"
+    color corEstrutura = corNeutra
+
+    if microEstruturaAlta
+        textoEstrutura := "ALTA"
+        corEstrutura := corCompra
+
+    else if microEstruturaBaixa
+        textoEstrutura := "BAIXA"
+        corEstrutura := corVenda
+
+
+    string textoFigura = "AUSENTE"
+    color corFigura = corNeutra
+
+    if microFiguraAlta
+        textoFigura := "ALTA"
+        corFigura := corCompra
+
+    else if microFiguraBaixa
+        textoFigura := "BAIXA"
+        corFigura := corVenda
+
+    else if microFiguraNeutra
+        textoFigura := "FORMACAO"
+        corFigura := corNeutra
+
+
+    string textoCandle = "NEUTRO"
+    color corCandle = corNeutra
+
+    if microCandleCompra
+        textoCandle := "COMPRADOR"
+        corCandle := corCompra
+
+    else if microCandleVenda
+        textoCandle := "VENDEDOR"
+        corCandle := corVenda
+
+
+    string textoRSI = "NEUTRO"
+    color corRSI = corNeutra
+
+    if rsiMicroUp
+        textoRSI := "ALTA"
+        corRSI := corCompra
+
+    else if rsiMicroDown
+        textoRSI := "BAIXA"
+        corRSI := corVenda
+
+
+    string textoDMI = "NEUTRO"
+    color corDMI = corNeutra
+
+    if dmiMicroUp
+        textoDMI := "ALTA"
+        corDMI := corCompra
+
+    else if dmiMicroDown
+        textoDMI := "BAIXA"
+        corDMI := corVenda
+
+
+    string textoKVO = "NEUTRO"
+    color corKVO = corNeutra
+
+    if kvoMicroUp
+        textoKVO := "ALTA"
+        corKVO := corCompra
+
+    else if kvoMicroDown
+        textoKVO := "BAIXA"
+        corKVO := corVenda
+
+
+    string textoVolume = "FRACO"
+    color corVolume = corVenda
+
+    if volumeMicroStrong
+        textoVolume := "FORTE"
+        corVolume := corCompra
+
+    else if volumeMicroUp
+        textoVolume := "OK"
+        corVolume := corNeutra
+
+
+    string textoMomentum = "NEUTRO"
+    color corMomentum = corNeutra
+
+    if momentumMicroUp
+        textoMomentum := "ALTA"
+        corMomentum := corCompra
+
+    else if momentumMicroDown
+        textoMomentum := "BAIXA"
+        corMomentum := corVenda
+
+
+    //================================================
+    // DIVERGÊNCIA
+    //================================================
+
+    string textoDiv = "AUSENTE"
+    color corDiv = corNeutra
+
+    if microDivergenciaCompra
+        textoDiv := "COMPRA"
+        corDiv := corCompra
+
+    else if microDivergenciaVenda
+        textoDiv := "VENDA"
+        corDiv := corVenda
+
+
+    //================================================
+    // PRESSÃO
+    //================================================
+
+    string textoPressao = "NEUTRA"
+    color corPressao = corNeutra
+
+    if pressaoMicroCompra
+        textoPressao := "COMPRA"
+        corPressao := corCompra
+
+    else if pressaoMicroVenda
+        textoPressao := "VENDA"
+        corPressao := corVenda
+
+
+    //================================================
+    // SCORE
+    //================================================
+
+    float scorePainel = math.max(
+         scoreMicroCompraFinal,
+         scoreMicroVendaFinal)
+
+    string textoScore =
+         str.tostring(
+             scorePainel,
+             "#.0") +
+         "%"
+
+
+    color corScore = corNeutra
+
+    if scoreMicroCompraFinal > scoreMicroVendaFinal
+        corScore := corCompra
+
+    else if scoreMicroVendaFinal > scoreMicroCompraFinal
+        corScore := corVenda
+
+
+    //================================================
+    // VANTAGEM
+    //================================================
+
+    float vantagemPainel =
+         math.max(
+             vantagemMicroCompra,
+             vantagemMicroVenda)
+
+    string textoVantagem =
+         str.tostring(
+             vantagemPainel,
+             "#.0")
+
+    color corVantagem = corNeutra
+
+    if vantagemMicroCompra > vantagemMicroVenda
+        corVantagem := corCompra
+
+    else if vantagemMicroVenda > vantagemMicroCompra
+        corVantagem := corVenda
+
+
+    //================================================
+    // MERCADO
+    //================================================
+
+    string textoMercado = "OPERÁVEL"
+    color corMercado = corCompra
+
+    if mercadoLateral
+        textoMercado := "LATERAL"
+        corMercado := corVenda
+
+
+    //================================================
+    // STATUS
+    //================================================
+
+    string textoStatus = "AGUARDANDO"
+    color corStatus = corNeutra
+
+    if sinalCompra
+        textoStatus := "ENTRADA COMPRA"
+        corStatus := corCompra
+
+    else if sinalVenda
+        textoStatus := "ENTRADA VENDA"
+        corStatus := corVenda
+
+    else if estadoPreparacao
+        textoStatus := "PREPARAÇÃO"
+        corStatus := corPreparacao
+
+
+    //================================================
+    // CABEÇALHO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         0,
+         "KVO PRO V42.0",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 0),
+         text_size = size.small)
+
+    table.cell(
+         painel,
+         1,
+         0,
+         "ULTRA FAST",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 0),
+         text_size = size.small)
+
+
+    //================================================
+    // LINHA 1 - DIREÇÃO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         1,
+         "DIREÇÃO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         1,
+         painelDirecao,
+         text_color = corDirecao,
+         bgcolor = corFundo)
+
+
+    //================================================
+    // LINHA 2 - STATUS
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         2,
+         "STATUS",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         2,
+         textoStatus,
+         text_color = corStatus,
+         bgcolor = color.new(corStatus, 85))
+
+
+    //================================================
+    // LINHA 3 - BREAK
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         3,
+         "BREAK",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         3,
+         textoBreak,
+         text_color = corBreak,
+         bgcolor = color.new(corBreak, 85))
+
+
+    //================================================
+    // LINHA 4 - TENDÊNCIA
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         4,
+         "TENDÊNCIA",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         4,
+         textoTendencia,
+         text_color = corTendencia,
+         bgcolor = color.new(corTendencia, 85))
+
+
+    //================================================
+    // LINHA 5 - VELOCIDADE
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         5,
+         "VELOCIDADE",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         5,
+         textoVelocidade,
+         text_color = corVelocidade,
+         bgcolor = color.new(corVelocidade, 85))
+
+
+    //================================================
+    // LINHA 6 - ACELERAÇÃO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         6,
+         "ACELERAÇÃO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         6,
+         textoAceleracao,
+         text_color = corAceleracao,
+         bgcolor = color.new(corAceleracao, 85))
+
+
+    //================================================
+    // LINHA 7 - ESTRUTURA
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         7,
+         "ESTRUTURA",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         7,
+         textoEstrutura,
+         text_color = corEstrutura,
+         bgcolor = color.new(corEstrutura, 85))
+
+
+    //================================================
+    // LINHA 8 - FIGURA
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         8,
+         "FIGURA",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         8,
+         textoFigura,
+         text_color = corFigura,
+         bgcolor = color.new(corFigura, 85))
+
+
+    //================================================
+    // LINHA 9 - CANDLE
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         9,
+         "CANDLE",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         9,
+         textoCandle,
+         text_color = corCandle,
+         bgcolor = color.new(corCandle, 85))
+
+
+    //================================================
+    // LINHA 10 - RSI
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         10,
+         "RSI",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         10,
+         textoRSI,
+         text_color = corRSI,
+         bgcolor = color.new(corRSI, 85))
+
+
+    //================================================
+    // LINHA 11 - DMI
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         11,
+         "DMI",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         11,
+         textoDMI,
+         text_color = corDMI,
+         bgcolor = color.new(corDMI, 85))
+
+
+    //================================================
+    // LINHA 12 - KVO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         12,
+         "KVO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         12,
+         textoKVO,
+         text_color = corKVO,
+         bgcolor = color.new(corKVO, 85))
+
+
+    //================================================
+    // LINHA 13 - VOLUME
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         13,
+         "VOLUME",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         13,
+         textoVolume,
+         text_color = corVolume,
+         bgcolor = color.new(corVolume, 85))
+
+
+    //================================================
+    // LINHA 14 - MOMENTUM
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         14,
+         "MOMENTUM",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         14,
+         textoMomentum,
+         text_color = corMomentum,
+         bgcolor = color.new(corMomentum, 85))
+
+
+    //================================================
+    // LINHA 15 - DIVERGÊNCIA
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         15,
+         "DIVERGÊNCIA",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         15,
+         textoDiv,
+         text_color = corDiv,
+         bgcolor = color.new(corDiv, 85))
+
+
+    //================================================
+    // LINHA 16 - PRESSÃO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         16,
+         "PRESSÃO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         16,
+         textoPressao,
+         text_color = corPressao,
+         bgcolor = color.new(corPressao, 85))
+
+
+    //================================================
+    // LINHA 17 - SCORE
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         17,
+         "SCORE",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         17,
+         textoScore,
+         text_color = corScore,
+         bgcolor = color.new(corScore, 85))
+
+
+    //================================================
+    // LINHA 18 - VANTAGEM
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         18,
+         "VANTAGEM",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         18,
+         textoVantagem,
+         text_color = corVantagem,
+         bgcolor = color.new(corVantagem, 85))
+
+
+    //================================================
+    // LINHA 19 - MERCADO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         19,
+         "MERCADO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         19,
+         textoMercado,
+         text_color = corMercado,
+         bgcolor = color.new(corMercado, 85))
+
+
+    //================================================
+    // LINHA 20 - MODO
+    //================================================
+
+    table.cell(
+         painel,
+         0,
+         20,
+         "MODO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         20,
+         modoOperacao,
+         text_color = color.white,
+         bgcolor = color.new(color.black, 50))
+
+
+    //================================================
+    // LINHA 21 - EXECUÇÃO
+    //================================================
+
+    string textoExecucao =
+         executarOrdens ?
+         "ORDENS ATIVAS" :
+         "SINAL / ALERTA"
+
+    color corExecucao =
+         executarOrdens ?
+         color.green :
+         color.orange
+
+    table.cell(
+         painel,
+         0,
+         21,
+         "EXECUÇÃO",
+         text_color = color.white,
+         bgcolor = color.new(color.black, 20))
+
+    table.cell(
+         painel,
+         1,
+         21,
+         textoExecucao,
+         text_color = corExecucao,
+         bgcolor = color.new(corExecucao, 85))

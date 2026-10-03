@@ -1,0 +1,3010 @@
+//@version=6
+indicator("KVO PRO V79.7 - MICRO PRE-BREAK ULTRA FAST", overlay=true, max_labels_count=500)
+
+//====================================================
+// V79.7
+//
+// HIERARQUIA
+//
+// CONTEXTO
+//     ↓
+// MICRO INDICADORES
+//     ↓
+// MICRO DIREÇÃO
+//     ↓
+// MICRO VELOCIDADE
+//     ↓
+// MICRO ACELERAÇÃO
+//     ↓
+// MICRO ESTRUTURA
+//     ↓
+// MICRO PADRÃO
+//     ↓
+// MICRO DIVERGÊNCIA
+//     ↓
+// PRE-BREAK
+//     ↓
+// MICRO ROMPIMENTO
+//     ↓
+// FORÇA
+//     ↓
+// ESPAÇO / RISCO
+//     ↓
+// DECISÃO
+//
+// IMPORTANTE:
+//
+// PRE-BREAK = PREPARAÇÃO
+// ROMPIMENTO = GATILHO
+//
+// O PRE-BREAK NÃO ABRE OPERAÇÃO.
+//====================================================
+
+
+//====================================================
+// GRUPOS
+//====================================================
+
+grupoPainel = "PAINEL"
+grupoBinarias = "OPÇÕES BINÁRIAS"
+grupoEstrutura = "ESTRUTURA"
+grupoMicro = "MICRO INDICADORES"
+grupoPadroes = "MICRO PADRÕES"
+grupoDivergencia = "MICRO DIVERGÊNCIA"
+grupoForca = "FORÇA"
+grupoMomentum = "MOMENTUM"
+grupoBreak = "ROMPIMENTO"
+grupoPreBreak = "PRE-BREAK ULTRA FAST"
+grupoRisco = "RISCO"
+
+
+//====================================================
+// PAINEL
+//====================================================
+
+mostrarPainel = input.bool(true, "Mostrar painel", group=grupoPainel)
+mostrarSinais = input.bool(true, "Mostrar sinais", group=grupoPainel)
+mostrarResultados = input.bool(true, "Mostrar resultados", group=grupoPainel)
+mostrarPreBreak = input.bool(true, "Mostrar PRE-BREAK", group=grupoPainel)
+ativarAlertas = input.bool(true, "Ativar alertas", group=grupoPainel)
+
+
+//====================================================
+// OPÇÕES
+//====================================================
+
+expiracaoVelas = input.int(1, "Expiração em velas", minval=1, maxval=20, group=grupoBinarias)
+permitirCall = input.bool(true, "Permitir CALL", group=grupoBinarias)
+permitirPut = input.bool(true, "Permitir PUT", group=grupoBinarias)
+cooldownBars = input.int(2, "Cooldown", minval=0, maxval=50, group=grupoBinarias)
+
+
+//====================================================
+// ESTRUTURA
+//====================================================
+
+pivotLen = input.int(3, "Pivot macro", minval=1, maxval=10, group=grupoEstrutura)
+srLookback = input.int(20, "Suporte / resistência", minval=5, maxval=100, group=grupoEstrutura)
+rangeLookback = input.int(20, "Faixa lateral", minval=5, maxval=100, group=grupoEstrutura)
+
+
+//====================================================
+// MICRO
+//====================================================
+
+microEmaFastLen = input.int(3, "Micro EMA rápida", minval=2, maxval=10, group=grupoMicro)
+microEmaMidLen = input.int(5, "Micro EMA média", minval=3, maxval=15, group=grupoMicro)
+microEmaSlowLen = input.int(8, "Micro EMA lenta", minval=4, maxval=20, group=grupoMicro)
+
+microSlopeBars = input.int(2, "Barras de inclinação", minval=1, maxval=5, group=grupoMicro)
+microLookback = input.int(3, "Estrutura micro", minval=2, maxval=10, group=grupoMicro)
+microBreakLookback = input.int(2, "Rompimento micro", minval=1, maxval=5, group=grupoMicro)
+
+microMinScore = input.int(7, "Score mínimo micro", minval=4, maxval=16, group=grupoMicro)
+microBreakATR = input.float(0.03, "Distância micro ATR", minval=0.0, maxval=1.0, step=0.01, group=grupoMicro)
+
+
+//====================================================
+// RSI MICRO
+//====================================================
+
+microRsiLen = input.int(3, "RSI micro", minval=2, maxval=10, group=grupoMicro)
+microRsiCallLevel = input.float(51.0, "RSI micro CALL", minval=45, maxval=65, step=0.5, group=grupoMicro)
+microRsiPutLevel = input.float(49.0, "RSI micro PUT", minval=35, maxval=55, step=0.5, group=grupoMicro)
+
+
+//====================================================
+// DMI MICRO
+//====================================================
+
+microDmiLen = input.int(5, "DMI micro", minval=2, maxval=14, group=grupoMicro)
+microAdxMin = input.float(12.0, "ADX micro mínimo", minval=5, maxval=40, step=1, group=grupoMicro)
+
+
+//====================================================
+// VOLUME MICRO
+//====================================================
+
+microVolumeLen = input.int(5, "Volume micro", minval=2, maxval=20, group=grupoMicro)
+
+
+//====================================================
+// PADRÕES MICRO
+//====================================================
+
+padraoLookback = input.int(5, "Janela padrões", minval=3, maxval=12, group=grupoPadroes)
+padraoToleranciaATR = input.float(0.20, "Tolerância ATR", minval=0.05, maxval=1, step=0.05, group=grupoPadroes)
+
+usarDuploTopoFundo = input.bool(true, "Duplo topo/fundo", group=grupoPadroes)
+usarConsolidacao = input.bool(true, "Consolidação", group=grupoPadroes)
+usarReteste = input.bool(true, "Reteste", group=grupoPadroes)
+
+
+//====================================================
+// DIVERGÊNCIA
+//====================================================
+
+divLookback = input.int(5, "Janela divergência", minval=2, maxval=12, group=grupoDivergencia)
+divMinDelta = input.float(0.50, "Delta mínimo RSI", minval=0.1, maxval=10, step=0.1, group=grupoDivergencia)
+
+usarDivRSI = input.bool(true, "Divergência RSI", group=grupoDivergencia)
+usarDivKVO = input.bool(true, "Divergência KVO", group=grupoDivergencia)
+
+
+//====================================================
+// PRE-BREAK
+//====================================================
+
+preBreakDistanceATR = input.float(
+     0.20,
+     "Distância máxima do nível ATR",
+     minval=0.02,
+     maxval=1.0,
+     step=0.01,
+     group=grupoPreBreak)
+
+preBreakMinScore = input.int(
+     7,
+     "Score mínimo PRE-BREAK",
+     minval=4,
+     maxval=12,
+     group=grupoPreBreak)
+
+preBreakAccelerationMin = input.int(
+     2,
+     "Aceleração mínima",
+     minval=1,
+     maxval=7,
+     group=grupoPreBreak)
+
+usarPreBreak = input.bool(
+     true,
+     "Ativar PRE-BREAK",
+     group=grupoPreBreak)
+
+
+//====================================================
+// FORÇA
+//====================================================
+
+bodyATRMin = input.float(0.30, "Corpo mínimo ATR", minval=0.05, maxval=3, step=0.05, group=grupoForca)
+bodyRangeMin = input.float(0.40, "Corpo mínimo da vela", minval=0.10, maxval=0.95, step=0.05, group=grupoForca)
+closeLongMin = input.float(0.62, "Fechamento CALL", minval=0.50, maxval=0.95, step=0.05, group=grupoForca)
+closeShortMax = input.float(0.38, "Fechamento PUT", minval=0.05, maxval=0.50, step=0.05, group=grupoForca)
+wickBodyMax = input.float(1.50, "Máximo pavio/corpo", minval=0.25, maxval=5, step=0.25, group=grupoForca)
+
+
+//====================================================
+// MOMENTUM
+//====================================================
+
+rsiCallMin = input.float(52, "RSI macro CALL", minval=40, maxval=70, step=0.5, group=grupoMomentum)
+rsiPutMax = input.float(48, "RSI macro PUT", minval=30, maxval=60, step=0.5, group=grupoMomentum)
+adxMin = input.float(18, "ADX macro", minval=5, maxval=50, step=1, group=grupoMomentum)
+
+
+//====================================================
+// ROMPIMENTO
+//====================================================
+
+breakATRMin = input.float(0.05, "Break macro mínimo ATR", minval=0, maxval=2, step=0.01, group=grupoBreak)
+strongBreakATR = input.float(0.20, "Break macro forte ATR", minval=0.05, maxval=3, step=0.05, group=grupoBreak)
+
+
+//====================================================
+// RISCO
+//====================================================
+
+minSpaceATR = input.float(1.0, "Espaço mínimo ATR", minval=0.1, maxval=10, step=0.1, group=grupoRisco)
+maxExtensionATR = input.float(3.0, "Extensão máxima ATR", minval=0.5, maxval=10, step=0.25, group=grupoRisco)
+
+
+//====================================================
+// MACRO INDICADORES
+//====================================================
+
+float ema5 = ta.ema(close, 5)
+float ema13 = ta.ema(close, 13)
+float ema21 = ta.ema(close, 21)
+float ema50 = ta.ema(close, 50)
+
+float rsi7 = ta.rsi(close, 7)
+
+float atr7 = ta.atr(7)
+float atr14 = ta.atr(14)
+
+float volumeSma20 = ta.sma(volume, 20)
+
+[dmiPlus, dmiMinus, dmiAdx] = ta.dmi(14, 14)
+
+
+//====================================================
+// MICRO EMA
+//====================================================
+
+float microEmaFast = ta.ema(close, microEmaFastLen)
+float microEmaMid = ta.ema(close, microEmaMidLen)
+float microEmaSlow = ta.ema(close, microEmaSlowLen)
+
+
+//====================================================
+// MICRO RSI
+//====================================================
+
+float microRsi = ta.rsi(close, microRsiLen)
+float microRsiPrev = microRsi[1]
+float microRsiPrev2 = microRsi[2]
+
+float microRsiVelocity = microRsi - microRsiPrev
+
+float microRsiAcceleration =
+     microRsiVelocity -
+     (microRsiPrev - microRsiPrev2)
+
+bool microRsiCallState =
+     microRsi >= microRsiCallLevel and
+     microRsiVelocity > 0
+
+bool microRsiPutState =
+     microRsi <= microRsiPutLevel and
+     microRsiVelocity < 0
+
+bool microRsiAccelCall =
+     microRsiAcceleration > 0
+
+bool microRsiAccelPut =
+     microRsiAcceleration < 0
+
+
+//====================================================
+// MICRO DMI
+//====================================================
+
+[diMicroPlus, diMicroMinus, adxMicro] =
+     ta.dmi(microDmiLen, microDmiLen)
+
+float diMicroPlusPrev = diMicroPlus[1]
+float diMicroMinusPrev = diMicroMinus[1]
+float adxMicroPrev = adxMicro[1]
+
+float microDmiSpread =
+     diMicroPlus -
+     diMicroMinus
+
+float microDmiSpreadPrev =
+     diMicroPlusPrev -
+     diMicroMinusPrev
+
+float microDmiAcceleration =
+     microDmiSpread -
+     microDmiSpreadPrev
+
+bool microDmiCallState =
+     diMicroPlus >
+     diMicroMinus and
+     diMicroPlus >=
+     diMicroPlusPrev and
+     adxMicro >=
+     microAdxMin
+
+bool microDmiPutState =
+     diMicroMinus >
+     diMicroPlus and
+     diMicroMinus >=
+     diMicroMinusPrev and
+     adxMicro >=
+     microAdxMin
+
+bool microDmiAccelCall =
+     microDmiAcceleration > 0
+
+bool microDmiAccelPut =
+     microDmiAcceleration < 0
+
+bool microAdxRising =
+     adxMicro >
+     adxMicroPrev
+
+
+//====================================================
+// MICRO KVO
+//====================================================
+
+float volumeForce =
+     (close - close[1]) *
+     volume
+
+float kvoFast =
+     ta.ema(volumeForce, 13)
+
+float kvoSlow =
+     ta.ema(volumeForce, 21)
+
+float microKvo =
+     kvoFast -
+     kvoSlow
+
+float microKvoSignal =
+     ta.ema(microKvo, 5)
+
+float microKvoPrev =
+     microKvo[1]
+
+float microKvoDistance =
+     microKvo -
+     microKvoSignal
+
+float microKvoDistancePrev =
+     microKvoPrev -
+     microKvoSignal[1]
+
+float microKvoAcceleration =
+     microKvoDistance -
+     microKvoDistancePrev
+
+bool microKvoCallState =
+     microKvo >
+     microKvoSignal
+
+bool microKvoPutState =
+     microKvo <
+     microKvoSignal
+
+bool microKvoAccelCall =
+     microKvoAcceleration > 0
+
+bool microKvoAccelPut =
+     microKvoAcceleration < 0
+
+
+//====================================================
+// MICRO VOLUME
+//====================================================
+
+float microVolumeAverage =
+     ta.sma(
+         volume,
+         microVolumeLen)
+
+float microVolumeRatio = 1.0
+
+if microVolumeAverage > 0
+    microVolumeRatio :=
+         volume /
+         microVolumeAverage
+
+float microVolumeRatioPrev =
+     microVolumeRatio[1]
+
+float microVolumeAcceleration =
+     microVolumeRatio -
+     microVolumeRatioPrev
+
+bool microVolumeCall =
+     volume >
+     microVolumeAverage and
+     close >
+     open
+
+bool microVolumePut =
+     volume >
+     microVolumeAverage and
+     close <
+     open
+
+bool microVolumeAccelCall =
+     microVolumeAcceleration > 0 and
+     close > open
+
+bool microVolumeAccelPut =
+     microVolumeAcceleration > 0 and
+     close < open
+
+
+//====================================================
+// MICRO EMA — DIREÇÃO / VELOCIDADE / ACELERAÇÃO
+//====================================================
+
+bool microEmaStackCall =
+     microEmaFast >
+     microEmaMid and
+     microEmaMid >
+     microEmaSlow
+
+bool microEmaStackPut =
+     microEmaFast <
+     microEmaMid and
+     microEmaMid <
+     microEmaSlow
+
+float microEmaFastVelocity =
+     microEmaFast -
+     microEmaFast[microSlopeBars]
+
+float microEmaMidVelocity =
+     microEmaMid -
+     microEmaMid[microSlopeBars]
+
+float microEmaSpread =
+     microEmaFast -
+     microEmaMid
+
+float microEmaSpreadPrev =
+     microEmaFast[1] -
+     microEmaMid[1]
+
+float microEmaSpreadVelocity =
+     microEmaSpread -
+     microEmaSpreadPrev
+
+bool microEmaSlopeCall =
+     microEmaFastVelocity > 0 and
+     microEmaMidVelocity >= 0
+
+bool microEmaSlopePut =
+     microEmaFastVelocity < 0 and
+     microEmaMidVelocity <= 0
+
+bool microEmaAccelCall =
+     microEmaSpreadVelocity > 0
+
+bool microEmaAccelPut =
+     microEmaSpreadVelocity < 0
+
+bool microPriceCall =
+     close >
+     microEmaFast and
+     close >
+     microEmaMid
+
+bool microPricePut =
+     close <
+     microEmaFast and
+     close <
+     microEmaMid
+
+
+//====================================================
+// GEOMETRIA DA VELA
+//====================================================
+
+float candleRange =
+     high - low
+
+float candleBody =
+     math.abs(close - open)
+
+float upperWick =
+     high -
+     math.max(open, close)
+
+float lowerWick =
+     math.min(open, close) -
+     low
+
+float safeRange =
+     math.max(candleRange, syminfo.mintick)
+
+float safeBody =
+     math.max(candleBody, syminfo.mintick)
+
+float closePosition =
+     (close - low) /
+     safeRange
+
+bool bullishCandle =
+     close > open
+
+bool bearishCandle =
+     close < open
+
+bool strongBody =
+     candleBody >=
+     atr7 * bodyATRMin and
+     candleBody /
+     safeRange >=
+     bodyRangeMin
+
+bool strongBull =
+     bullishCandle and
+     strongBody and
+     closePosition >=
+     closeLongMin and
+     upperWick <=
+     safeBody * wickBodyMax
+
+bool strongBear =
+     bearishCandle and
+     strongBody and
+     closePosition <=
+     closeShortMax and
+     lowerWick <=
+     safeBody * wickBodyMax
+
+
+//====================================================
+// MICRO CANDLE
+//====================================================
+
+float candleBodyPrev =
+     math.abs(
+         close[1] -
+         open[1])
+
+bool microCandleCall =
+     bullishCandle and
+     closePosition >= 0.60 and
+     candleBody >= candleBodyPrev
+
+bool microCandlePut =
+     bearishCandle and
+     closePosition <= 0.40 and
+     candleBody >= candleBodyPrev
+
+bool microCandleAccelCall =
+     bullishCandle and
+     candleBody > candleBodyPrev and
+     close > close[1]
+
+bool microCandleAccelPut =
+     bearishCandle and
+     candleBody > candleBodyPrev and
+     close < close[1]
+
+
+//====================================================
+// MICRO IMPULSO
+//====================================================
+
+float previousMove =
+     math.abs(
+         close[1] -
+         close[2])
+
+float currentMove =
+     math.abs(
+         close -
+         close[1])
+
+float acceleration =
+     currentMove -
+     previousMove
+
+bool microImpulseCall =
+     currentMove >
+     previousMove and
+     close >
+     close[1]
+
+bool microImpulsePut =
+     currentMove >
+     previousMove and
+     close <
+     close[1]
+
+bool microAccelerationCall =
+     acceleration > 0 and
+     close > close[1]
+
+bool microAccelerationPut =
+     acceleration > 0 and
+     close < close[1]
+
+
+//====================================================
+// MICRO ESTRUTURA
+//====================================================
+
+float microResistance =
+     ta.highest(
+         high[1],
+         microLookback)
+
+float microSupport =
+     ta.lowest(
+         low[1],
+         microLookback)
+
+float microBreakResistance =
+     ta.highest(
+         high[1],
+         microBreakLookback)
+
+float microBreakSupport =
+     ta.lowest(
+         low[1],
+         microBreakLookback)
+
+bool microHH =
+     high > high[1]
+
+bool microHL =
+     low > low[1]
+
+bool microLH =
+     high < high[1]
+
+bool microLL =
+     low < low[1]
+
+bool microStructureCall =
+     microHH and
+     microHL
+
+bool microStructurePut =
+     microLH and
+     microLL
+
+bool microStructureSoftCall =
+     microHH or
+     microHL
+
+bool microStructureSoftPut =
+     microLH or
+     microLL
+
+
+//====================================================
+// DISTÂNCIA DO PRE-BREAK
+//====================================================
+
+float callDistanceToMicroBreak = 0.0
+float putDistanceToMicroBreak = 0.0
+
+if atr7 > 0
+
+    callDistanceToMicroBreak :=
+         math.max(
+             microBreakResistance -
+             close,
+             0) /
+         atr7
+
+    putDistanceToMicroBreak :=
+         math.max(
+             close -
+             microBreakSupport,
+             0) /
+         atr7
+
+
+//====================================================
+// PRESSÃO SOBRE O NÍVEL
+//====================================================
+
+bool callAttackLevel =
+     close <
+     microBreakResistance and
+     high >=
+     microBreakResistance -
+     atr7 * preBreakDistanceATR
+
+bool putAttackLevel =
+     close >
+     microBreakSupport and
+     low <=
+     microBreakSupport +
+     atr7 * preBreakDistanceATR
+
+bool callVeryNearLevel =
+     callDistanceToMicroBreak <=
+     preBreakDistanceATR
+
+bool putVeryNearLevel =
+     putDistanceToMicroBreak <=
+     preBreakDistanceATR
+
+
+//====================================================
+// ROMPIMENTO MICRO
+//====================================================
+
+float microBreakUpATR = -999.0
+float microBreakDownATR = -999.0
+
+if atr7 > 0
+
+    microBreakUpATR :=
+         (
+             high -
+             microBreakResistance
+         ) /
+         atr7
+
+    microBreakDownATR :=
+         (
+             microBreakSupport -
+             low
+         ) /
+         atr7
+
+bool rawMicroBreakCall =
+     high >
+     microBreakResistance
+
+bool rawMicroBreakPut =
+     low <
+     microBreakSupport
+
+bool newMicroBreakCall =
+     rawMicroBreakCall and
+     high[1] <=
+     microBreakResistance
+
+bool newMicroBreakPut =
+     rawMicroBreakPut and
+     low[1] >=
+     microBreakSupport
+
+bool microBreakCall =
+     newMicroBreakCall and
+     close >
+     microBreakResistance and
+     microBreakUpATR >=
+     microBreakATR
+
+bool microBreakPut =
+     newMicroBreakPut and
+     close <
+     microBreakSupport and
+     microBreakDownATR >=
+     microBreakATR
+
+
+//====================================================
+// RETESTE
+//====================================================
+
+bool microRetestCall =
+     usarReteste and
+     low <=
+     microBreakResistance and
+     close >
+     microBreakResistance and
+     close >
+     open
+
+bool microRetestPut =
+     usarReteste and
+     high >=
+     microBreakSupport and
+     close <
+     microBreakSupport and
+     close <
+     open
+
+
+//====================================================
+// PADRÕES MICRO
+//====================================================
+
+float recentLow =
+     ta.lowest(
+         low,
+         padraoLookback)
+
+float recentHigh =
+     ta.highest(
+         high,
+         padraoLookback)
+
+float lowReference =
+     ta.lowest(
+         low[2],
+         padraoLookback)
+
+float highReference =
+     ta.highest(
+         high[2],
+         padraoLookback)
+
+bool nearDoubleBottom =
+     math.abs(
+         recentLow -
+         lowReference
+     ) <=
+     atr7 *
+     padraoToleranciaATR
+
+bool nearDoubleTop =
+     math.abs(
+         recentHigh -
+         highReference
+     ) <=
+     atr7 *
+     padraoToleranciaATR
+
+bool microDoubleBottom =
+     usarDuploTopoFundo and
+     nearDoubleBottom and
+     close > open
+
+bool microDoubleTop =
+     usarDuploTopoFundo and
+     nearDoubleTop and
+     close < open
+
+
+//====================================================
+// CONSOLIDAÇÃO
+//====================================================
+
+float microRangeHigh =
+     ta.highest(
+         high[1],
+         padraoLookback)
+
+float microRangeLow =
+     ta.lowest(
+         low[1],
+         padraoLookback)
+
+float microRangeSize =
+     microRangeHigh -
+     microRangeLow
+
+float microRangeATR = 999.0
+
+if atr7 > 0
+
+    microRangeATR :=
+         microRangeSize /
+         atr7
+
+bool microConsolidacao =
+     usarConsolidacao and
+     microRangeATR <=
+     1.50
+
+bool microConsolidacaoBreakCall =
+     microConsolidacao and
+     close >
+     microRangeHigh
+
+bool microConsolidacaoBreakPut =
+     microConsolidacao and
+     close <
+     microRangeLow
+
+
+//====================================================
+// PADRÕES DE IMPULSO
+//====================================================
+
+bool microBullFlag =
+     microStructureCall and
+     microEmaStackCall and
+     microImpulseCall
+
+bool microBearFlag =
+     microStructurePut and
+     microEmaStackPut and
+     microImpulsePut
+
+
+//====================================================
+// SCORE PADRÕES
+//====================================================
+
+int microPatternCallScore = 0
+
+if microDoubleBottom
+    microPatternCallScore += 2
+
+if microConsolidacaoBreakCall
+    microPatternCallScore += 2
+
+if microBullFlag
+    microPatternCallScore += 2
+
+if microRetestCall
+    microPatternCallScore += 2
+
+if microStructureCall
+    microPatternCallScore += 1
+
+
+int microPatternPutScore = 0
+
+if microDoubleTop
+    microPatternPutScore += 2
+
+if microConsolidacaoBreakPut
+    microPatternPutScore += 2
+
+if microBearFlag
+    microPatternPutScore += 2
+
+if microRetestPut
+    microPatternPutScore += 2
+
+if microStructurePut
+    microPatternPutScore += 1
+
+
+//====================================================
+// DIVERGÊNCIA RSI
+//====================================================
+
+float previousPriceLow =
+     ta.lowest(
+         low[1],
+         divLookback)
+
+float previousPriceHigh =
+     ta.highest(
+         high[1],
+         divLookback)
+
+float previousRsiLow =
+     ta.lowest(
+         microRsi[1],
+         divLookback)
+
+float previousRsiHigh =
+     ta.highest(
+         microRsi[1],
+         divLookback)
+
+bool divRsiBull =
+     usarDivRSI and
+     low <
+     previousPriceLow and
+     microRsi >
+     previousRsiLow +
+     divMinDelta
+
+bool divRsiBear =
+     usarDivRSI and
+     high >
+     previousPriceHigh and
+     microRsi <
+     previousRsiHigh -
+     divMinDelta
+
+
+//====================================================
+// DIVERGÊNCIA KVO
+//====================================================
+
+float previousKvoLow =
+     ta.lowest(
+         microKvo[1],
+         divLookback)
+
+float previousKvoHigh =
+     ta.highest(
+         microKvo[1],
+         divLookback)
+
+bool divKvoBull =
+     usarDivKVO and
+     low <
+     previousPriceLow and
+     microKvo >
+     previousKvoLow
+
+bool divKvoBear =
+     usarDivKVO and
+     high >
+     previousPriceHigh and
+     microKvo <
+     previousKvoHigh
+
+
+//====================================================
+// DIVERGÊNCIA COMPOSTA
+//====================================================
+
+bool microDivergenceCall =
+     divRsiBull or
+     divKvoBull
+
+bool microDivergencePut =
+     divRsiBear or
+     divKvoBear
+
+int microDivergenceCallScore = 0
+
+if divRsiBull
+    microDivergenceCallScore += 2
+
+if divKvoBull
+    microDivergenceCallScore += 2
+
+
+int microDivergencePutScore = 0
+
+if divRsiBear
+    microDivergencePutScore += 2
+
+if divKvoBear
+    microDivergencePutScore += 2
+
+
+//====================================================
+// MACRO TENDÊNCIA
+//====================================================
+
+bool trendCall =
+     ema5 >
+     ema13 and
+     ema13 >
+     ema21 and
+     ema21 >=
+     ema50
+
+bool trendPut =
+     ema5 <
+     ema13 and
+     ema13 <
+     ema21 and
+     ema21 <=
+     ema50
+
+
+//====================================================
+// MACRO MOMENTUM
+//====================================================
+
+bool momentumCall =
+     rsi7 >=
+     rsiCallMin and
+     dmiPlus >=
+     dmiMinus and
+     dmiAdx >=
+     adxMin
+
+bool momentumPut =
+     rsi7 <=
+     rsiPutMax and
+     dmiMinus >=
+     dmiPlus and
+     dmiAdx >=
+     adxMin
+
+
+//====================================================
+// MICRO SCORE
+//
+// 16 PONTOS
+//====================================================
+
+int microScoreCall = 0
+
+if microEmaStackCall
+    microScoreCall += 1
+
+if microEmaSlopeCall
+    microScoreCall += 1
+
+if microEmaAccelCall
+    microScoreCall += 1
+
+if microPriceCall
+    microScoreCall += 1
+
+if microRsiCallState
+    microScoreCall += 1
+
+if microRsiAccelCall
+    microScoreCall += 1
+
+if microDmiCallState
+    microScoreCall += 1
+
+if microDmiAccelCall
+    microScoreCall += 1
+
+if microKvoCallState
+    microScoreCall += 1
+
+if microKvoAccelCall
+    microScoreCall += 1
+
+if microVolumeCall
+    microScoreCall += 1
+
+if microCandleCall
+    microScoreCall += 1
+
+if microImpulseCall
+    microScoreCall += 1
+
+if microStructureCall
+    microScoreCall += 1
+
+if microDivergenceCall
+    microScoreCall += 1
+
+if microPatternCallScore >= 2
+    microScoreCall += 1
+
+
+int microScorePut = 0
+
+if microEmaStackPut
+    microScorePut += 1
+
+if microEmaSlopePut
+    microScorePut += 1
+
+if microEmaAccelPut
+    microScorePut += 1
+
+if microPricePut
+    microScorePut += 1
+
+if microRsiPutState
+    microScorePut += 1
+
+if microRsiAccelPut
+    microScorePut += 1
+
+if microDmiPutState
+    microScorePut += 1
+
+if microDmiAccelPut
+    microScorePut += 1
+
+if microKvoPutState
+    microScorePut += 1
+
+if microKvoAccelPut
+    microScorePut += 1
+
+if microVolumePut
+    microScorePut += 1
+
+if microCandlePut
+    microScorePut += 1
+
+if microImpulsePut
+    microScorePut += 1
+
+if microStructurePut
+    microScorePut += 1
+
+if microDivergencePut
+    microScorePut += 1
+
+if microPatternPutScore >= 2
+    microScorePut += 1
+
+
+//====================================================
+// MICRO DIREÇÃO
+//====================================================
+
+bool microTrendCall =
+     microScoreCall >=
+     microMinScore
+
+bool microTrendPut =
+     microScorePut >=
+     microMinScore
+
+bool microDominanceCall =
+     microScoreCall >
+     microScorePut
+
+bool microDominancePut =
+     microScorePut >
+     microScoreCall
+
+
+//====================================================
+// MICRO ACELERAÇÃO
+//====================================================
+
+int microAccelerationCallScore = 0
+
+if microEmaAccelCall
+    microAccelerationCallScore += 1
+
+if microRsiAccelCall
+    microAccelerationCallScore += 1
+
+if microDmiAccelCall
+    microAccelerationCallScore += 1
+
+if microKvoAccelCall
+    microAccelerationCallScore += 1
+
+if microVolumeAccelCall
+    microAccelerationCallScore += 1
+
+if microCandleAccelCall
+    microAccelerationCallScore += 1
+
+if microAccelerationCall
+    microAccelerationCallScore += 1
+
+
+int microAccelerationPutScore = 0
+
+if microEmaAccelPut
+    microAccelerationPutScore += 1
+
+if microRsiAccelPut
+    microAccelerationPutScore += 1
+
+if microDmiAccelPut
+    microAccelerationPutScore += 1
+
+if microKvoAccelPut
+    microAccelerationPutScore += 1
+
+if microVolumeAccelPut
+    microAccelerationPutScore += 1
+
+if microCandleAccelPut
+    microAccelerationPutScore += 1
+
+if microAccelerationPut
+    microAccelerationPutScore += 1
+
+
+//====================================================
+// MICRO PRESSÃO
+//====================================================
+
+bool microPressureCall =
+     microTrendCall and
+     microDominanceCall and
+     microAccelerationCallScore >= 2
+
+bool microPressurePut =
+     microTrendPut and
+     microDominancePut and
+     microAccelerationPutScore >= 2
+
+
+//====================================================
+// PRE-BREAK SCORE CALL
+//
+// Aqui NÃO entra o rompimento.
+// É apenas leitura de aproximação.
+//====================================================
+
+int preBreakCallScore = 0
+
+if microTrendCall
+    preBreakCallScore += 2
+
+if microDominanceCall
+    preBreakCallScore += 1
+
+if microAccelerationCallScore >= preBreakAccelerationMin
+    preBreakCallScore += 2
+
+if callAttackLevel
+    preBreakCallScore += 2
+
+if microStructureSoftCall
+    preBreakCallScore += 1
+
+if microEmaAccelCall
+    preBreakCallScore += 1
+
+if microRsiAccelCall
+    preBreakCallScore += 1
+
+if microKvoAccelCall
+    preBreakCallScore += 1
+
+if microVolumeAccelCall
+    preBreakCallScore += 1
+
+
+//====================================================
+// PRE-BREAK SCORE PUT
+//====================================================
+
+int preBreakPutScore = 0
+
+if microTrendPut
+    preBreakPutScore += 2
+
+if microDominancePut
+    preBreakPutScore += 1
+
+if microAccelerationPutScore >= preBreakAccelerationMin
+    preBreakPutScore += 2
+
+if putAttackLevel
+    preBreakPutScore += 2
+
+if microStructureSoftPut
+    preBreakPutScore += 1
+
+if microEmaAccelPut
+    preBreakPutScore += 1
+
+if microRsiAccelPut
+    preBreakPutScore += 1
+
+if microKvoAccelPut
+    preBreakPutScore += 1
+
+if microVolumeAccelPut
+    preBreakPutScore += 1
+
+
+//====================================================
+// PRE-BREAK FINAL
+//====================================================
+
+bool preBreakCall =
+     usarPreBreak and
+     not microBreakCall and
+     callVeryNearLevel and
+     preBreakCallScore >=
+     preBreakMinScore and
+     microDominanceCall
+
+bool preBreakPut =
+     usarPreBreak and
+     not microBreakPut and
+     putVeryNearLevel and
+     preBreakPutScore >=
+     preBreakMinScore and
+     microDominancePut
+
+
+//====================================================
+// VOLUME MACRO
+//====================================================
+
+float volumeRatio = 1.0
+
+if volumeSma20 > 0
+    volumeRatio :=
+         volume /
+         volumeSma20
+
+bool volumeOK =
+     volumeRatio >=
+     0.90
+
+bool volumeStrong =
+     volumeRatio >=
+     1.20
+
+
+//====================================================
+// EXPANSÃO
+//====================================================
+
+float rangeRatio = 0.0
+
+if atr14 > 0
+    rangeRatio :=
+         candleRange /
+         atr14
+
+bool rangeExpansion =
+     rangeRatio >=
+     1.10
+
+bool strongExpansion =
+     rangeRatio >=
+     1.35
+
+
+//====================================================
+// MERCADO LATERAL
+//====================================================
+
+float rangeTop =
+     ta.highest(
+         high[1],
+         rangeLookback)
+
+float rangeBottom =
+     ta.lowest(
+         low[1],
+         rangeLookback)
+
+float rangeWidth =
+     rangeTop -
+     rangeBottom
+
+float rangeATR = 0.0
+
+if atr14 > 0
+    rangeATR :=
+         rangeWidth /
+         atr14
+
+bool mercadoLateral =
+     rangeATR <= 3.0 and
+     dmiAdx < 20
+
+bool mercadoLiberado =
+     not mercadoLateral
+
+
+//====================================================
+// ESTRUTURA MACRO
+//====================================================
+
+float resistance =
+     ta.highest(
+         high[1],
+         srLookback)
+
+float support =
+     ta.lowest(
+         low[1],
+         srLookback)
+
+float pivotHigh =
+     ta.pivothigh(
+         high,
+         pivotLen,
+         pivotLen)
+
+float pivotLow =
+     ta.pivotlow(
+         low,
+         pivotLen,
+         pivotLen)
+
+var float structuralTop = na
+var float structuralBottom = na
+
+if not na(pivotHigh)
+    structuralTop := pivotHigh
+
+if not na(pivotLow)
+    structuralBottom := pivotLow
+
+float referenceResistance = resistance
+float referenceSupport = support
+
+if not na(structuralTop)
+    referenceResistance :=
+         math.max(
+             resistance,
+             structuralTop)
+
+if not na(structuralBottom)
+    referenceSupport :=
+         math.min(
+             support,
+             structuralBottom)
+
+
+//====================================================
+// ROMPIMENTO MACRO
+//====================================================
+
+float callBreakDistance = -999.0
+float putBreakDistance = -999.0
+
+if atr7 > 0
+
+    callBreakDistance :=
+         (
+             high -
+             referenceResistance
+         ) /
+         atr7
+
+    putBreakDistance :=
+         (
+             referenceSupport -
+             low
+         ) /
+         atr7
+
+bool rawCall =
+     high >
+     referenceResistance
+
+bool rawPut =
+     low <
+     referenceSupport
+
+bool earlyCall =
+     rawCall and
+     callBreakDistance >=
+     breakATRMin
+
+bool earlyPut =
+     rawPut and
+     putBreakDistance >=
+     breakATRMin
+
+bool strongCallBreak =
+     rawCall and
+     callBreakDistance >=
+     strongBreakATR
+
+bool strongPutBreak =
+     rawPut and
+     putBreakDistance >=
+     strongBreakATR
+
+
+//====================================================
+// PRESSÃO GERAL
+//====================================================
+
+int pressureCall = 0
+
+if trendCall
+    pressureCall += 1
+
+if microTrendCall
+    pressureCall += 2
+
+if microPressureCall
+    pressureCall += 2
+
+if momentumCall
+    pressureCall += 1
+
+if bullishCandle
+    pressureCall += 1
+
+if volumeStrong
+    pressureCall += 1
+
+if microDivergenceCall
+    pressureCall += 1
+
+if microPatternCallScore >= 2
+    pressureCall += 1
+
+if microBreakCall
+    pressureCall += 2
+
+
+int pressurePut = 0
+
+if trendPut
+    pressurePut += 1
+
+if microTrendPut
+    pressurePut += 2
+
+if microPressurePut
+    pressurePut += 2
+
+if momentumPut
+    pressurePut += 1
+
+if bearishCandle
+    pressurePut += 1
+
+if volumeStrong
+    pressurePut += 1
+
+if microDivergencePut
+    pressurePut += 1
+
+if microPatternPutScore >= 2
+    pressurePut += 1
+
+if microBreakPut
+    pressurePut += 2
+
+
+//====================================================
+// BREAK SCORE
+//====================================================
+
+int callBreakScore = 0
+
+if microBreakCall
+    callBreakScore += 4
+
+if earlyCall
+    callBreakScore += 2
+
+if strongCallBreak
+    callBreakScore += 3
+
+if microRetestCall
+    callBreakScore += 1
+
+if volumeOK
+    callBreakScore += 1
+
+if rangeExpansion
+    callBreakScore += 1
+
+int callBreakFinal =
+     math.min(
+         callBreakScore,
+         12)
+
+
+int putBreakScore = 0
+
+if microBreakPut
+    putBreakScore += 4
+
+if earlyPut
+    putBreakScore += 2
+
+if strongPutBreak
+    putBreakScore += 3
+
+if microRetestPut
+    putBreakScore += 1
+
+if volumeOK
+    putBreakScore += 1
+
+if rangeExpansion
+    putBreakScore += 1
+
+int putBreakFinal =
+     math.min(
+         putBreakScore,
+         12)
+
+
+//====================================================
+// FORÇA
+//====================================================
+
+int callForceScore = 0
+
+if strongBull
+    callForceScore += 4
+
+if microCandleCall
+    callForceScore += 2
+
+if microImpulseCall
+    callForceScore += 2
+
+if microPressureCall
+    callForceScore += 2
+
+if microDivergenceCall
+    callForceScore += 1
+
+if microPatternCallScore >= 2
+    callForceScore += 1
+
+if volumeStrong
+    callForceScore += 2
+
+if strongExpansion
+    callForceScore += 2
+
+if acceleration > 0 and close > close[1]
+    callForceScore += 1
+
+int callForceFinal =
+     math.min(
+         callForceScore,
+         17)
+
+
+int putForceScore = 0
+
+if strongBear
+    putForceScore += 4
+
+if microCandlePut
+    putForceScore += 2
+
+if microImpulsePut
+    putForceScore += 2
+
+if microPressurePut
+    putForceScore += 2
+
+if microDivergencePut
+    putForceScore += 1
+
+if microPatternPutScore >= 2
+    putForceScore += 1
+
+if volumeStrong
+    putForceScore += 2
+
+if strongExpansion
+    putForceScore += 2
+
+if acceleration > 0 and close < close[1]
+    putForceScore += 1
+
+int putForceFinal =
+     math.min(
+         putForceScore,
+         17)
+
+
+//====================================================
+// PREVISÃO
+//====================================================
+
+bool forecastCall =
+     microTrendCall and
+     microDominanceCall and
+     microPressureCall and
+     microBreakCall
+
+bool forecastPut =
+     microTrendPut and
+     microDominancePut and
+     microPressurePut and
+     microBreakPut
+
+
+//====================================================
+// ESPAÇO
+//====================================================
+
+float callRoom =
+     math.max(
+         referenceResistance -
+         support,
+         0)
+
+float putRoom =
+     math.max(
+         resistance -
+         referenceSupport,
+         0)
+
+float callSpaceATR = 0.0
+float putSpaceATR = 0.0
+
+if atr7 > 0
+
+    callSpaceATR :=
+         callRoom /
+         atr7
+
+    putSpaceATR :=
+         putRoom /
+         atr7
+
+bool callSpaceOK =
+     callSpaceATR >=
+     minSpaceATR
+
+bool putSpaceOK =
+     putSpaceATR >=
+     minSpaceATR
+
+
+//====================================================
+// EXTENSÃO
+//====================================================
+
+float callExtensionATR = 0.0
+float putExtensionATR = 0.0
+
+if atr7 > 0
+
+    callExtensionATR :=
+         math.max(
+             close -
+             referenceResistance,
+             0) /
+         atr7
+
+    putExtensionATR :=
+         math.max(
+             referenceSupport -
+             close,
+             0) /
+         atr7
+
+bool callExtensionOK =
+     callExtensionATR <=
+     maxExtensionATR
+
+bool putExtensionOK =
+     putExtensionATR <=
+     maxExtensionATR
+
+
+//====================================================
+// FALSO ROMPIMENTO
+//====================================================
+
+bool falseCall =
+     rawCall and
+     close <
+     referenceResistance and
+     upperWick >
+     candleBody
+
+bool falsePut =
+     rawPut and
+     close >
+     referenceSupport and
+     lowerWick >
+     candleBody
+
+bool falseMicroCall =
+     rawMicroBreakCall and
+     close <
+     microBreakResistance and
+     upperWick >
+     candleBody
+
+bool falseMicroPut =
+     rawMicroBreakPut and
+     close >
+     microBreakSupport and
+     lowerWick >
+     candleBody
+
+
+//====================================================
+// EXAUSTÃO
+//====================================================
+
+bool exhaustionCall =
+     close >
+     referenceResistance and
+     upperWick >
+     candleBody * 1.5 and
+     rsi7 >
+     75
+
+bool exhaustionPut =
+     close <
+     referenceSupport and
+     lowerWick >
+     candleBody * 1.5 and
+     rsi7 <
+     25
+
+
+//====================================================
+// RISCO
+//====================================================
+
+bool callRiskOK =
+     callSpaceOK and
+     callExtensionOK and
+     not falseCall and
+     not falseMicroCall and
+     not exhaustionCall
+
+bool putRiskOK =
+     putSpaceOK and
+     putExtensionOK and
+     not falsePut and
+     not falseMicroPut and
+     not exhaustionPut
+
+
+//====================================================
+// MEMÓRIA
+//====================================================
+
+var bool sinalAtivo = false
+var int direcaoSinal = 0
+var int barraEntrada = na
+var float precoEntrada = na
+var int barraExpiracao = na
+var int ultimoSinalBar = na
+
+
+//====================================================
+// RESULTADOS
+//====================================================
+
+var int wins = 0
+var int losses = 0
+var int draws = 0
+
+var int ultimoResultado = 99
+var int ultimoResultadoBar = na
+
+
+//====================================================
+// COOLDOWN
+//====================================================
+
+bool cooldownOK = true
+
+if not na(ultimoSinalBar)
+
+    cooldownOK :=
+         bar_index -
+         ultimoSinalBar >=
+         cooldownBars
+
+
+//====================================================
+// GATILHO CALL
+//====================================================
+
+bool callTrigger =
+     microBreakCall and
+     microTrendCall and
+     microDominanceCall and
+     (
+         microImpulseCall or
+         microStructureCall or
+         microRetestCall
+     )
+
+
+//====================================================
+// GATILHO PUT
+//====================================================
+
+bool putTrigger =
+     microBreakPut and
+     microTrendPut and
+     microDominancePut and
+     (
+         microImpulsePut or
+         microStructurePut or
+         microRetestPut
+     )
+
+
+//====================================================
+// SINAIS
+//====================================================
+
+bool callSignal =
+     not sinalAtivo and
+     cooldownOK and
+     permitirCall and
+     mercadoLiberado and
+     callTrigger and
+     callRiskOK and
+     callBreakFinal >= 4 and
+     callForceFinal >= 5 and
+     forecastCall
+
+bool putSignal =
+     not sinalAtivo and
+     cooldownOK and
+     permitirPut and
+     mercadoLiberado and
+     putTrigger and
+     putRiskOK and
+     putBreakFinal >= 4 and
+     putForceFinal >= 5 and
+     forecastPut
+
+
+//====================================================
+// CONFLITO
+//====================================================
+
+if callSignal and putSignal
+
+    if microScoreCall >
+         microScorePut
+
+        putSignal := false
+
+    else if microScorePut >
+             microScoreCall
+
+        callSignal := false
+
+    else
+
+        callSignal := false
+        putSignal := false
+
+
+//====================================================
+// ENTRADA CALL
+//====================================================
+
+if callSignal
+
+    sinalAtivo := true
+    direcaoSinal := 1
+    barraEntrada := bar_index
+    precoEntrada := close
+    barraExpiracao :=
+         bar_index +
+         expiracaoVelas
+    ultimoSinalBar :=
+         bar_index
+
+    if ativarAlertas
+
+        alert(
+             "V79.7 | CALL | MICRO BREAK + PRE-BREAK CONFLUENCE | MICRO=" +
+             str.tostring(microScoreCall) +
+             " | PRE=" +
+             str.tostring(preBreakCallScore),
+             alert.freq_once_per_bar)
+
+
+//====================================================
+// ENTRADA PUT
+//====================================================
+
+if putSignal
+
+    sinalAtivo := true
+    direcaoSinal := -1
+    barraEntrada := bar_index
+    precoEntrada := close
+    barraExpiracao :=
+         bar_index +
+         expiracaoVelas
+    ultimoSinalBar :=
+         bar_index
+
+    if ativarAlertas
+
+        alert(
+             "V79.7 | PUT | MICRO BREAK + PRE-BREAK CONFLUENCE | MICRO=" +
+             str.tostring(microScorePut) +
+             " | PRE=" +
+             str.tostring(preBreakPutScore),
+             alert.freq_once_per_bar)
+
+
+//====================================================
+// EXPIRAÇÃO
+//====================================================
+
+bool expirou =
+     sinalAtivo and
+     not na(barraExpiracao) and
+     bar_index >=
+     barraExpiracao
+
+if expirou
+
+    int resultadoAtual = 0
+
+    if direcaoSinal == 1
+
+        if close > precoEntrada
+            resultadoAtual := 1
+        else if close < precoEntrada
+            resultadoAtual := -1
+
+    else if direcaoSinal == -1
+
+        if close < precoEntrada
+            resultadoAtual := 1
+        else if close > precoEntrada
+            resultadoAtual := -1
+
+    ultimoResultado :=
+         resultadoAtual
+
+    ultimoResultadoBar :=
+         bar_index
+
+    if resultadoAtual == 1
+        wins += 1
+    else if resultadoAtual == -1
+        losses += 1
+    else
+        draws += 1
+
+    sinalAtivo := false
+    direcaoSinal := 0
+    barraEntrada := na
+    precoEntrada := na
+    barraExpiracao := na
+
+
+//====================================================
+// TEXTOS
+//====================================================
+
+string textoSinal = "AGUARDAR"
+
+if mercadoLateral
+    textoSinal := "BLOQUEADO"
+else if sinalAtivo and direcaoSinal == 1
+    textoSinal := "CALL ATIVO"
+else if sinalAtivo and direcaoSinal == -1
+    textoSinal := "PUT ATIVO"
+else if callSignal
+    textoSinal := "CALL"
+else if putSignal
+    textoSinal := "PUT"
+
+
+string textoPreBreak = "NENHUM"
+
+if preBreakCall
+    textoPreBreak :=
+         "CALL " +
+         str.tostring(
+             preBreakCallScore)
+else if preBreakPut
+    textoPreBreak :=
+         "PUT " +
+         str.tostring(
+             preBreakPutScore)
+
+
+string textoMicro = "NEUTRO"
+
+if microScoreCall >
+   microScorePut
+
+    textoMicro :=
+         "CALL " +
+         str.tostring(
+             microScoreCall) +
+         "/16"
+
+else if microScorePut >
+         microScoreCall
+
+    textoMicro :=
+         "PUT " +
+         str.tostring(
+             microScorePut) +
+         "/16"
+
+
+string textoAceleracao = "NEUTRO"
+
+if microAccelerationCallScore >
+   microAccelerationPutScore
+
+    textoAceleracao :=
+         "CALL ↑"
+
+else if microAccelerationPutScore >
+         microAccelerationCallScore
+
+    textoAceleracao :=
+         "PUT ↓"
+
+
+string textoEstrutura = "NEUTRO"
+
+if microStructureCall
+    textoEstrutura := "CALL HH/HL"
+else if microStructurePut
+    textoEstrutura := "PUT LH/LL"
+else if microStructureSoftCall
+    textoEstrutura := "CALL"
+else if microStructureSoftPut
+    textoEstrutura := "PUT"
+
+
+string textoPadrao = "NENHUM"
+
+if microPatternCallScore >
+   microPatternPutScore
+
+    if microDoubleBottom
+        textoPadrao := "FUNDO DUPLO"
+    else if microBullFlag
+        textoPadrao := "IMPULSO CALL"
+    else if microRetestCall
+        textoPadrao := "RETESTE CALL"
+    else if microConsolidacaoBreakCall
+        textoPadrao := "BREAK CALL"
+
+else if microPatternPutScore >
+         microPatternCallScore
+
+    if microDoubleTop
+        textoPadrao := "TOPO DUPLO"
+    else if microBearFlag
+        textoPadrao := "IMPULSO PUT"
+    else if microRetestPut
+        textoPadrao := "RETESTE PUT"
+    else if microConsolidacaoBreakPut
+        textoPadrao := "BREAK PUT"
+
+
+string textoDivergencia = "NENHUMA"
+
+if microDivergenceCall
+    textoDivergencia := "CALL"
+else if microDivergencePut
+    textoDivergencia := "PUT"
+
+
+string textoMicroBreak = "AGUARDAR"
+
+if microBreakCall
+    textoMicroBreak := "CALL"
+else if microBreakPut
+    textoMicroBreak := "PUT"
+
+
+string textoMicroRSI = "NEUTRO"
+
+if microRsiCallState
+    textoMicroRSI := "CALL"
+else if microRsiPutState
+    textoMicroRSI := "PUT"
+
+
+string textoMicroDMI = "NEUTRO"
+
+if microDmiCallState
+    textoMicroDMI := "CALL"
+else if microDmiPutState
+    textoMicroDMI := "PUT"
+
+
+string textoMicroKVO = "NEUTRO"
+
+if microKvoCallState
+    textoMicroKVO := "CALL"
+else if microKvoPutState
+    textoMicroKVO := "PUT"
+
+
+string textoMicroVolume = "NORMAL"
+
+if microVolumeCall
+    textoMicroVolume := "CALL"
+else if microVolumePut
+    textoMicroVolume := "PUT"
+
+
+string textoMicroEMA = "NEUTRO"
+
+if microEmaStackCall
+    textoMicroEMA := "CALL"
+else if microEmaStackPut
+    textoMicroEMA := "PUT"
+
+
+string textoMercado = "TENDÊNCIA"
+
+if mercadoLateral
+    textoMercado := "LATERAL"
+else if strongExpansion
+    textoMercado := "EXPANSÃO"
+
+
+string textoBreak = "AGUARDAR"
+
+if strongCallBreak
+    textoBreak := "CALL FORTE"
+else if strongPutBreak
+    textoBreak := "PUT FORTE"
+else if earlyCall
+    textoBreak := "CALL"
+else if earlyPut
+    textoBreak := "PUT"
+
+
+string textoForca = "NORMAL"
+
+if callForceFinal >
+   putForceFinal
+
+    textoForca :=
+         "CALL " +
+         str.tostring(
+             callForceFinal)
+
+else if putForceFinal >
+         callForceFinal
+
+    textoForca :=
+         "PUT " +
+         str.tostring(
+             putForceFinal)
+
+
+string textoRisco = "OK"
+
+if mercadoLateral
+    textoRisco := "BLOQUEADO"
+else if exhaustionCall or exhaustionPut
+    textoRisco := "EXAUSTÃO"
+else if falseCall or falsePut or falseMicroCall or falseMicroPut
+    textoRisco := "FALSO"
+
+
+string textoPrevisao = "AGUARDAR"
+
+if forecastCall
+    textoPrevisao := "CALL ↑↑"
+else if forecastPut
+    textoPrevisao := "PUT ↓↓"
+else if preBreakCall
+    textoPrevisao := "CALL PRE"
+else if preBreakPut
+    textoPrevisao := "PUT PRE"
+
+
+string textoExpiracao =
+     str.tostring(
+         expiracaoVelas) +
+     " VELA"
+
+if expiracaoVelas > 1
+
+    textoExpiracao :=
+         str.tostring(
+             expiracaoVelas) +
+         " VELAS"
+
+if sinalAtivo and
+   not na(barraExpiracao)
+
+    int restantes =
+         math.max(
+             barraExpiracao -
+             bar_index,
+             0)
+
+    textoExpiracao :=
+         str.tostring(
+             restantes) +
+         " VELAS"
+
+
+string textoResultado = "—"
+
+if ultimoResultado == 1
+    textoResultado := "WIN"
+else if ultimoResultado == -1
+    textoResultado := "LOSS"
+else if ultimoResultado == 0 and
+         not na(ultimoResultadoBar)
+    textoResultado := "EMPATE"
+
+
+int totalOperacoes =
+     wins +
+     losses +
+     draws
+
+float winRate = 0.0
+
+if totalOperacoes > 0
+
+    winRate :=
+         wins /
+         totalOperacoes *
+         100.0
+
+string textoWinRate =
+     str.tostring(
+         winRate,
+         "#.##") +
+     "%"
+
+
+//====================================================
+// PAINEL
+//====================================================
+
+color fundoPainel =
+     color.rgb(25, 25, 25)
+
+color fundoTitulo =
+     color.rgb(0, 0, 0)
+
+color fundoNormal =
+     color.rgb(42, 42, 42)
+
+color fundoCall =
+     color.rgb(0, 110, 50)
+
+color fundoPut =
+     color.rgb(150, 25, 25)
+
+color fundoPre =
+     color.rgb(150, 100, 0)
+
+color fundoBloqueado =
+     color.rgb(75, 75, 75)
+
+
+var table painel =
+     table.new(
+         position.top_right,
+         2,
+         26,
+         border_width=1,
+         frame_width=2)
+
+
+if barstate.islast
+
+    if mostrarPainel
+
+        table.clear(
+             painel,
+             0,
+             0,
+             1,
+             25)
+
+
+        table.cell(
+             painel,
+             0,
+             0,
+             "BINÁRIAS",
+             text_color=color.white,
+             bgcolor=fundoTitulo)
+
+        table.cell(
+             painel,
+             1,
+             0,
+             "V79.7",
+             text_color=color.white,
+             bgcolor=fundoTitulo)
+
+
+        table.cell(
+             painel,
+             0,
+             1,
+             "SINAL",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             1,
+             textoSinal,
+             text_color=color.white,
+             bgcolor=
+                 textoSinal == "CALL" or
+                 textoSinal == "CALL ATIVO" ?
+                 fundoCall :
+                 textoSinal == "PUT" or
+                 textoSinal == "PUT ATIVO" ?
+                 fundoPut :
+                 textoSinal == "BLOQUEADO" ?
+                 fundoBloqueado :
+                 fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             2,
+             "PRE-BREAK",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             2,
+             textoPreBreak,
+             text_color=color.white,
+             bgcolor=
+                 preBreakCall ?
+                 fundoPre :
+                 preBreakPut ?
+                 fundoPre :
+                 fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             3,
+             "MICRO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             3,
+             textoMicro,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             4,
+             "ACELERAÇÃO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             4,
+             textoAceleracao,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             5,
+             "ESTRUTURA",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             5,
+             textoEstrutura,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             6,
+             "PADRÃO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             6,
+             textoPadrao,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             7,
+             "DIVERGÊNCIA",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             7,
+             textoDivergencia,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             8,
+             "MICRO BREAK",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             8,
+             textoMicroBreak,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             9,
+             "MICRO EMA",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             9,
+             textoMicroEMA,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             10,
+             "MICRO RSI",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             10,
+             textoMicroRSI,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             11,
+             "MICRO DMI",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             11,
+             textoMicroDMI,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             12,
+             "MICRO KVO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             12,
+             textoMicroKVO,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             13,
+             "MICRO VOL",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             13,
+             textoMicroVolume,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             14,
+             "MERCADO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             14,
+             textoMercado,
+             text_color=color.white,
+             bgcolor=
+                 mercadoLateral ?
+                 fundoBloqueado :
+                 fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             15,
+             "BREAK",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             15,
+             textoBreak,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             16,
+             "FORÇA",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             16,
+             textoForca,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             17,
+             "PREVISÃO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             17,
+             textoPrevisao,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             18,
+             "RISCO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             18,
+             textoRisco,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             19,
+             "EXPIRAÇÃO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             19,
+             textoExpiracao,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             20,
+             "RESULTADO",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             20,
+             textoResultado,
+             text_color=color.white,
+             bgcolor=
+                 ultimoResultado == 1 ?
+                 fundoCall :
+                 ultimoResultado == -1 ?
+                 fundoPut :
+                 fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             21,
+             "WIN",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             21,
+             str.tostring(wins),
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             22,
+             "LOSS",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             22,
+             str.tostring(losses),
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             23,
+             "EMPATE",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             23,
+             str.tostring(draws),
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             24,
+             "WINRATE",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             24,
+             textoWinRate,
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+
+        table.cell(
+             painel,
+             0,
+             25,
+             "PRE / DIV / PAD",
+             text_color=color.white,
+             bgcolor=fundoPainel)
+
+        table.cell(
+             painel,
+             1,
+             25,
+             str.tostring(preBreakCallScore) +
+             "/" +
+             str.tostring(preBreakPutScore) +
+             " | " +
+             str.tostring(
+                 microDivergenceCallScore +
+                 microDivergencePutScore) +
+             " | " +
+             str.tostring(
+                 microPatternCallScore +
+                 microPatternPutScore),
+             text_color=color.white,
+             bgcolor=fundoNormal)
+
+    else
+
+        table.clear(
+             painel,
+             0,
+             0,
+             1,
+             25)
+
+
+//====================================================
+// SINAIS
+//====================================================
+
+
+//====================================================
+// PRE-BREAK NO GRÁFICO
+//====================================================
+
+
+//====================================================
+// DIVERGÊNCIA
+//====================================================
+
+
+//====================================================
+// PADRÕES
+//====================================================
+
+
+//====================================================
+// RESULTADOS
+//====================================================
+
+bool mostrarWin =
+     mostrarResultados and
+     ultimoResultado == 1 and
+     ultimoResultadoBar ==
+     bar_index
+
+bool mostrarLoss =
+     mostrarResultados and
+     ultimoResultado == -1 and
+     ultimoResultadoBar ==
+     bar_index
+
+bool mostrarEmpate =
+     mostrarResultados and
+     ultimoResultado == 0 and
+     ultimoResultadoBar ==
+     bar_index
+
+
+//====================================================
+// FUNDO LATERAL
+//====================================================
+
+
+//====================================================
+// ALERTAS
+//====================================================
+
+alertcondition(
+     callSignal,
+     title="V79.7 CALL",
+     message="V79.7 CALL - PRE-BREAK + MICRO ROMPIMENTO")
+
+alertcondition(
+     putSignal,
+     title="V79.7 PUT",
+     message="V79.7 PUT - PRE-BREAK + MICRO ROMPIMENTO")
+
+alertcondition(
+     preBreakCall,
+     title="V79.7 PRE-BREAK CALL",
+     message="V79.7 PRE-BREAK CALL - preço se aproximando do rompimento")
+
+alertcondition(
+     preBreakPut,
+     title="V79.7 PRE-BREAK PUT",
+     message="V79.7 PRE-BREAK PUT - preço se aproximando do rompimento")
+
+
+//====================================================
+// FIM V79.7
+//====================================================
