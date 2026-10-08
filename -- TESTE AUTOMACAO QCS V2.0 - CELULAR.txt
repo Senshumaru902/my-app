@@ -1,0 +1,435 @@
+------------------------------------------------------------
+-- TESTE AUTOMACAO QCS V2.0
+-- DIAGNOSTICO DE AUTOMACAO
+-- NAO ENVIA ORDENS
+--
+-- MOTOR:
+-- TENDENCIA + MICRO TENDENCIA
+-- MOMENTUM + FORCA
+-- ROMPIMENTO + REJEICAO
+-- CONFLUENCIA + FILTRO LATERAL
+------------------------------------------------------------
+
+instrument {
+    name = "TESTE AUTOMACAO QCS V2.0",
+    short_name = "AUTO TEST V2",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACAO
+------------------------------------------------------------
+
+periodo = input(5, "Periodo", input.integer, 2, 20)
+minScore = input(5, "Score minimo", input.integer, 2, 8)
+
+------------------------------------------------------------
+-- DADOS
+------------------------------------------------------------
+
+c = close
+o = open
+h = high
+l = low
+v = volume
+
+------------------------------------------------------------
+-- INDICADORES
+------------------------------------------------------------
+
+ema5 = ema(c, 5)
+ema13 = ema(c, 13)
+ema21 = ema(c, 21)
+
+rsi7 = rsi(c, 7)
+
+tr7 = tr
+atr7 = sma(tr7, 7)
+
+volMedia = sma(v, 20)
+
+------------------------------------------------------------
+-- ESTRUTURA
+------------------------------------------------------------
+
+range = h - l
+corpo = abs(c - o)
+
+corpoPct =
+    iff(range > 0, corpo / range, 0)
+
+fechAlta =
+    iff(range > 0, (c - l) / range, 0)
+
+fechBaixa =
+    iff(range > 0, (h - c) / range, 0)
+
+pavioSup = h - max(c, o)
+pavioInf = min(c, o) - l
+
+------------------------------------------------------------
+-- TENDENCIA PRINCIPAL
+------------------------------------------------------------
+
+tendAlta =
+    c > ema5 and
+    ema5 > ema13 and
+    ema13 > ema21
+
+tendBaixa =
+    c < ema5 and
+    ema5 < ema13 and
+    ema13 < ema21
+
+------------------------------------------------------------
+-- MICRO TENDENCIA
+------------------------------------------------------------
+
+microAlta =
+    c > c[1] and
+    c[1] > c[2] and
+    ema5 > ema5[1]
+
+microBaixa =
+    c < c[1] and
+    c[1] < c[2] and
+    ema5 < ema5[1]
+
+------------------------------------------------------------
+-- MOMENTUM
+------------------------------------------------------------
+
+momAlta =
+    rsi7 > 52
+
+momBaixa =
+    rsi7 < 48
+
+------------------------------------------------------------
+-- FORCA DA VELA
+------------------------------------------------------------
+
+velaForte =
+    range > atr7 * 0.50 and
+    corpoPct >= 0.50
+
+velaForteAlta =
+    velaForte and
+    c > o and
+    fechAlta >= 0.65
+
+velaForteBaixa =
+    velaForte and
+    c < o and
+    fechBaixa >= 0.65
+
+------------------------------------------------------------
+-- VOLUME
+------------------------------------------------------------
+
+volumeForte =
+    v > volMedia
+
+------------------------------------------------------------
+-- MICRO ROMPIMENTO
+------------------------------------------------------------
+
+topoAnterior = highest(h, periodo)[1]
+fundoAnterior = lowest(l, periodo)[1]
+
+rompeAlta =
+    c > topoAnterior
+
+rompeBaixa =
+    c < fundoAnterior
+
+------------------------------------------------------------
+-- REJEICAO
+------------------------------------------------------------
+
+rejeitaBaixa =
+    pavioInf > corpo and
+    c > o
+
+rejeitaAlta =
+    pavioSup > corpo and
+    c < o
+
+------------------------------------------------------------
+-- PRESSAO
+------------------------------------------------------------
+
+pressaoCompra =
+    c > o and
+    fechAlta > 0.60
+
+pressaoVenda =
+    c < o and
+    fechBaixa > 0.60
+
+------------------------------------------------------------
+-- MERCADO LATERAL
+------------------------------------------------------------
+
+distEMA =
+    abs(ema5 - ema13)
+
+lateral =
+    distEMA < atr7 * 0.08 and
+    abs(rsi7 - 50) < 5
+
+------------------------------------------------------------
+-- SCORE CALL
+------------------------------------------------------------
+
+scoreCall =
+    iff(tendAlta, 1, 0) +
+    iff(microAlta, 1, 0) +
+    iff(momAlta, 1, 0) +
+    iff(velaForteAlta, 1, 0) +
+    iff(volumeForte, 1, 0) +
+    iff(rompeAlta, 2, 0) +
+    iff(pressaoCompra, 1, 0) +
+    iff(rejeitaBaixa, 1, 0)
+
+------------------------------------------------------------
+-- SCORE PUT
+------------------------------------------------------------
+
+scorePut =
+    iff(tendBaixa, 1, 0) +
+    iff(microBaixa, 1, 0) +
+    iff(momBaixa, 1, 0) +
+    iff(velaForteBaixa, 1, 0) +
+    iff(volumeForte, 1, 0) +
+    iff(rompeBaixa, 2, 0) +
+    iff(pressaoVenda, 1, 0) +
+    iff(rejeitaAlta, 1, 0)
+
+------------------------------------------------------------
+-- PREVISAO
+------------------------------------------------------------
+
+previsaoCall =
+    not lateral and
+    scoreCall >= minScore and
+    scoreCall > scorePut
+
+previsaoPut =
+    not lateral and
+    scorePut >= minScore and
+    scorePut > scoreCall
+
+------------------------------------------------------------
+-- ENTRADA
+-- EXIGE FORCA OU ROMPIMENTO
+------------------------------------------------------------
+
+CALL =
+    previsaoCall and
+    (
+        rompeAlta or
+        velaForteAlta or
+        microAlta
+    )
+
+PUT =
+    previsaoPut and
+    (
+        rompeBaixa or
+        velaForteBaixa or
+        microBaixa
+    )
+
+------------------------------------------------------------
+-- GARANTIA DE EXCLUSIVIDADE
+------------------------------------------------------------
+
+CALL_FINAL =
+    CALL and not PUT
+
+PUT_FINAL =
+    PUT and not CALL
+
+------------------------------------------------------------
+-- PREVISAO SEM ENTRADA
+------------------------------------------------------------
+
+PC =
+    previsaoCall and
+    not CALL_FINAL
+
+PV =
+    previsaoPut and
+    not PUT_FINAL
+
+------------------------------------------------------------
+-- ESTADO
+--
+-- 1 = CALL
+-- -1 = PUT
+-- 2 = PREVISAO CALL
+-- -2 = PREVISAO PUT
+-- 0 = NEUTRO
+------------------------------------------------------------
+
+estado =
+    iff(CALL_FINAL, 1,
+    iff(PUT_FINAL, -1,
+    iff(PC, 2,
+    iff(PV, -2, 0))))
+
+------------------------------------------------------------
+-- PLOTS DE SINAL
+------------------------------------------------------------
+
+plot(
+    iff(CALL_FINAL, c, nil),
+    "CALL",
+    "blue",
+    4,
+    0,
+    style.points
+)
+
+plot(
+    iff(PUT_FINAL, c, nil),
+    "PUT",
+    "purple",
+    4,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- PREVISOES
+------------------------------------------------------------
+
+plot(
+    iff(PC, c, nil),
+    "PREVISAO COMPRA",
+    "orange",
+    2,
+    0,
+    style.points
+)
+
+plot(
+    iff(PV, c, nil),
+    "PREVISAO VENDA",
+    "orange",
+    2,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- MICRO TENDENCIA
+------------------------------------------------------------
+
+plot(
+    iff(microAlta and not lateral, c, nil),
+    "MICRO CALL",
+    "green",
+    2,
+    0,
+    style.points
+)
+
+plot(
+    iff(microBaixa and not lateral, c, nil),
+    "MICRO PUT",
+    "red",
+    2,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- ROMPIMENTOS
+------------------------------------------------------------
+
+plot(
+    iff(rompeAlta, c, nil),
+    "ROMPIMENTO ALTA",
+    "blue",
+    3,
+    0,
+    style.points
+)
+
+plot(
+    iff(rompeBaixa, c, nil),
+    "ROMPIMENTO BAIXA",
+    "purple",
+    3,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- STATUS
+------------------------------------------------------------
+
+plot(
+    iff(estado == 1, c, nil),
+    "STATUS CALL",
+    "blue",
+    5,
+    0,
+    style.points
+)
+
+plot(
+    iff(estado == -1, c, nil),
+    "STATUS PUT",
+    "purple",
+    5,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- MEDIAS
+------------------------------------------------------------
+
+plot(
+    ema5,
+    "EMA5",
+    "green",
+    1
+)
+
+plot(
+    ema13,
+    "EMA13",
+    "red",
+    1
+)
+
+plot(
+    ema21,
+    "EMA21",
+    "yellow",
+    1
+)
+
+------------------------------------------------------------
+-- TESTE DE SERIES
+------------------------------------------------------------
+
+testeSerie =
+    conditional(CALL_FINAL)
+
+plot(
+    iff(testeSerie, c, nil),
+    "TESTE SERIES",
+    "yellow",
+    1,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- FIM
+------------------------------------------------------------

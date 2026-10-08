@@ -1,0 +1,953 @@
+------------------------------------------------------------
+-- NEXT CANDLE PRO V10.5.2
+-- CROSS + MTF MOBILE
+--
+-- MTF:
+-- 1M + 5M + 15M + 30M
+--
+-- TODOS ALTA  = CALL
+-- TODOS BAIXA = PUT
+-- QUALQUER CONFLITO = SEM SINAL
+--
+-- NOVO:
+-- CRUZAMENTO EMA MICRO x EMA TENDENCIA
+--
+-- ↑ = CRUZAMENTO PARA CIMA
+-- ↓ = CRUZAMENTO PARA BAIXO
+------------------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE PRO V10.5.2",
+    short_name = "NCP V10.5.2",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIG
+------------------------------------------------------------
+
+ema1_len = input(5, "EMA Micro", input.integer, 2, 20)
+ema2_len = input(13, "EMA Tendencia", input.integer, 3, 40)
+rsi_len = input(7, "RSI", input.integer, 2, 20)
+sr_len = input(20, "Estrutura", input.integer, 5, 60)
+micro_len = input(5, "Micro", input.integer, 3, 12)
+
+------------------------------------------------------------
+-- BASE
+------------------------------------------------------------
+
+body = abs(close - open)
+rng = max(high - low, 0.00000001)
+
+upper = high - max(open, close)
+lower = min(open, close) - low
+
+br = body / rng
+cp = (close - low) / rng
+
+ef = ema(close, ema1_len)
+es = ema(close, ema2_len)
+
+trend_up = ef > es
+trend_dn = ef < es
+
+------------------------------------------------------------
+-- MICRO TENDENCIA
+------------------------------------------------------------
+
+mf = ema(close, 3)
+mb = ema(close, 8)
+
+micro_up =
+    mf > mb and
+    mf >= mf[1]
+
+micro_dn =
+    mf < mb and
+    mf <= mf[1]
+
+macc_up =
+    mf > mf[1] and
+    mf[1] >= mf[2]
+
+macc_dn =
+    mf < mf[1] and
+    mf[1] <= mf[2]
+
+------------------------------------------------------------
+-- CRUZAMENTO DAS LINHAS PRINCIPAIS
+--
+-- EF = EMA MICRO
+-- ES = EMA TENDENCIA
+------------------------------------------------------------
+
+cross_up =
+    ef > es and
+    ef[1] <= es[1]
+
+cross_dn =
+    ef < es and
+    ef[1] >= es[1]
+
+------------------------------------------------------------
+-- MOMENTUM
+------------------------------------------------------------
+
+d0 = close - close[1]
+d1 = close[1] - close[2]
+
+mom_up =
+    d0 > 0 and
+    d1 >= 0
+
+mom_dn =
+    d0 < 0 and
+    d1 <= 0
+
+acc_up =
+    d0 > 0 and
+    d0 > d1
+
+acc_dn =
+    d0 < 0 and
+    d0 < d1
+
+------------------------------------------------------------
+-- RSI
+------------------------------------------------------------
+
+rv = rsi(close, rsi_len)
+
+rsi_up = rv >= 51
+rsi_dn = rv <= 49
+
+rsi_rise = rv > rv[1]
+rsi_fall = rv < rv[1]
+
+------------------------------------------------------------
+-- SUPORTE / RESISTENCIA
+------------------------------------------------------------
+
+res = highest(high[1], sr_len)
+sup = lowest(low[1], sr_len)
+
+break_up =
+    close > res and
+    close[1] <= res
+
+break_dn =
+    close < sup and
+    close[1] >= sup
+
+strong_up =
+    break_up and
+    br >= 0.45 and
+    cp >= 0.58
+
+strong_dn =
+    break_dn and
+    br >= 0.45 and
+    cp <= 0.42
+
+------------------------------------------------------------
+-- MICRO ROMPIMENTO
+------------------------------------------------------------
+
+mres = highest(high[1], micro_len)
+msup = lowest(low[1], micro_len)
+
+micro_break_up =
+    close > mres and
+    close >= open and
+    br >= 0.25
+
+micro_break_dn =
+    close < msup and
+    close <= open and
+    br >= 0.25
+
+micro_strong_up =
+    micro_break_up and
+    br >= 0.45
+
+micro_strong_dn =
+    micro_break_dn and
+    br >= 0.45
+
+------------------------------------------------------------
+-- CANDLE
+------------------------------------------------------------
+
+bull_engulf =
+    close > open and
+    close[1] < open[1] and
+    close >= open[1] and
+    open <= close[1]
+
+bear_engulf =
+    close < open and
+    close[1] > open[1] and
+    close <= open[1] and
+    open >= close[1]
+
+hammer =
+    lower >= body * 1.7 and
+    cp >= 0.52
+
+shooting =
+    upper >= body * 1.7 and
+    cp <= 0.48
+
+bull_pin =
+    lower >= body * 2.0 and
+    cp >= 0.56
+
+bear_pin =
+    upper >= body * 2.0 and
+    cp <= 0.44
+
+strong_bull =
+    close > open and
+    br >= 0.55 and
+    cp >= 0.60
+
+strong_bear =
+    close < open and
+    br >= 0.55 and
+    cp <= 0.40
+
+------------------------------------------------------------
+-- PULLBACK
+------------------------------------------------------------
+
+pull_up =
+    trend_up and
+    low <= ef and
+    close > ef and
+    close > open
+
+pull_dn =
+    trend_dn and
+    high >= ef and
+    close < ef and
+    close < open
+
+------------------------------------------------------------
+-- TOPO / FUNDO
+------------------------------------------------------------
+
+la = lowest(low[3], 3)
+lb = lowest(low, 3)
+
+ha = highest(high[3], 3)
+hb = highest(high, 3)
+
+double_bottom =
+    lb <= la * 1.004 and
+    close > open
+
+double_top =
+    hb >= ha * 0.996 and
+    close < open
+
+------------------------------------------------------------
+-- PADROES
+------------------------------------------------------------
+
+bull_pattern =
+    bull_engulf or
+    hammer or
+    bull_pin or
+    double_bottom or
+    pull_up or
+    strong_bull or
+    micro_break_up
+
+bear_pattern =
+    bear_engulf or
+    shooting or
+    bear_pin or
+    double_top or
+    pull_dn or
+    strong_bear or
+    micro_break_dn
+
+------------------------------------------------------------
+-- KVO
+------------------------------------------------------------
+
+flow = (close - close[1]) * volume
+
+kf = ema(flow, 5)
+ks = ema(flow, 13)
+
+k_up = kf > ks
+k_dn = kf < ks
+
+------------------------------------------------------------
+-- FIBONACCI
+------------------------------------------------------------
+
+fh = highest(high, sr_len)
+fl = lowest(low, sr_len)
+
+fr = max(fh - fl, 0.00000001)
+
+f38u = fh - fr * 0.382
+f50u = fh - fr * 0.500
+f61u = fh - fr * 0.618
+
+f38d = fl + fr * 0.382
+f50d = fl + fr * 0.500
+f61d = fl + fr * 0.618
+
+f127u = fh + fr * 0.272
+f127d = fl - fr * 0.272
+
+fib_up =
+    close >= f61u and
+    close <= f38u
+
+fib_dn =
+    close <= f61d and
+    close >= f38d
+
+space_up = close < f127u
+space_dn = close > f127d
+
+fib_call =
+    fib_up and
+    space_up and
+    (trend_up or micro_up)
+
+fib_put =
+    fib_dn and
+    space_dn and
+    (trend_dn or micro_dn)
+
+------------------------------------------------------------
+-- MTF 1M
+------------------------------------------------------------
+
+m1 = security(current_ticker_id, "1m")
+
+m1c = m1.close
+m1f = ema(m1c, ema1_len)
+m1s = ema(m1c, ema2_len)
+
+m1u =
+    m1c > m1f and
+    m1f >= m1s and
+    m1f >= m1f[1]
+
+m1d =
+    m1c < m1f and
+    m1f <= m1s and
+    m1f <= m1f[1]
+
+------------------------------------------------------------
+-- MTF 5M
+------------------------------------------------------------
+
+m5 = security(current_ticker_id, "5m")
+
+m5c = m5.close
+m5f = ema(m5c, ema1_len)
+m5s = ema(m5c, ema2_len)
+
+m5u =
+    m5c > m5f and
+    m5f >= m5s and
+    m5f >= m5f[1]
+
+m5d =
+    m5c < m5f and
+    m5f <= m5s and
+    m5f <= m5f[1]
+
+------------------------------------------------------------
+-- MTF 15M
+------------------------------------------------------------
+
+m15 = security(current_ticker_id, "15m")
+
+m15c = m15.close
+m15f = ema(m15c, ema1_len)
+m15s = ema(m15c, ema2_len)
+
+m15u =
+    m15c > m15f and
+    m15f >= m15s and
+    m15f >= m15f[1]
+
+m15d =
+    m15c < m15f and
+    m15f <= m15s and
+    m15f <= m15f[1]
+
+------------------------------------------------------------
+-- MTF 30M
+------------------------------------------------------------
+
+m30 = security(current_ticker_id, "30m")
+
+m30c = m30.close
+m30f = ema(m30c, ema1_len)
+m30s = ema(m30c, ema2_len)
+
+m30u =
+    m30c > m30f and
+    m30f >= m30s and
+    m30f >= m30f[1]
+
+m30d =
+    m30c < m30f and
+    m30f <= m30s and
+    m30f <= m30f[1]
+
+------------------------------------------------------------
+-- MTF UNANIME
+------------------------------------------------------------
+
+mtf_up =
+    m1u and
+    m5u and
+    m15u and
+    m30u
+
+mtf_dn =
+    m1d and
+    m5d and
+    m15d and
+    m30d
+
+mtf_conflict =
+    not mtf_up and
+    not mtf_dn
+
+------------------------------------------------------------
+-- CRUZAMENTO CONFIRMADO PELO MTF
+------------------------------------------------------------
+
+cross_call =
+    cross_up and
+    mtf_up
+
+cross_put =
+    cross_dn and
+    mtf_dn
+
+------------------------------------------------------------
+-- REGIME
+------------------------------------------------------------
+
+avg_range = sma(high - low, 10)
+
+ema_gap = abs(ef - es)
+
+ema_flat =
+    abs(ef - ef[1]) <
+    avg_range * 0.05
+
+ema_compressed =
+    ema_gap <
+    avg_range * 0.12
+
+regime_up =
+    mtf_up and
+    trend_up and
+    not ema_compressed
+
+regime_dn =
+    mtf_dn and
+    trend_dn and
+    not ema_compressed
+
+sideways =
+    mtf_conflict and
+    (ema_flat or ema_compressed)
+
+------------------------------------------------------------
+-- FORCA LOCAL CALL
+------------------------------------------------------------
+
+bull = 0
+
+if trend_up then
+    bull = bull + 1
+end
+
+if micro_up then
+    bull = bull + 2
+end
+
+if mom_up then
+    bull = bull + 1
+end
+
+if acc_up then
+    bull = bull + 1
+end
+
+if rsi_up then
+    bull = bull + 1
+end
+
+if rsi_rise then
+    bull = bull + 1
+end
+
+if k_up then
+    bull = bull + 1
+end
+
+if bull_pattern then
+    bull = bull + 2
+end
+
+if fib_call then
+    bull = bull + 1
+end
+
+if micro_break_up then
+    bull = bull + 2
+end
+
+if strong_up then
+    bull = bull + 2
+end
+
+------------------------------------------------------------
+-- FORCA LOCAL PUT
+------------------------------------------------------------
+
+bear = 0
+
+if trend_dn then
+    bear = bear + 1
+end
+
+if micro_dn then
+    bear = bear + 2
+end
+
+if mom_dn then
+    bear = bear + 1
+end
+
+if acc_dn then
+    bear = bear + 1
+end
+
+if rsi_dn then
+    bear = bear + 1
+end
+
+if rsi_fall then
+    bear = bear + 1
+end
+
+if k_dn then
+    bear = bear + 1
+end
+
+if bear_pattern then
+    bear = bear + 2
+end
+
+if fib_put then
+    bear = bear + 1
+end
+
+if micro_break_dn then
+    bear = bear + 2
+end
+
+if strong_dn then
+    bear = bear + 2
+end
+
+------------------------------------------------------------
+-- GATILHOS CALL
+------------------------------------------------------------
+
+call_trigger =
+    bull_pattern or
+    micro_break_up or
+    strong_up or
+    pull_up or
+    mom_up or
+    acc_up or
+    fib_call or
+    macc_up
+
+------------------------------------------------------------
+-- GATILHOS PUT
+------------------------------------------------------------
+
+put_trigger =
+    bear_pattern or
+    micro_break_dn or
+    strong_dn or
+    pull_dn or
+    mom_dn or
+    acc_dn or
+    fib_put or
+    macc_dn
+
+------------------------------------------------------------
+-- PROTECOES
+------------------------------------------------------------
+
+weak =
+    br < 0.10
+
+reject_call =
+    upper > body * 2.2 and
+    cp < 0.50
+
+reject_put =
+    lower > body * 2.2 and
+    cp > 0.50
+
+false_up =
+    high > res and
+    close < res
+
+false_dn =
+    low < sup and
+    close > sup
+
+conflict_call =
+    trend_dn and
+    mom_dn and
+    rsi_dn
+
+conflict_put =
+    trend_up and
+    mom_up and
+    rsi_up
+
+------------------------------------------------------------
+-- SINAL CALL
+------------------------------------------------------------
+
+call_signal =
+    mtf_up and
+    call_trigger and
+    bull >= 3 and
+    bull >= bear and
+    not weak and
+    not reject_call and
+    not conflict_call and
+    not false_up
+
+------------------------------------------------------------
+-- SINAL PUT
+------------------------------------------------------------
+
+put_signal =
+    mtf_dn and
+    put_trigger and
+    bear >= 3 and
+    bear >= bull and
+    not weak and
+    not reject_put and
+    not conflict_put and
+    not false_dn
+
+------------------------------------------------------------
+-- BLOQUEIO FINAL
+------------------------------------------------------------
+
+if mtf_conflict then
+    call_signal = false
+    put_signal = false
+end
+
+if call_signal and put_signal then
+    call_signal = false
+    put_signal = false
+end
+
+------------------------------------------------------------
+-- LINHAS PRINCIPAIS
+------------------------------------------------------------
+
+plot(
+    ef,
+    "EMA MICRO",
+    "white",
+    2
+)
+
+plot(
+    es,
+    "EMA TENDENCIA",
+    "gray",
+    2
+)
+
+plot(
+    sup,
+    "SUPORTE",
+    "gray",
+    1
+)
+
+plot(
+    res,
+    "RESISTENCIA",
+    "gray",
+    1
+)
+
+plot(
+    f50u,
+    "FIB 50 ALTA",
+    "yellow",
+    1
+)
+
+plot(
+    f50d,
+    "FIB 50 BAIXA",
+    "orange",
+    1
+)
+
+------------------------------------------------------------
+-- LINHA VISUAL CALL
+------------------------------------------------------------
+
+call_line =
+    call_signal and
+    close
+
+plot(
+    call_line,
+    "CALL",
+    "green",
+    4
+)
+
+------------------------------------------------------------
+-- LINHA VISUAL PUT
+------------------------------------------------------------
+
+put_line =
+    put_signal and
+    close
+
+plot(
+    put_line,
+    "PUT",
+    "red",
+    4
+)
+
+------------------------------------------------------------
+-- CRUZAMENTO BRUTO PARA CIMA
+--
+-- AVISA EXATAMENTE NA VELA
+-- EM QUE EF CRUZA ES PARA CIMA
+------------------------------------------------------------
+
+plot_shape(
+    cross_up,
+    "CRUZAMENTO PARA CIMA",
+    shape_style.labelup,
+    shape_size.large,
+    "green",
+    shape_location.belowbar,
+    0,
+    "CRUZOU ↑",
+    "white"
+)
+
+------------------------------------------------------------
+-- CRUZAMENTO BRUTO PARA BAIXO
+--
+-- AVISA EXATAMENTE NA VELA
+-- EM QUE EF CRUZA ES PARA BAIXO
+------------------------------------------------------------
+
+plot_shape(
+    cross_dn,
+    "CRUZAMENTO PARA BAIXO",
+    shape_style.labeldown,
+    shape_size.large,
+    "red",
+    shape_location.abovebar,
+    0,
+    "CRUZOU ↓",
+    "white"
+)
+
+------------------------------------------------------------
+-- CRUZAMENTO CONFIRMADO CALL
+--
+-- CRUZAMENTO PARA CIMA
+-- +
+-- MTF 1M + 5M + 15M + 30M ALTA
+------------------------------------------------------------
+
+plot_shape(
+    cross_call,
+    "CROSS CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    "green",
+    shape_location.belowbar,
+    0,
+    "CALL CROSS",
+    "white"
+)
+
+------------------------------------------------------------
+-- CRUZAMENTO CONFIRMADO PUT
+--
+-- CRUZAMENTO PARA BAIXO
+-- +
+-- MTF 1M + 5M + 15M + 30M BAIXA
+------------------------------------------------------------
+
+plot_shape(
+    cross_put,
+    "CROSS PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    "red",
+    shape_location.abovebar,
+    0,
+    "PUT CROSS",
+    "white"
+)
+
+------------------------------------------------------------
+-- MARCADORES CALL PRINCIPAL
+------------------------------------------------------------
+
+plot_shape(
+    call_signal,
+    "CALL",
+    shape_style.labelup,
+    shape_size.large,
+    "green",
+    shape_location.belowbar,
+    0,
+    "CALL",
+    "white"
+)
+
+------------------------------------------------------------
+-- MARCADORES PUT PRINCIPAL
+------------------------------------------------------------
+
+plot_shape(
+    put_signal,
+    "PUT",
+    shape_style.labeldown,
+    shape_size.large,
+    "red",
+    shape_location.abovebar,
+    0,
+    "PUT",
+    "white"
+)
+
+------------------------------------------------------------
+-- PROXIMA VELA CALL
+------------------------------------------------------------
+
+plot_shape(
+    call_signal,
+    "PROXIMO CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    "green",
+    shape_location.belowbar,
+    1,
+    "CALL",
+    "white"
+)
+
+------------------------------------------------------------
+-- PROXIMA VELA PUT
+------------------------------------------------------------
+
+plot_shape(
+    put_signal,
+    "PROXIMO PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    "red",
+    shape_location.abovebar,
+    1,
+    "PUT",
+    "white"
+)
+
+------------------------------------------------------------
+-- MTF UNANIME ALTA
+------------------------------------------------------------
+
+plot_shape(
+    mtf_up,
+    "MTF ALTA",
+    shape_style.triangleup,
+    shape_size.small,
+    "cyan",
+    shape_location.belowbar,
+    0,
+    "MTF",
+    "white"
+)
+
+------------------------------------------------------------
+-- MTF UNANIME BAIXA
+------------------------------------------------------------
+
+plot_shape(
+    mtf_dn,
+    "MTF BAIXA",
+    shape_style.triangledown,
+    shape_size.small,
+    "magenta",
+    shape_location.abovebar,
+    0,
+    "MTF",
+    "white"
+)
+
+------------------------------------------------------------
+-- MICRO CALL
+------------------------------------------------------------
+
+plot_shape(
+    micro_break_up,
+    "MICRO CALL",
+    shape_style.triangleup,
+    shape_size.small,
+    "cyan",
+    shape_location.belowbar,
+    0,
+    "MICRO",
+    "white"
+)
+
+------------------------------------------------------------
+-- MICRO PUT
+------------------------------------------------------------
+
+plot_shape(
+    micro_break_dn,
+    "MICRO PUT",
+    shape_style.triangledown,
+    shape_size.small,
+    "magenta",
+    shape_location.abovebar,
+    0,
+    "MICRO",
+    "white"
+)
