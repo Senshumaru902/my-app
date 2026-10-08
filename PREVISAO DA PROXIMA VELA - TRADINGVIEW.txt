@@ -1,0 +1,1443 @@
+//@version=6
+indicator("NEXT CANDLE PRO V39.0 - PREVISAO DA PROXIMA VELA", overlay=true, max_labels_count=500)
+
+// =====================================================
+// OBJETIVO
+// =====================================================
+// Este algoritmo tenta prever SOMENTE a proxima vela.
+//
+// Resultado:
+// ALTA       = proxima vela tende a ser de alta
+// BAIXA      = proxima vela tende a ser de baixa
+// INDEFINIDA = nao existe vantagem suficiente
+//
+// Nenhuma previsao de varias velas.
+// Nenhuma indicacao de compra ou venda.
+// =====================================================
+
+
+// =====================================================
+// CONFIGURACOES
+// =====================================================
+
+grupoGeral = "GERAL"
+
+sensibilidade = input.string(
+     "Equilibrada",
+     "Sensibilidade",
+     options=["Cautelosa", "Equilibrada", "Rapida"],
+     group=grupoGeral)
+
+usarMemoria = input.bool(
+     true,
+     "Estabilidade da previsao",
+     group=grupoGeral)
+
+forcaInversao = input.int(
+     14,
+     "Forca minima para trocar a previsao",
+     minval=1,
+     maxval=40,
+     group=grupoGeral)
+
+mostrarPainel = input.bool(
+     true,
+     "Mostrar painel",
+     group=grupoGeral)
+
+mostrarSinalGrafico = input.bool(
+     true,
+     "Mostrar previsao no grafico",
+     group=grupoGeral)
+
+mostrarEMAs = input.bool(
+     false,
+     "Mostrar EMAs",
+     group=grupoGeral)
+
+
+// =====================================================
+// ESTRUTURA
+// =====================================================
+
+grupoEstrutura = "ESTRUTURA"
+
+periodoSR = input.int(
+     20,
+     "Periodo suporte/resistencia",
+     minval=5,
+     maxval=100,
+     group=grupoEstrutura)
+
+periodoMicro = input.int(
+     5,
+     "Periodo microestrutura",
+     minval=2,
+     maxval=20,
+     group=grupoEstrutura)
+
+pivotLen = input.int(
+     3,
+     "Pivot",
+     minval=2,
+     maxval=10,
+     group=grupoEstrutura)
+
+toleranciaDuploATR = input.float(
+     0.35,
+     "Tolerancia topo/fundo duplo",
+     minval=0.05,
+     maxval=1.50,
+     step=0.05,
+     group=grupoEstrutura)
+
+distanciaMinTestes = input.int(
+     3,
+     "Distancia minima entre testes",
+     minval=1,
+     maxval=20,
+     group=grupoEstrutura)
+
+
+// =====================================================
+// FILTROS
+// =====================================================
+
+grupoFiltro = "FILTROS"
+
+rsiAlto = input.float(
+     52,
+     "RSI favoravel a alta",
+     minval=50,
+     maxval=70,
+     group=grupoFiltro)
+
+rsiBaixo = input.float(
+     48,
+     "RSI favoravel a baixa",
+     minval=30,
+     maxval=50,
+     group=grupoFiltro)
+
+adxMin = input.float(
+     18,
+     "ADX minimo",
+     minval=5,
+     maxval=50,
+     group=grupoFiltro)
+
+corpoMinATR = input.float(
+     0.25,
+     "Corpo minimo ATR",
+     minval=0.05,
+     maxval=2.0,
+     step=0.05,
+     group=grupoFiltro)
+
+pavioMax = input.float(
+     1.8,
+     "Pavio maximo relativo ao corpo",
+     minval=0.5,
+     maxval=5.0,
+     step=0.1,
+     group=grupoFiltro)
+
+
+// =====================================================
+// INDICADORES
+// =====================================================
+
+ema5 = ta.ema(close, 5)
+ema8 = ta.ema(close, 8)
+ema13 = ta.ema(close, 13)
+ema21 = ta.ema(close, 21)
+ema50 = ta.ema(close, 50)
+
+rsi = ta.rsi(close, 7)
+
+atr7 = ta.atr(7)
+atr14 = ta.atr(14)
+
+volumeMedia = ta.sma(volume, 20)
+
+[diPlus, diMinus, adx] = ta.dmi(14, 14)
+
+
+// =====================================================
+// PROTECAO CONTRA NA
+// =====================================================
+
+atrSeguro = math.max(atr7, syminfo.mintick)
+
+
+// =====================================================
+// DADOS DO CANDLE ATUAL
+// =====================================================
+
+rangeCandle = high - low
+
+corpo = math.abs(close - open)
+
+corpoSeguro = math.max(corpo, syminfo.mintick)
+
+pavioSuperior = high - math.max(open, close)
+
+pavioInferior = math.min(open, close) - low
+
+posicaoFechamento = rangeCandle > 0 ?
+     (close - low) / rangeCandle :
+     0.5
+
+candleAlta = close > open
+candleBaixa = close < open
+
+candleNeutro = close == open
+
+candleForte = corpo >= atrSeguro * corpoMinATR
+
+fechamentoAlto = posicaoFechamento >= 0.65
+
+fechamentoBaixo = posicaoFechamento <= 0.35
+
+pavioSuperiorExcessivo =
+     pavioSuperior > corpoSeguro * pavioMax
+
+pavioInferiorExcessivo =
+     pavioInferior > corpoSeguro * pavioMax
+
+
+// =====================================================
+// CANDLES DE FORCA
+// =====================================================
+
+velaForcaAlta =
+     candleAlta and
+     candleForte and
+     fechamentoAlto and
+     not pavioSuperiorExcessivo
+
+velaForcaBaixa =
+     candleBaixa and
+     candleForte and
+     fechamentoBaixo and
+     not pavioInferiorExcessivo
+
+
+// =====================================================
+// PADROES DE REVERSAO
+// =====================================================
+
+corpoAnterior = math.abs(close[1] - open[1])
+
+bullishEngulfing =
+     candleAlta and
+     close[1] < open[1] and
+     open <= close[1] and
+     close >= open[1] and
+     corpo >= corpoAnterior
+
+bearishEngulfing =
+     candleBaixa and
+     close[1] > open[1] and
+     open >= close[1] and
+     close <= open[1] and
+     corpo >= corpoAnterior
+
+martelo =
+     pavioInferior >= corpoSeguro * 1.5 and
+     pavioSuperior <= corpoSeguro * 0.8 and
+     posicaoFechamento >= 0.55
+
+estrelaCadente =
+     pavioSuperior >= corpoSeguro * 1.5 and
+     pavioInferior <= corpoSeguro * 0.8 and
+     posicaoFechamento <= 0.55
+
+pinAlta =
+     pavioInferior >= corpoSeguro * 1.8 and
+     posicaoFechamento >= 0.60
+
+pinBaixa =
+     pavioSuperior >= corpoSeguro * 1.8 and
+     posicaoFechamento <= 0.40
+
+
+// =====================================================
+// SUPORTE E RESISTENCIA
+// =====================================================
+
+resistencia = ta.highest(high, periodoSR)
+
+suporte = ta.lowest(low, periodoSR)
+
+resistenciaAnterior = ta.highest(high, periodoSR)[1]
+
+suporteAnterior = ta.lowest(low, periodoSR)[1]
+
+
+// =====================================================
+// MICROESTRUTURA
+// =====================================================
+
+microMax = ta.highest(high, periodoMicro)
+
+microMin = ta.lowest(low, periodoMicro)
+
+microMaxAnterior = ta.highest(high, periodoMicro)[1]
+
+microMinAnterior = ta.lowest(low, periodoMicro)[1]
+
+microAlta =
+     close > ema5 and
+     ema5 > ema5[1] and
+     close > close[1]
+
+microBaixa =
+     close < ema5 and
+     ema5 < ema5[1] and
+     close < close[1]
+
+
+microPressaoAlta =
+     close > ema5 and
+     close >= close[1]
+
+microPressaoBaixa =
+     close < ema5 and
+     close <= close[1]
+
+
+// =====================================================
+// MICRO ROMPIMENTO
+// =====================================================
+
+microRompimentoAlta =
+     close > microMaxAnterior and
+     candleAlta and
+     corpo >= atrSeguro * 0.15
+
+microRompimentoBaixa =
+     close < microMinAnterior and
+     candleBaixa and
+     corpo >= atrSeguro * 0.15
+
+
+// =====================================================
+// ROMPIMENTO DE ESTRUTURA
+// =====================================================
+
+rompimentoAlta =
+     close > resistenciaAnterior and
+     candleAlta
+
+rompimentoBaixa =
+     close < suporteAnterior and
+     candleBaixa
+
+
+// =====================================================
+// FALSO ROMPIMENTO
+// =====================================================
+
+falsoRompimentoAlta =
+     high > resistenciaAnterior and
+     close <= resistenciaAnterior and
+     pavioSuperior > corpoSeguro
+
+falsoRompimentoBaixa =
+     low < suporteAnterior and
+     close >= suporteAnterior and
+     pavioInferior > corpoSeguro
+
+
+// =====================================================
+// PROXIMIDADE DO SUPORTE/RESISTENCIA
+// =====================================================
+
+distanciaSuporte =
+     math.abs(close - suporte) / atrSeguro
+
+distanciaResistencia =
+     math.abs(resistencia - close) / atrSeguro
+
+pertoSuporte =
+     distanciaSuporte <= 0.80
+
+pertoResistencia =
+     distanciaResistencia <= 0.80
+
+
+// =====================================================
+// PIVOTS
+// =====================================================
+
+pivotHigh = ta.pivothigh(high, pivotLen, pivotLen)
+
+pivotLow = ta.pivotlow(low, pivotLen, pivotLen)
+
+var float ultimoTopo = na
+var float penultimoTopo = na
+
+var float ultimoFundo = na
+var float penultimoFundo = na
+
+var int idadeTopo = 0
+var int idadeFundo = 0
+
+if not na(pivotHigh)
+    penultimoTopo := ultimoTopo
+    ultimoTopo := pivotHigh
+    idadeTopo := 0
+else
+    idadeTopo += 1
+
+if not na(pivotLow)
+    penultimoFundo := ultimoFundo
+    ultimoFundo := pivotLow
+    idadeFundo := 0
+else
+    idadeFundo += 1
+
+
+// =====================================================
+// TOPO DUPLO / FUNDO DUPLO
+// =====================================================
+
+toleranciaDuplo =
+     atrSeguro * toleranciaDuploATR
+
+distanciaEntreFundos =
+     not na(ultimoFundo) and not na(penultimoFundo) ?
+     math.abs(ultimoFundo - penultimoFundo) :
+     0.0
+
+distanciaEntreTopos =
+     not na(ultimoTopo) and not na(penultimoTopo) ?
+     math.abs(ultimoTopo - penultimoTopo) :
+     0.0
+
+
+fundoDuplo =
+     not na(ultimoFundo) and
+     not na(penultimoFundo) and
+     distanciaEntreFundos <= toleranciaDuplo and
+     idadeFundo <= periodoSR
+
+topoDuplo =
+     not na(ultimoTopo) and
+     not na(penultimoTopo) and
+     distanciaEntreTopos <= toleranciaDuplo and
+     idadeTopo <= periodoSR
+
+
+// =====================================================
+// ANTECIPACAO DE PADRAO DUPLO
+// =====================================================
+
+proximoTesteFundo = false
+proximoTesteTopo = false
+
+if not na(ultimoFundo)
+    proximoTesteFundo :=
+         math.abs(low - ultimoFundo) <= toleranciaDuplo
+
+if not na(ultimoTopo)
+    proximoTesteTopo :=
+         math.abs(high - ultimoTopo) <= toleranciaDuplo
+
+
+fundoDuploAntecipado = false
+topoDuploAntecipado = false
+
+if not na(ultimoFundo) and not na(penultimoFundo)
+    fundoDuploAntecipado :=
+         distanciaEntreFundos >= syminfo.mintick * distanciaMinTestes and
+         idadeFundo <= periodoSR and
+         proximoTesteFundo
+
+if not na(ultimoTopo) and not na(penultimoTopo)
+    topoDuploAntecipado :=
+         distanciaEntreTopos >= syminfo.mintick * distanciaMinTestes and
+         idadeTopo <= periodoSR and
+         proximoTesteTopo
+
+
+// =====================================================
+// PADROES DE ESTRUTURA
+// =====================================================
+
+compressao =
+     rangeCandle < atrSeguro * 0.65 and
+     math.abs(ema5 - ema13) < atrSeguro * 0.40
+
+expansao =
+     rangeCandle > atrSeguro * 1.20 and
+     corpo > atrSeguro * 0.55
+
+consolidacao =
+     math.abs(ema5 - ema13) < atrSeguro * 0.25 and
+     rangeCandle < atrSeguro * 0.90
+
+canalAlta =
+     ema5 > ema13 and
+     ema13 > ema21 and
+     microAlta
+
+canalBaixa =
+     ema5 < ema13 and
+     ema13 < ema21 and
+     microBaixa
+
+
+// =====================================================
+// MOMENTUM
+// =====================================================
+
+momentumAlta =
+     rsi >= rsiAlto
+
+momentumBaixa =
+     rsi <= rsiBaixo
+
+
+// =====================================================
+// ESTRUTURA EMA
+// =====================================================
+
+estruturaAlta =
+     ema5 > ema8 and
+     ema8 > ema13 and
+     ema13 > ema21
+
+estruturaBaixa =
+     ema5 < ema8 and
+     ema8 < ema13 and
+     ema13 < ema21
+
+
+estruturaAltaForte =
+     estruturaAlta and
+     ema21 > ema50
+
+estruturaBaixaForte =
+     estruturaBaixa and
+     ema21 < ema50
+
+
+// =====================================================
+// DMI / ADX
+// =====================================================
+
+forcaDirecionalAlta =
+     adx >= adxMin and
+     diPlus > diMinus
+
+forcaDirecionalBaixa =
+     adx >= adxMin and
+     diMinus > diPlus
+
+
+// =====================================================
+// VOLUME
+// =====================================================
+
+volumeForte =
+     volume > volumeMedia
+
+volumeAlta =
+     volumeForte and candleAlta
+
+volumeBaixa =
+     volumeForte and candleBaixa
+
+
+// =====================================================
+// REACOES DE SUPORTE E RESISTENCIA
+// =====================================================
+
+reacaoSuporte =
+     pertoSuporte and
+     (candleAlta or pinAlta or martelo)
+
+reacaoResistencia =
+     pertoResistencia and
+     (candleBaixa or pinBaixa or estrelaCadente)
+
+
+// =====================================================
+// GAP / ANOMALIA
+// =====================================================
+
+gapAtual =
+     math.abs(open - close[1]) > atrSeguro * 0.80
+
+candleAnormal =
+     rangeCandle > atr14 * 3.0
+
+anomalia =
+     gapAtual or candleAnormal
+
+
+// =====================================================
+// PRESSAO PARA A PROXIMA VELA
+// =====================================================
+// Aqui esta o centro do algoritmo.
+//
+// Os pontos nao representam previsao de varias velas.
+// Eles representam apenas evidencias sobre a DIRECAO
+// DA PROXIMA VELA.
+// =====================================================
+
+int pontosAlta = 0
+int pontosBaixa = 0
+
+
+// -----------------------------------------------------
+// CANDLE ATUAL
+// -----------------------------------------------------
+
+if candleAlta
+    pontosAlta += 8
+
+if candleBaixa
+    pontosBaixa += 8
+
+if velaForcaAlta
+    pontosAlta += 12
+
+if velaForcaBaixa
+    pontosBaixa += 12
+
+if fechamentoAlto
+    pontosAlta += 7
+
+if fechamentoBaixo
+    pontosBaixa += 7
+
+
+// -----------------------------------------------------
+// PADROES
+// -----------------------------------------------------
+
+if bullishEngulfing
+    pontosAlta += 16
+
+if bearishEngulfing
+    pontosBaixa += 16
+
+if martelo
+    pontosAlta += 12
+
+if pinAlta
+    pontosAlta += 10
+
+if estrelaCadente
+    pontosBaixa += 12
+
+if pinBaixa
+    pontosBaixa += 10
+
+
+// -----------------------------------------------------
+// ESTRUTURA
+// -----------------------------------------------------
+
+if estruturaAlta
+    pontosAlta += 8
+
+if estruturaBaixa
+    pontosBaixa += 8
+
+if estruturaAltaForte
+    pontosAlta += 5
+
+if estruturaBaixaForte
+    pontosBaixa += 5
+
+
+// -----------------------------------------------------
+// MICRO
+// -----------------------------------------------------
+
+if microAlta
+    pontosAlta += 10
+
+if microBaixa
+    pontosBaixa += 10
+
+if microPressaoAlta
+    pontosAlta += 5
+
+if microPressaoBaixa
+    pontosBaixa += 5
+
+
+// -----------------------------------------------------
+// MICRO ROMPIMENTO
+// -----------------------------------------------------
+
+if microRompimentoAlta
+    pontosAlta += 12
+
+if microRompimentoBaixa
+    pontosBaixa += 12
+
+
+// -----------------------------------------------------
+// ROMPIMENTO
+// -----------------------------------------------------
+
+if rompimentoAlta
+    pontosAlta += 14
+
+if rompimentoBaixa
+    pontosBaixa += 14
+
+
+// -----------------------------------------------------
+// MOMENTUM
+// -----------------------------------------------------
+
+if momentumAlta
+    pontosAlta += 7
+
+if momentumBaixa
+    pontosBaixa += 7
+
+
+// -----------------------------------------------------
+// DMI
+// -----------------------------------------------------
+
+if forcaDirecionalAlta
+    pontosAlta += 7
+
+if forcaDirecionalBaixa
+    pontosBaixa += 7
+
+
+// -----------------------------------------------------
+// VOLUME
+// -----------------------------------------------------
+
+if volumeAlta
+    pontosAlta += 5
+
+if volumeBaixa
+    pontosBaixa += 5
+
+
+// -----------------------------------------------------
+// SUPORTE / RESISTENCIA
+// -----------------------------------------------------
+
+if reacaoSuporte
+    pontosAlta += 12
+
+if reacaoResistencia
+    pontosBaixa += 12
+
+
+// -----------------------------------------------------
+// DUPLO
+// -----------------------------------------------------
+
+if fundoDuplo
+    pontosAlta += 18
+
+if fundoDuploAntecipado
+    pontosAlta += 12
+
+if topoDuplo
+    pontosBaixa += 18
+
+if topoDuploAntecipado
+    pontosBaixa += 12
+
+
+// -----------------------------------------------------
+// CANAL
+// -----------------------------------------------------
+
+if canalAlta
+    pontosAlta += 5
+
+if canalBaixa
+    pontosBaixa += 5
+
+
+// -----------------------------------------------------
+// EXPANSAO
+// -----------------------------------------------------
+
+if expansao and candleAlta
+    pontosAlta += 7
+
+if expansao and candleBaixa
+    pontosBaixa += 7
+
+
+// =====================================================
+// PROTECAO CONTRA FALSO ROMPIMENTO
+// =====================================================
+
+if falsoRompimentoAlta
+    pontosAlta -= 20
+    pontosBaixa += 12
+
+if falsoRompimentoBaixa
+    pontosBaixa -= 20
+    pontosAlta += 12
+
+
+// =====================================================
+// PAVIOS DE REJEICAO
+// =====================================================
+
+if pavioSuperiorExcessivo and not candleAlta
+    pontosBaixa += 6
+
+if pavioInferiorExcessivo and not candleBaixa
+    pontosAlta += 6
+
+
+// =====================================================
+// LIMITAR PONTUACAO
+// =====================================================
+
+pontosAlta := math.max(0, math.min(100, pontosAlta))
+
+pontosBaixa := math.max(0, math.min(100, pontosBaixa))
+
+
+// =====================================================
+// CONFLITO
+// =====================================================
+
+conflito =
+     math.abs(pontosAlta - pontosBaixa) <= 5
+
+
+// =====================================================
+// BLOQUEIOS
+// =====================================================
+
+bloqueioAnomalia =
+     anomalia and not velaForcaAlta and not velaForcaBaixa
+
+bloqueioFalsoAlta =
+     falsoRompimentoAlta and not bullishEngulfing
+
+bloqueioFalsoBaixa =
+     falsoRompimentoBaixa and not bearishEngulfing
+
+
+// =====================================================
+// SENSIBILIDADE
+// =====================================================
+
+int minimoPontos = 42
+int minimoVantagem = 8
+
+if sensibilidade == "Cautelosa"
+    minimoPontos := 58
+    minimoVantagem := 14
+
+if sensibilidade == "Equilibrada"
+    minimoPontos := 42
+    minimoVantagem := 8
+
+if sensibilidade == "Rapida"
+    minimoPontos := 34
+    minimoVantagem := 5
+
+
+// =====================================================
+// VANTAGEM
+// =====================================================
+
+vantagemAlta =
+     pontosAlta - pontosBaixa
+
+vantagemBaixa =
+     pontosBaixa - pontosAlta
+
+
+// =====================================================
+// CANDIDATO DA PROXIMA VELA
+// =====================================================
+
+int candidato = 0
+
+if pontosAlta >= minimoPontos and vantagemAlta >= minimoVantagem
+    candidato := 1
+
+if pontosBaixa >= minimoPontos and vantagemBaixa >= minimoVantagem
+    candidato := -1
+
+
+// =====================================================
+// BLOQUEIOS FINAIS
+// =====================================================
+
+if conflito
+    candidato := 0
+
+if bloqueioAnomalia
+    candidato := 0
+
+if bloqueioFalsoAlta
+    candidato := 0
+
+if bloqueioFalsoBaixa
+    candidato := 0
+
+
+// =====================================================
+// MEMORIA DE ESTABILIDADE
+// =====================================================
+// A memoria nao tenta prever varias velas.
+// Ela somente evita que pequenas alteracoes dentro
+// do candle atual troquem imediatamente a previsao.
+//
+// Exemplo:
+// ALTA -> pequeno movimento -> continua ALTA
+//
+// Mas uma mudanca realmente forte pode inverter.
+// =====================================================
+
+var int memoriaDirecao = 0
+var int estabilidade = 0
+
+if usarMemoria
+
+    if candidato == 0
+        estabilidade := math.max(0, estabilidade - 1)
+
+    if candidato != 0
+
+        if memoriaDirecao == 0
+            memoriaDirecao := candidato
+            estabilidade := 1
+
+        else if candidato == memoriaDirecao
+            estabilidade += 1
+
+        else
+
+            diferencaAbsoluta =
+                 math.abs(pontosAlta - pontosBaixa)
+
+            bool trocaForte =
+                 diferencaAbsoluta >= forcaInversao
+
+            bool eventoForteAlta =
+                 candidato == 1 and
+                 (
+                     bullishEngulfing or
+                     fundoDuplo or
+                     rompimentoAlta or
+                     microRompimentoAlta or
+                     velaForcaAlta
+                 )
+
+            bool eventoForteBaixa =
+                 candidato == -1 and
+                 (
+                     bearishEngulfing or
+                     topoDuplo or
+                     rompimentoBaixa or
+                     microRompimentoBaixa or
+                     velaForcaBaixa
+                 )
+
+            if trocaForte or eventoForteAlta or eventoForteBaixa
+                memoriaDirecao := candidato
+                estabilidade := 1
+
+else
+    memoriaDirecao := candidato
+    estabilidade := candidato != 0 ? 1 : 0
+
+
+// =====================================================
+// PREVISAO FINAL
+// =====================================================
+
+int previsaoProxima = candidato
+
+if usarMemoria
+
+    if candidato == 0
+        previsaoProxima := memoriaDirecao
+
+    else if memoriaDirecao != 0 and candidato != memoriaDirecao
+
+        diferencaFinal =
+             math.abs(pontosAlta - pontosBaixa)
+
+        eventoMuitoForte =
+             diferencaFinal >= forcaInversao or
+             (candidato == 1 and (bullishEngulfing or fundoDuplo or rompimentoAlta)) or
+             (candidato == -1 and (bearishEngulfing or topoDuplo or rompimentoBaixa))
+
+        if eventoMuitoForte
+            previsaoProxima := candidato
+        else
+            previsaoProxima := memoriaDirecao
+
+
+// =====================================================
+// TEXTO DA PREVISAO
+// =====================================================
+
+string textoPrevisao = "INDEFINIDA"
+
+if previsaoProxima == 1
+    textoPrevisao := "ALTA"
+
+if previsaoProxima == -1
+    textoPrevisao := "BAIXA"
+
+
+// =====================================================
+// PRESSAO ATUAL
+// =====================================================
+
+string textoPressao = "NEUTRA"
+
+if pontosAlta > pontosBaixa + 5
+    textoPressao := "ALTA"
+
+if pontosBaixa > pontosAlta + 5
+    textoPressao := "BAIXA"
+
+
+// =====================================================
+// PADRAO PRINCIPAL
+// =====================================================
+
+string padrao = "SEM PADRAO CLARO"
+
+if fundoDuplo
+    padrao := "FUNDO DUPLO"
+
+else if topoDuplo
+    padrao := "TOPO DUPLO"
+
+else if bullishEngulfing
+    padrao := "ENGOLFO DE ALTA"
+
+else if bearishEngulfing
+    padrao := "ENGOLFO DE BAIXA"
+
+else if martelo
+    padrao := "MARTELO"
+
+else if estrelaCadente
+    padrao := "ESTRELA CADENTE"
+
+else if microRompimentoAlta
+    padrao := "MICRO ROMPIMENTO ALTA"
+
+else if microRompimentoBaixa
+    padrao := "MICRO ROMPIMENTO BAIXA"
+
+else if rompimentoAlta
+    padrao := "ROMPIMENTO ALTA"
+
+else if rompimentoBaixa
+    padrao := "ROMPIMENTO BAIXA"
+
+else if compressao
+    padrao := "COMPRESSAO"
+
+else if expansao
+    padrao := "EXPANSAO"
+
+else if canalAlta
+    padrao := "CANAL DE ALTA"
+
+else if canalBaixa
+    padrao := "CANAL DE BAIXA"
+
+else if reacaoSuporte
+    padrao := "REACAO NO SUPORTE"
+
+else if reacaoResistencia
+    padrao := "REACAO NA RESISTENCIA"
+
+
+// =====================================================
+// MOTIVO PRINCIPAL
+// =====================================================
+
+string motivo = "SEM VANTAGEM CLARA"
+
+if previsaoProxima == 1
+
+    if fundoDuplo or fundoDuploAntecipado
+        motivo := "FUNDO DUPLO FAVORECE ALTA"
+
+    else if bullishEngulfing
+        motivo := "ENGOLFO FAVORECE ALTA"
+
+    else if rompimentoAlta
+        motivo := "ROMPIMENTO FAVORECE ALTA"
+
+    else if microRompimentoAlta
+        motivo := "MICRO PRESSAO DE ALTA"
+
+    else if reacaoSuporte
+        motivo := "REJEICAO DO SUPORTE"
+
+    else if velaForcaAlta
+        motivo := "CANDLE FORTE DE ALTA"
+
+    else if microAlta
+        motivo := "MICRO ESTRUTURA DE ALTA"
+
+    else
+        motivo := "PRESSAO COMPRADORA DOMINANTE"
+
+if previsaoProxima == -1
+
+    if topoDuplo or topoDuploAntecipado
+        motivo := "TOPO DUPLO FAVORECE BAIXA"
+
+    else if bearishEngulfing
+        motivo := "ENGOLFO FAVORECE BAIXA"
+
+    else if rompimentoBaixa
+        motivo := "ROMPIMENTO FAVORECE BAIXA"
+
+    else if microRompimentoBaixa
+        motivo := "MICRO PRESSAO DE BAIXA"
+
+    else if reacaoResistencia
+        motivo := "REJEICAO DA RESISTENCIA"
+
+    else if velaForcaBaixa
+        motivo := "CANDLE FORTE DE BAIXA"
+
+    else if microBaixa
+        motivo := "MICRO ESTRUTURA DE BAIXA"
+
+    else
+        motivo := "PRESSAO VENDEDORA DOMINANTE"
+
+
+// =====================================================
+// ESTABILIDADE EM PALAVRAS
+// =====================================================
+
+string textoEstabilidade = "INSTAVEL"
+
+if estabilidade >= 4
+    textoEstabilidade := "FORTE"
+
+else if estabilidade >= 2
+    textoEstabilidade := "MEDIA"
+
+else if estabilidade == 1
+    textoEstabilidade := "INICIAL"
+
+
+// =====================================================
+// MUDANCA DA PREVISAO
+// =====================================================
+
+bool novaPrevisao =
+     previsaoProxima != previsaoProxima[1]
+
+
+// =====================================================
+// CORES DO RESULTADO
+// =====================================================
+
+color corPrevisao = color.gray
+
+if previsaoProxima == 1
+    corPrevisao := color.lime
+
+if previsaoProxima == -1
+    corPrevisao := color.red
+
+
+// =====================================================
+// PAINEL
+// =====================================================
+
+var table painel = table.new(
+     position.middle_left,
+     2,
+     10,
+     border_width=1)
+
+
+if mostrarPainel and barstate.islast
+
+    table.cell(
+         painel,
+         0,
+         0,
+         "PROXIMA VELA",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         0,
+         textoPrevisao,
+         bgcolor=corPrevisao,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         1,
+         "DIRECAO",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         1,
+         textoPrevisao,
+         bgcolor=corPrevisao,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         2,
+         "PADRAO",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         2,
+         padrao,
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         3,
+         "MOTIVO",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         3,
+         motivo,
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         4,
+         "PRESSAO",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         4,
+         textoPressao,
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         5,
+         "ESTABILIDADE",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         5,
+         textoEstabilidade,
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         6,
+         "RSI",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         1,
+         6,
+         rsi >= 50 ? "ALTA" : "BAIXA",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         7,
+         "MICRO",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    string textoMicro = "NEUTRA"
+
+    if microAlta
+        textoMicro := "ALTA"
+
+    if microBaixa
+        textoMicro := "BAIXA"
+
+    table.cell(
+         painel,
+         1,
+         7,
+         textoMicro,
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         8,
+         "ESTRUTURA",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    string textoEstrutura = "NEUTRA"
+
+    if estruturaAlta
+        textoEstrutura := "ALTA"
+
+    if estruturaBaixa
+        textoEstrutura := "BAIXA"
+
+    table.cell(
+         painel,
+         1,
+         8,
+         textoEstrutura,
+         bgcolor=color.black,
+         text_color=color.white)
+
+    table.cell(
+         painel,
+         0,
+         9,
+         "ESTADO",
+         bgcolor=color.black,
+         text_color=color.white)
+
+    string textoEstado = "AGUARDANDO"
+
+    if previsaoProxima == 1
+        textoEstado := "PREVISAO DE ALTA"
+
+    if previsaoProxima == -1
+        textoEstado := "PREVISAO DE BAIXA"
+
+    table.cell(
+         painel,
+         1,
+         9,
+         textoEstado,
+         bgcolor=corPrevisao,
+         text_color=color.white)
+
+
+// =====================================================
+// SINAL NO GRAFICO
+// =====================================================
+// O texto aparece no candle ATUAL e significa:
+// "este candle esta prevendo a proxima vela".
+
+if mostrarSinalGrafico and novaPrevisao and previsaoProxima != 0
+
+    string textoGrafico = ""
+
+    if previsaoProxima == 1
+        textoGrafico := "PROXIMA\nALTA"
+
+    if previsaoProxima == -1
+        textoGrafico := "PROXIMA\nBAIXA"
+
+    label.new(
+         bar_index,
+         previsaoProxima == 1 ? low : high,
+         textoGrafico,
+         style=previsaoProxima == 1 ?
+              label.style_label_up :
+              label.style_label_down,
+         textcolor=color.white,
+         color=corPrevisao,
+         size=size.small)
+
+
+// =====================================================
+// EMAs OPCIONAIS
+// =====================================================
+
+plot(
+     mostrarEMAs ? ema5 : na,
+     "EMA 5",
+     color=color.gray)
+
+plot(
+     mostrarEMAs ? ema13 : na,
+     "EMA 13",
+     color=color.orange)
+
+plot(
+     mostrarEMAs ? ema21 : na,
+     "EMA 21",
+     color=color.blue)
+
+
+// =====================================================
+// ALERTAS
+// =====================================================
+
+alertcondition(
+     previsaoProxima == 1,
+     "PROXIMA VELA ALTA",
+     "Previsao da proxima vela: ALTA")
+
+alertcondition(
+     previsaoProxima == -1,
+     "PROXIMA VELA BAIXA",
+     "Previsao da proxima vela: BAIXA")
+
+
+// =====================================================
+// ALERTA DINAMICO
+// =====================================================
+
+if barstate.isrealtime and novaPrevisao
+
+    if previsaoProxima == 1
+        alert(
+             "PROXIMA VELA: ALTA",
+             alert.freq_once_per_bar)
+
+    if previsaoProxima == -1
+        alert(
+             "PROXIMA VELA: BAIXA",
+             alert.freq_once_per_bar)
+
