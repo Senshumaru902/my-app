@@ -1,0 +1,360 @@
+
+------------------------------------------------------------
+-- TESTE AUTOMACAO QCS V3.2 NOTEBOOK
+-- MOTOR PREDITIVO ANTECIPADO + LINHA DE FORCA
+-- IQ OPTION / QUADCODE SCRIPT
+-- NAO ENVIA ORDENS
+--
+-- VISUAL:
+-- VERDE  = DIRECAO DE ALTA
+-- VERMELHO = DIRECAO DE BAIXA
+-- LARANJA = MERCADO LATERAL
+-- CINZA = REFERENCIA DE TENDENCIA
+-- TRIANGULO VERDE = CALL
+-- TRIANGULO VERMELHO = PUT
+------------------------------------------------------------
+
+instrument {
+    name = "TESTE AUTOMACAO QCS V3.2 NOTEBOOK",
+    short_name = "QCS NOTEBOOK",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACOES
+------------------------------------------------------------
+
+periodo = input(5, "Periodo da linha rapida", input.integer, 1, 50)
+minScore = input(55, "Score minimo para sinal", input.integer, 1, 100)
+minAntecipacao = input(45, "Antecipacao minima", input.integer, 1, 100)
+
+------------------------------------------------------------
+-- CORES
+------------------------------------------------------------
+
+COR_COMPRA = "#00C853"
+COR_VENDA = "#FF1744"
+COR_LATERAL = "#FFB74D"
+COR_TENDENCIA = "#B0BEC5"
+
+------------------------------------------------------------
+-- DADOS DO MERCADO
+------------------------------------------------------------
+
+c = close
+o = open
+h = high
+l = low
+v = volume
+
+------------------------------------------------------------
+-- MEDIAS E INDICADORES
+------------------------------------------------------------
+
+ema5 = ema(c, 5)
+ema13 = ema(c, 13)
+ema21 = ema(c, 21)
+
+rsi7 = rsi(c, 7)
+atr7 = sma(tr, 7)
+
+volumeMedio = sma(v, 20)
+
+------------------------------------------------------------
+-- ESTRUTURA DO CANDLE
+------------------------------------------------------------
+
+amplitude = h - l
+corpo = abs(c - o)
+
+forcaCandle = iff(
+    amplitude > 0,
+    (corpo / amplitude) * 100,
+    0
+)
+
+candleAlta = c > o
+candleBaixa = c < o
+
+pavioSuperior = h - max(o, c)
+pavioInferior = min(o, c) - l
+
+rejeicaoCompra = amplitude > 0 and
+    pavioInferior > corpo * 0.8 and c > l + amplitude * 0.5
+
+rejeicaoVenda = amplitude > 0 and
+    pavioSuperior > corpo * 0.8 and c < l + amplitude * 0.5
+
+------------------------------------------------------------
+-- TENDENCIA PRINCIPAL
+------------------------------------------------------------
+
+tendenciaAlta = ema5 > ema13 and ema13 > ema21
+tendenciaBaixa = ema5 < ema13 and ema13 < ema21
+
+microAlta = ema5 > ema5[1] and c > ema5
+microBaixa = ema5 < ema5[1] and c < ema5
+
+cruzamentoAlta = ema5 > ema13 and ema5[1] <= ema13[1]
+cruzamentoBaixa = ema5 < ema13 and ema5[1] >= ema13[1]
+
+------------------------------------------------------------
+-- MOMENTUM E ACELERACAO
+------------------------------------------------------------
+
+momentumAlta = c > c[1]
+momentumBaixa = c < c[1]
+
+aceleracaoPreco = c - c[1]
+aceleracaoAnterior = c[1] - c[2]
+
+aceleracaoAlta = aceleracaoPreco > aceleracaoAnterior
+aceleracaoBaixa = aceleracaoPreco < aceleracaoAnterior
+
+rsiAlta = rsi7 > 50
+rsiBaixa = rsi7 < 50
+
+rsiAcelerandoAlta = rsi7 > rsi7[1]
+rsiAcelerandoBaixa = rsi7 < rsi7[1]
+
+------------------------------------------------------------
+-- VOLUME
+------------------------------------------------------------
+
+volumeForte = volumeMedio > 0 and v > volumeMedio
+volumeFraco = volumeMedio > 0 and v < volumeMedio
+
+------------------------------------------------------------
+-- ROMPIMENTO E PROXIMIDADE
+------------------------------------------------------------
+
+topoAnterior = highest(h, 10)[1]
+fundoAnterior = lowest(l, 10)[1]
+
+rompimentoAlta = c > topoAnterior
+rompimentoBaixa = c < fundoAnterior
+
+pertoTopo = atr7 > 0 and
+    topoAnterior > c and
+    (topoAnterior - c) <= atr7 * 0.30
+
+pertoFundo = atr7 > 0 and
+    c > fundoAnterior and
+    (c - fundoAnterior) <= atr7 * 0.30
+
+------------------------------------------------------------
+-- PRESSAO DIRECIONAL
+------------------------------------------------------------
+
+pressaoCompra = 0
+pressaoCompra = pressaoCompra + iff(tendenciaAlta, 20, 0)
+pressaoCompra = pressaoCompra + iff(microAlta, 15, 0)
+pressaoCompra = pressaoCompra + iff(momentumAlta, 10, 0)
+pressaoCompra = pressaoCompra + iff(aceleracaoAlta, 10, 0)
+pressaoCompra = pressaoCompra + iff(rsiAlta, 10, 0)
+pressaoCompra = pressaoCompra + iff(rsiAcelerandoAlta, 10, 0)
+pressaoCompra = pressaoCompra + iff(candleAlta, 5, 0)
+pressaoCompra = pressaoCompra + iff(forcaCandle >= 60, 5, 0)
+pressaoCompra = pressaoCompra + iff(volumeForte, 5, 0)
+pressaoCompra = pressaoCompra + iff(rejeicaoCompra, 10, 0)
+
+pressaoVenda = 0
+pressaoVenda = pressaoVenda + iff(tendenciaBaixa, 20, 0)
+pressaoVenda = pressaoVenda + iff(microBaixa, 15, 0)
+pressaoVenda = pressaoVenda + iff(momentumBaixa, 10, 0)
+pressaoVenda = pressaoVenda + iff(aceleracaoBaixa, 10, 0)
+pressaoVenda = pressaoVenda + iff(rsiBaixa, 10, 0)
+pressaoVenda = pressaoVenda + iff(rsiAcelerandoBaixa, 10, 0)
+pressaoVenda = pressaoVenda + iff(candleBaixa, 5, 0)
+pressaoVenda = pressaoVenda + iff(forcaCandle >= 60, 5, 0)
+pressaoVenda = pressaoVenda + iff(volumeForte, 5, 0)
+pressaoVenda = pressaoVenda + iff(rejeicaoVenda, 10, 0)
+
+------------------------------------------------------------
+-- SCORE DE ROMPIMENTO
+------------------------------------------------------------
+
+scoreRompimentoCompra = iff(rompimentoAlta, 15, 0) +
+    iff(pertoTopo, 5, 0) +
+    iff(cruzamentoAlta, 10, 0)
+
+scoreRompimentoVenda = iff(rompimentoBaixa, 15, 0) +
+    iff(pertoFundo, 5, 0) +
+    iff(cruzamentoBaixa, 10, 0)
+
+------------------------------------------------------------
+-- ANTECIPACAO
+------------------------------------------------------------
+
+anteCall = 0
+anteCall = anteCall + iff(microAlta, 20, 0)
+anteCall = anteCall + iff(aceleracaoAlta, 15, 0)
+anteCall = anteCall + iff(rsiAcelerandoAlta, 15, 0)
+anteCall = anteCall + iff(pertoTopo, 15, 0)
+anteCall = anteCall + iff(rejeicaoCompra, 15, 0)
+anteCall = anteCall + iff(volumeForte, 10, 0)
+anteCall = anteCall + iff(ema5 > ema5[1], 10, 0)
+
+antePut = 0
+antePut = antePut + iff(microBaixa, 20, 0)
+antePut = antePut + iff(aceleracaoBaixa, 15, 0)
+antePut = antePut + iff(rsiAcelerandoBaixa, 15, 0)
+antePut = antePut + iff(pertoFundo, 15, 0)
+antePut = antePut + iff(rejeicaoVenda, 15, 0)
+antePut = antePut + iff(volumeForte, 10, 0)
+antePut = antePut + iff(ema5 < ema5[1], 10, 0)
+
+------------------------------------------------------------
+-- SCORE FINAL
+------------------------------------------------------------
+
+scoreCallBruto = pressaoCompra + scoreRompimentoCompra
+scorePutBruto = pressaoVenda + scoreRompimentoVenda
+
+scoreCall = min(100, scoreCallBruto)
+scorePut = min(100, scorePutBruto)
+
+forcaCompraPct = min(100, max(0, scoreCall))
+forcaVendaPct = min(100, max(0, scorePut))
+
+------------------------------------------------------------
+-- DETECCAO DE LATERALIZACAO
+------------------------------------------------------------
+
+distanciaMedias = abs(ema5 - ema13)
+
+lateral = atr7 > 0 and
+    distanciaMedias < atr7 * 0.08 and
+    abs(rsi7 - 50) < 5
+
+------------------------------------------------------------
+-- SINAIS PREDITIVOS
+------------------------------------------------------------
+
+previsaoCall = not lateral and
+    scoreCall >= minScore and
+    anteCall >= minAntecipacao and
+    forcaCompraPct > forcaVendaPct
+
+previsaoPut = not lateral and
+    scorePut >= minScore and
+    antePut >= minAntecipacao and
+    forcaVendaPct > forcaCompraPct
+
+------------------------------------------------------------
+-- CONFIRMACAO FINAL
+------------------------------------------------------------
+
+CALL_FINAL = previsaoCall and
+    (tendenciaAlta or microAlta or cruzamentoAlta)
+
+PUT_FINAL = previsaoPut and
+    (tendenciaBaixa or microBaixa or cruzamentoBaixa)
+
+------------------------------------------------------------
+-- LINHA RAPIDA COLORIDA
+------------------------------------------------------------
+
+linhaCompra = iff(
+    not lateral and ema5 >= ema5[1],
+    ema5,
+    nil
+)
+
+linhaVenda = iff(
+    not lateral and ema5 < ema5[1],
+    ema5,
+    nil
+)
+
+linhaLateral = iff(
+    lateral,
+    ema5,
+    nil
+)
+
+------------------------------------------------------------
+-- VISUAL LIMPO PARA NOTEBOOK / PC
+------------------------------------------------------------
+
+-- Linha verde: direcao de alta
+plot(
+    linhaCompra,
+    "DIRECAO DE ALTA",
+    COR_COMPRA,
+    3
+)
+
+-- Linha vermelha: direcao de baixa
+plot(
+    linhaVenda,
+    "DIRECAO DE BAIXA",
+    COR_VENDA,
+    3
+)
+
+-- Linha laranja: mercado lateralizado
+plot(
+    linhaLateral,
+    "MERCADO LATERALIZADO",
+    COR_LATERAL,
+    3
+)
+
+-- Linha cinza fina: referencia de tendencia
+plot(
+    ema21,
+    "REFERENCIA DE TENDENCIA",
+    COR_TENDENCIA,
+    1
+)
+
+------------------------------------------------------------
+-- TRIANGULOS DE ENTRADA
+------------------------------------------------------------
+
+plot_shape(
+    CALL_FINAL,
+    "CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    COR_COMPRA,
+    shape_location.belowbar,
+    0,
+    "CALL",
+    COR_COMPRA
+)
+
+plot_shape(
+    PUT_FINAL,
+    "PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    COR_VENDA,
+    shape_location.abovebar,
+    0,
+    "PUT",
+    COR_VENDA
+)
+
+------------------------------------------------------------
+-- MARCADOR DE LATERALIZACAO
+------------------------------------------------------------
+
+plot_shape(
+    lateral,
+    "LATERALIZACAO",
+    shape_style.circle,
+    shape_size.small,
+    COR_LATERAL,
+    shape_location.abovebar,
+    0,
+    "LATERAL",
+    COR_LATERAL
+)
+
+------------------------------------------------------------
+-- FIM
+-- INDICADOR VISUAL
+-- NAO ENVIA ORDENS
+------------------------------------------------------------
