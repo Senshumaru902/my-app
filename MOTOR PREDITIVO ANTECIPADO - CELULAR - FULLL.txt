@@ -1,0 +1,190 @@
+
+------------------------------------------------------------
+-- AUTO QCS MOBILE V3.7 - VISIBLE FIX
+-- IQ OPTION / QUADCODE SCRIPT
+-- INDICADOR VISUAL - NAO ENVIA ORDENS
+--
+-- VERDE  = DIRECAO DE COMPRA
+-- VERMELHO = DIRECAO DE VENDA
+-- AMBAR = LATERALIZACAO
+------------------------------------------------------------
+
+instrument {
+    name = "AUTO QCS MOBILE V3.7 - VISIBLE FIX",
+    short_name = "AUTO QCS V3.7",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACOES
+------------------------------------------------------------
+
+periodoRapido = input(5, "EMA Rapida", input.integer, 1, 100)
+periodoLento = input(13, "EMA Lenta", input.integer, 2, 200)
+periodoTendencia = input(21, "EMA Tendencia", input.integer, 2, 300)
+periodoRSI = input(7, "Periodo RSI", input.integer, 2, 50)
+periodoATR = input(7, "Periodo ATR", input.integer, 2, 50)
+periodoEstrutura = input(10, "Estrutura", input.integer, 2, 100)
+
+------------------------------------------------------------
+-- CORES
+------------------------------------------------------------
+
+COR_COMPRA = "#00C853"
+COR_VENDA = "#FF1744"
+COR_LATERAL = "#D6AD60"
+COR_NEUTRA = "#B0BEC5"
+
+------------------------------------------------------------
+-- CALCULOS
+------------------------------------------------------------
+
+emaRapida = ema(close, periodoRapido)
+emaLenta = ema(close, periodoLento)
+emaTendencia = ema(close, periodoTendencia)
+
+valorRSI = rsi(close, periodoRSI)
+valorATR = sma(tr, periodoATR)
+
+------------------------------------------------------------
+-- DIRECAO DO MERCADO
+------------------------------------------------------------
+
+direcaoCompra =
+    emaRapida > emaLenta and
+    close > emaRapida
+
+direcaoVenda =
+    emaRapida < emaLenta and
+    close < emaRapida
+
+------------------------------------------------------------
+-- LATERALIZACAO
+------------------------------------------------------------
+
+lateral = false
+
+if valorATR > 0 then
+    lateral =
+        abs(emaRapida - emaLenta) < valorATR * 0.08 and
+        abs(valorRSI - 50) < 5
+end
+
+------------------------------------------------------------
+-- COR DINAMICA
+------------------------------------------------------------
+
+corLinha = COR_NEUTRA
+
+if direcaoCompra then
+    corLinha = COR_COMPRA
+end
+
+if direcaoVenda then
+    corLinha = COR_VENDA
+end
+
+if lateral then
+    corLinha = COR_LATERAL
+end
+
+------------------------------------------------------------
+-- LINHAS SEMPRE VISIVEIS
+------------------------------------------------------------
+
+plot(
+    emaRapida,
+    "LINHA DIRECIONAL",
+    corLinha,
+    3
+)
+
+plot(
+    emaTendencia,
+    "REFERENCIA DE TENDENCIA",
+    COR_NEUTRA,
+    1
+)
+
+------------------------------------------------------------
+-- ROMPIMENTOS
+------------------------------------------------------------
+
+topoAnterior = highest(high, periodoEstrutura)[1]
+fundoAnterior = lowest(low, periodoEstrutura)[1]
+
+rompeuAlta =
+    close > topoAnterior and
+    close > open
+
+rompeuBaixa =
+    close < fundoAnterior and
+    close < open
+
+------------------------------------------------------------
+-- SINAIS CALL E PUT
+------------------------------------------------------------
+
+CALL_FINAL =
+    not lateral and
+    direcaoCompra and
+    valorRSI > 50 and
+    (rompeuAlta or close > high[1])
+
+PUT_FINAL =
+    not lateral and
+    direcaoVenda and
+    valorRSI < 50 and
+    (rompeuBaixa or close < low[1])
+
+------------------------------------------------------------
+-- MARCACAO CALL
+------------------------------------------------------------
+
+plot_shape(
+    CALL_FINAL,
+    "CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    COR_COMPRA,
+    shape_location.belowbar,
+    0,
+    "CALL",
+    COR_COMPRA
+)
+
+------------------------------------------------------------
+-- MARCACAO PUT
+------------------------------------------------------------
+
+plot_shape(
+    PUT_FINAL,
+    "PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    COR_VENDA,
+    shape_location.abovebar,
+    0,
+    "PUT",
+    COR_VENDA
+)
+
+------------------------------------------------------------
+-- MARCACAO LATERAL
+------------------------------------------------------------
+
+plot_shape(
+    lateral,
+    "LATERALIZACAO",
+    shape_style.circle,
+    shape_size.small,
+    COR_LATERAL,
+    shape_location.abovebar,
+    0,
+    "LATERAL",
+    COR_LATERAL
+)
+
+------------------------------------------------------------
+-- FIM DO INDICADOR
+------------------------------------------------------------

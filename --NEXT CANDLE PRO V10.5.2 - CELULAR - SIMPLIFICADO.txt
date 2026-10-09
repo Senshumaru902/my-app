@@ -1,0 +1,280 @@
+
+------------------------------------------------------------
+-- NEXT CANDLE PRO V10.5.3 MOBILE
+-- MICRO + CRUZAMENTO + ROMPIMENTO
+-- OTIMIZADO PARA LEITURA NO CELULAR
+--
+-- NAO ENVIA ORDENS
+--
+-- CRUZOU ↑ = EMA MICRO CRUZOU PARA CIMA
+-- CRUZOU ↓ = EMA MICRO CRUZOU PARA BAIXO
+-- MICRO = ROMPIMENTO NORMAL
+-- FORTE = ROMPIMENTO FORTE
+------------------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE PRO V10.5.3 MOBILE",
+    short_name = "NCP MOBILE",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACOES
+------------------------------------------------------------
+
+ema1_len = input(
+    5,
+    "EMA Micro",
+    input.integer,
+    2,
+    20
+)
+
+ema2_len = input(
+    13,
+    "EMA Tendencia",
+    input.integer,
+    3,
+    40
+)
+
+micro_len = input(
+    5,
+    "Periodo Micro",
+    input.integer,
+    3,
+    12
+)
+
+------------------------------------------------------------
+-- BASE DO CANDLE
+------------------------------------------------------------
+
+body = abs(close - open)
+
+rng = max(
+    high - low,
+    0.00000001
+)
+
+upper = high - max(open, close)
+lower = min(open, close) - low
+
+br = body / rng
+cp = (close - low) / rng
+
+------------------------------------------------------------
+-- EMA MICRO E EMA DE TENDENCIA
+------------------------------------------------------------
+
+ef = ema(close, ema1_len)
+es = ema(close, ema2_len)
+
+trend_up = ef > es
+trend_dn = ef < es
+
+------------------------------------------------------------
+-- MICRO TENDENCIA
+------------------------------------------------------------
+
+mf = ema(close, 3)
+mb = ema(close, 8)
+
+micro_up =
+    mf > mb and
+    mf >= mf[1]
+
+micro_dn =
+    mf < mb and
+    mf <= mf[1]
+
+------------------------------------------------------------
+-- MICRO ACELERACAO
+------------------------------------------------------------
+
+macc_up =
+    mf > mf[1] and
+    mf[1] >= mf[2]
+
+macc_dn =
+    mf < mf[1] and
+    mf[1] <= mf[2]
+
+------------------------------------------------------------
+-- CRUZAMENTO DAS EMAS
+------------------------------------------------------------
+
+cross_up =
+    ef > es and
+    ef[1] <= es[1]
+
+cross_dn =
+    ef < es and
+    ef[1] >= es[1]
+
+------------------------------------------------------------
+-- MICRO RESISTENCIA E SUPORTE
+------------------------------------------------------------
+
+mres = highest(high[1], micro_len)
+msup = lowest(low[1], micro_len)
+
+------------------------------------------------------------
+-- MICRO ROMPIMENTO
+------------------------------------------------------------
+
+micro_break_up =
+    close > mres and
+    close >= open and
+    br >= 0.25
+
+micro_break_dn =
+    close < msup and
+    close <= open and
+    br >= 0.25
+
+------------------------------------------------------------
+-- MICRO ROMPIMENTO FORTE
+------------------------------------------------------------
+
+micro_strong_up =
+    micro_break_up and
+    br >= 0.45
+
+micro_strong_dn =
+    micro_break_dn and
+    br >= 0.45
+
+------------------------------------------------------------
+-- PRIORIDADE VISUAL
+-- EVITA MOSTRAR MICRO NORMAL QUANDO
+-- O ROMPIMENTO FORTE JA ESTA PRESENTE
+------------------------------------------------------------
+
+micro_signal_up =
+    micro_break_up and
+    not micro_strong_up
+
+micro_signal_dn =
+    micro_break_dn and
+    not micro_strong_dn
+
+------------------------------------------------------------
+-- LINHAS DAS EMAS
+------------------------------------------------------------
+
+plot(
+    ef,
+    "EMA MICRO",
+    "white",
+    2
+)
+
+plot(
+    es,
+    "EMA TENDENCIA",
+    "gray",
+    1
+)
+
+------------------------------------------------------------
+-- CRUZAMENTO DE ALTA
+------------------------------------------------------------
+
+plot_shape(
+    cross_up,
+    "CRUZAMENTO ALTA",
+    shape_style.labelup,
+    shape_size.normal,
+    "green",
+    shape_location.belowbar,
+    0,
+    "↑ CRUZOU",
+    "white"
+)
+
+------------------------------------------------------------
+-- CRUZAMENTO DE BAIXA
+------------------------------------------------------------
+
+plot_shape(
+    cross_dn,
+    "CRUZAMENTO BAIXA",
+    shape_style.labeldown,
+    shape_size.normal,
+    "red",
+    shape_location.abovebar,
+    0,
+    "↓ CRUZOU",
+    "white"
+)
+
+------------------------------------------------------------
+-- ROMPIMENTO NORMAL PARA CIMA
+------------------------------------------------------------
+
+plot_shape(
+    micro_signal_up,
+    "MICRO ALTA",
+    shape_style.triangleup,
+    shape_size.small,
+    "cyan",
+    shape_location.belowbar,
+    0,
+    "MICRO",
+    "white"
+)
+
+------------------------------------------------------------
+-- ROMPIMENTO NORMAL PARA BAIXO
+------------------------------------------------------------
+
+plot_shape(
+    micro_signal_dn,
+    "MICRO BAIXA",
+    shape_style.triangledown,
+    shape_size.small,
+    "magenta",
+    shape_location.abovebar,
+    0,
+    "MICRO",
+    "white"
+)
+
+------------------------------------------------------------
+-- ROMPIMENTO FORTE PARA CIMA
+------------------------------------------------------------
+
+plot_shape(
+    micro_strong_up,
+    "MICRO FORTE ALTA",
+    shape_style.triangleup,
+    shape_size.large,
+    "green",
+    shape_location.belowbar,
+    0,
+    "FORTE",
+    "white"
+)
+
+------------------------------------------------------------
+-- ROMPIMENTO FORTE PARA BAIXO
+------------------------------------------------------------
+
+plot_shape(
+    micro_strong_dn,
+    "MICRO FORTE BAIXA",
+    shape_style.triangledown,
+    shape_size.large,
+    "red",
+    shape_location.abovebar,
+    0,
+    "FORTE",
+    "white"
+)
+
+------------------------------------------------------------
+-- FIM
+-- INDICADOR VISUAL
+-- SEM ENVIO DE ORDENS
+------------------------------------------------------------
