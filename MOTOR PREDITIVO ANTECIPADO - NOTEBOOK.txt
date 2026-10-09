@@ -1,0 +1,683 @@
+
+------------------------------------------------------------
+-- TESTE AUTOMACAO QCS V3.1
+-- MOTOR PREDITIVO ANTECIPADO + LINHA DE FORCA
+-- IQ OPTION / QUADCODE SCRIPT
+-- NAO ENVIA ORDENS
+--
+-- AZUL VIOLETA = PROJECAO DE ALTA / COMPRA
+-- ROXO VIOLETA = PROJECAO DE BAIXA / VENDA
+-- LARANJA = MERCADO LATERAL
+--
+-- MOTOR PREDITIVO:
+-- INCLINACAO DAS EMAS
+-- ACELERACAO DO PRECO
+-- VARIACAO DO RSI
+-- PRESSAO DOS CANDLES
+-- PROXIMIDADE DO ROMPIMENTO
+-- MOMENTUM + VOLATILIDADE ATR
+--
+-- CALL / PUT MANTIDOS SEPARADAMENTE
+------------------------------------------------------------
+
+instrument {
+    name = "TESTE AUTOMACAO QCS V3.1",
+    short_name = "AUTO QCS V3.1",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACAO
+------------------------------------------------------------
+
+periodo = input(
+    5,
+    "Periodo de rompimento",
+    input.integer,
+    2,
+    20
+)
+
+minScore = input(
+    5,
+    "Score minimo CALL/PUT",
+    input.integer,
+    2,
+    8
+)
+
+minAntecipacao = input(
+    3,
+    "Score minimo antecipacao",
+    input.integer,
+    2,
+    7
+)
+
+------------------------------------------------------------
+-- DADOS
+------------------------------------------------------------
+
+c = close
+o = open
+h = high
+l = low
+v = volume
+
+------------------------------------------------------------
+-- INDICADORES
+------------------------------------------------------------
+
+ema5 = ema(c, 5)
+ema13 = ema(c, 13)
+ema21 = ema(c, 21)
+
+rsi7 = rsi(c, 7)
+
+tr7 = tr
+atr7 = sma(tr7, 7)
+
+volMedia = sma(v, 20)
+
+------------------------------------------------------------
+-- ESTRUTURA DO CANDLE
+------------------------------------------------------------
+
+range = h - l
+corpo = abs(c - o)
+
+corpoPct =
+    iff(
+        range > 0,
+        corpo / range,
+        0
+    )
+
+fechAlta =
+    iff(
+        range > 0,
+        (c - l) / range,
+        0
+    )
+
+fechBaixa =
+    iff(
+        range > 0,
+        (h - c) / range,
+        0
+    )
+
+pavioSup = h - max(c, o)
+pavioInf = min(c, o) - l
+
+------------------------------------------------------------
+-- TENDENCIA PRINCIPAL
+------------------------------------------------------------
+
+tendAlta =
+    c > ema5 and
+    ema5 > ema13 and
+    ema13 > ema21
+
+tendBaixa =
+    c < ema5 and
+    ema5 < ema13 and
+    ema13 < ema21
+
+------------------------------------------------------------
+-- MICRO TENDENCIA
+------------------------------------------------------------
+
+microAlta =
+    c > c[1] and
+    c[1] > c[2] and
+    ema5 > ema5[1]
+
+microBaixa =
+    c < c[1] and
+    c[1] < c[2] and
+    ema5 < ema5[1]
+
+------------------------------------------------------------
+-- MOMENTUM
+------------------------------------------------------------
+
+momAlta = rsi7 > 52
+momBaixa = rsi7 < 48
+
+rsiSubindo = rsi7 > rsi7[1]
+rsiCaindo = rsi7 < rsi7[1]
+
+rsiAcelerandoAlta =
+    rsiSubindo and
+    rsi7[1] > rsi7[2]
+
+rsiAcelerandoBaixa =
+    rsiCaindo and
+    rsi7[1] < rsi7[2]
+
+------------------------------------------------------------
+-- ACELERACAO DO PRECO
+------------------------------------------------------------
+
+variacaoAtual = c - c[1]
+variacaoAnterior = c[1] - c[2]
+
+aceleracaoAlta =
+    variacaoAtual > 0 and
+    variacaoAtual > variacaoAnterior
+
+aceleracaoBaixa =
+    variacaoAtual < 0 and
+    variacaoAtual < variacaoAnterior
+
+------------------------------------------------------------
+-- FORCA DA VELA
+------------------------------------------------------------
+
+velaForte =
+    range > atr7 * 0.50 and
+    corpoPct >= 0.50
+
+velaForteAlta =
+    velaForte and
+    c > o and
+    fechAlta >= 0.65
+
+velaForteBaixa =
+    velaForte and
+    c < o and
+    fechBaixa >= 0.65
+
+------------------------------------------------------------
+-- VOLUME
+------------------------------------------------------------
+
+volumeForte = v > volMedia
+
+------------------------------------------------------------
+-- ROMPIMENTOS
+------------------------------------------------------------
+
+topoAnterior = highest(h, periodo)[1]
+fundoAnterior = lowest(l, periodo)[1]
+
+rompeAlta = c > topoAnterior
+rompeBaixa = c < fundoAnterior
+
+------------------------------------------------------------
+-- PROXIMIDADE DO ROMPIMENTO
+------------------------------------------------------------
+
+distanciaTopo = topoAnterior - c
+distanciaFundo = c - fundoAnterior
+
+pertoTopo =
+    atr7 > 0 and
+    distanciaTopo >= 0 and
+    distanciaTopo <= atr7 * 0.35
+
+pertoFundo =
+    atr7 > 0 and
+    distanciaFundo >= 0 and
+    distanciaFundo <= atr7 * 0.35
+
+------------------------------------------------------------
+-- REJEICAO
+------------------------------------------------------------
+
+rejeitaBaixa =
+    pavioInf > corpo and
+    c > o
+
+rejeitaAlta =
+    pavioSup > corpo and
+    c < o
+
+------------------------------------------------------------
+-- PRESSAO COMPRADORA E VENDEDORA
+------------------------------------------------------------
+
+pressaoCompra =
+    c > o and
+    fechAlta > 0.60
+
+pressaoVenda =
+    c < o and
+    fechBaixa > 0.60
+
+------------------------------------------------------------
+-- MERCADO LATERAL
+------------------------------------------------------------
+
+distEMA = abs(ema5 - ema13)
+
+lateral =
+    atr7 > 0 and
+    distEMA < atr7 * 0.08 and
+    abs(rsi7 - 50) < 5
+
+------------------------------------------------------------
+-- SCORE CALL ORIGINAL
+------------------------------------------------------------
+
+scoreCall =
+    iff(tendAlta, 1, 0) +
+    iff(microAlta, 1, 0) +
+    iff(momAlta, 1, 0) +
+    iff(velaForteAlta, 1, 0) +
+    iff(volumeForte, 1, 0) +
+    iff(rompeAlta, 2, 0) +
+    iff(pressaoCompra, 1, 0) +
+    iff(rejeitaBaixa, 1, 0)
+
+------------------------------------------------------------
+-- SCORE PUT ORIGINAL
+------------------------------------------------------------
+
+scorePut =
+    iff(tendBaixa, 1, 0) +
+    iff(microBaixa, 1, 0) +
+    iff(momBaixa, 1, 0) +
+    iff(velaForteBaixa, 1, 0) +
+    iff(volumeForte, 1, 0) +
+    iff(rompeBaixa, 2, 0) +
+    iff(pressaoVenda, 1, 0) +
+    iff(rejeitaAlta, 1, 0)
+
+------------------------------------------------------------
+-- MOTOR PREDITIVO ANTECIPADO
+-- NAO EXIGE ROMPIMENTO CONFIRMADO
+------------------------------------------------------------
+
+anteCall =
+    iff(ema5 > ema5[1], 1, 0) +
+    iff(ema13 > ema13[1], 1, 0) +
+    iff(ema21 > ema21[1], 1, 0) +
+    iff(rsiSubindo, 1, 0) +
+    iff(rsiAcelerandoAlta, 1, 0) +
+    iff(aceleracaoAlta, 1, 0) +
+    iff(pressaoCompra, 1, 0) +
+    iff(pertoTopo, 1, 0)
+
+antePut =
+    iff(ema5 < ema5[1], 1, 0) +
+    iff(ema13 < ema13[1], 1, 0) +
+    iff(ema21 < ema21[1], 1, 0) +
+    iff(rsiCaindo, 1, 0) +
+    iff(rsiAcelerandoBaixa, 1, 0) +
+    iff(aceleracaoBaixa, 1, 0) +
+    iff(pressaoVenda, 1, 0) +
+    iff(pertoFundo, 1, 0)
+
+------------------------------------------------------------
+-- FORCA DIRECIONAL
+-- VALORES NORMALIZADOS DE 0 A 100
+------------------------------------------------------------
+
+forcaCompraPct = anteCall * 12.5
+forcaVendaPct = antePut * 12.5
+
+------------------------------------------------------------
+-- ANTECIPACAO DIRECIONAL
+------------------------------------------------------------
+
+antecipacaoCompra =
+    not lateral and
+    anteCall >= minAntecipacao and
+    anteCall > antePut
+
+antecipacaoVenda =
+    not lateral and
+    antePut >= minAntecipacao and
+    antePut > anteCall
+
+------------------------------------------------------------
+-- PREVISAO ORIGINAL
+------------------------------------------------------------
+
+previsaoCall =
+    not lateral and
+    scoreCall >= minScore and
+    scoreCall > scorePut
+
+previsaoPut =
+    not lateral and
+    scorePut >= minScore and
+    scorePut > scoreCall
+
+------------------------------------------------------------
+-- ENTRADAS ORIGINAIS
+------------------------------------------------------------
+
+CALL =
+    previsaoCall and
+    (
+        rompeAlta or
+        velaForteAlta or
+        microAlta
+    )
+
+PUT =
+    previsaoPut and
+    (
+        rompeBaixa or
+        velaForteBaixa or
+        microBaixa
+    )
+
+CALL_FINAL = CALL and not PUT
+PUT_FINAL = PUT and not CALL
+
+------------------------------------------------------------
+-- PREVISAO SEM ENTRADA
+------------------------------------------------------------
+
+PC = previsaoCall and not CALL_FINAL
+PV = previsaoPut and not PUT_FINAL
+
+------------------------------------------------------------
+-- MOTOR DE PROJECAO PREDITIVA
+--
+-- COMBINA:
+-- DIRECAO DO MOMENTUM
+-- ACELERACAO DO PRECO
+-- INCLINACAO DA EMA5
+-- DIFERENCA ENTRE OS SCORES
+-- ATR PARA ESCALA DA PROJECAO
+------------------------------------------------------------
+
+momentumNormalizado =
+    iff(
+        atr7 > 0,
+        (c - c[2]) / (atr7 * 2),
+        0
+    )
+
+inclinacaoNormalizada =
+    iff(
+        atr7 > 0,
+        (ema5 - ema5[2]) / (atr7 * 2),
+        0
+    )
+
+diferencaDirecional =
+    (anteCall - antePut) / 8
+
+impulsoDirecional =
+    momentumNormalizado * 0.40 +
+    inclinacaoNormalizada * 0.30 +
+    diferencaDirecional * 0.30
+
+------------------------------------------------------------
+-- PROJECAO DE COMPRA
+-- NIVEL ESTIMADO A FRENTE DO PRECO ATUAL
+------------------------------------------------------------
+
+distanciaProjCompra =
+    atr7 *
+    (
+        0.15 +
+        forcaCompraPct / 100 * 0.85
+    ) *
+    (
+        0.50 + abs(impulsoDirecional)
+    )
+
+projecaoCompra =
+    c + distanciaProjCompra
+
+------------------------------------------------------------
+-- PROJECAO DE VENDA
+------------------------------------------------------------
+
+distanciaProjVenda =
+    atr7 *
+    (
+        0.15 +
+        forcaVendaPct / 100 * 0.85
+    ) *
+    (
+        0.50 + abs(impulsoDirecional)
+    )
+
+projecaoVenda =
+    c - distanciaProjVenda
+
+------------------------------------------------------------
+-- LINHAS PREDITIVAS
+------------------------------------------------------------
+
+linhaCompra =
+    iff(
+        antecipacaoCompra and
+        impulsoDirecional > 0,
+        projecaoCompra,
+        nil
+    )
+
+linhaVenda =
+    iff(
+        antecipacaoVenda and
+        impulsoDirecional < 0,
+        projecaoVenda,
+        nil
+    )
+
+------------------------------------------------------------
+-- LINHA AZUL VIOLETA
+-- ANTECIPACAO DE COMPRA
+------------------------------------------------------------
+
+plot(
+    linhaCompra,
+    "LINHA FORCA COMPRA",
+    "blueviolet",
+    3
+)
+
+------------------------------------------------------------
+-- LINHA ROXO VIOLETA
+-- ANTECIPACAO DE VENDA
+------------------------------------------------------------
+
+plot(
+    linhaVenda,
+    "LINHA FORCA VENDA",
+    "violet",
+    3
+)
+
+------------------------------------------------------------
+-- PONTOS CALL E PUT
+------------------------------------------------------------
+
+plot(
+    iff(CALL_FINAL, c, nil),
+    "CALL",
+    "blue",
+    4,
+    0,
+    style.points
+)
+
+plot(
+    iff(PUT_FINAL, c, nil),
+    "PUT",
+    "purple",
+    4,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- PREVISOES ORIGINAIS
+------------------------------------------------------------
+
+plot(
+    iff(PC, c, nil),
+    "PREVISAO COMPRA",
+    "orange",
+    2,
+    0,
+    style.points
+)
+
+plot(
+    iff(PV, c, nil),
+    "PREVISAO VENDA",
+    "orange",
+    2,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- MICRO TENDENCIA
+------------------------------------------------------------
+
+plot(
+    iff(microAlta and not lateral, c, nil),
+    "MICRO CALL",
+    "green",
+    2,
+    0,
+    style.points
+)
+
+plot(
+    iff(microBaixa and not lateral, c, nil),
+    "MICRO PUT",
+    "red",
+    2,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- ROMPIMENTOS
+------------------------------------------------------------
+
+plot(
+    iff(rompeAlta, c, nil),
+    "ROMPIMENTO ALTA",
+    "blue",
+    3,
+    0,
+    style.points
+)
+
+plot(
+    iff(rompeBaixa, c, nil),
+    "ROMPIMENTO BAIXA",
+    "purple",
+    3,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- STATUS
+------------------------------------------------------------
+
+estado =
+    iff(
+        CALL_FINAL, 1,
+        iff(
+            PUT_FINAL, -1,
+            iff(
+                antecipacaoCompra, 2,
+                iff(
+                    antecipacaoVenda, -2,
+                    0
+                )
+            )
+        )
+    )
+
+plot(
+    iff(estado == 1, c, nil),
+    "STATUS CALL",
+    "blue",
+    5,
+    0,
+    style.points
+)
+
+plot(
+    iff(estado == -1, c, nil),
+    "STATUS PUT",
+    "purple",
+    5,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- EMAS NORMAIS
+------------------------------------------------------------
+
+plot(
+    iff(not lateral, ema5, nil),
+    "EMA5",
+    "green",
+    1
+)
+
+plot(
+    iff(not lateral, ema13, nil),
+    "EMA13",
+    "red",
+    1
+)
+
+plot(
+    iff(not lateral, ema21, nil),
+    "EMA21",
+    "yellow",
+    1
+)
+
+------------------------------------------------------------
+-- EMAS LARANJAS NA LATERALIZACAO
+------------------------------------------------------------
+
+plot(
+    iff(lateral, ema5, nil),
+    "EMA5 LATERAL",
+    "orange",
+    2
+)
+
+plot(
+    iff(lateral, ema13, nil),
+    "EMA13 LATERAL",
+    "orange",
+    2
+)
+
+plot(
+    iff(lateral, ema21, nil),
+    "EMA21 LATERAL",
+    "orange",
+    2
+)
+
+------------------------------------------------------------
+-- TESTE DE SERIES
+------------------------------------------------------------
+
+testeSerie = conditional(CALL_FINAL)
+
+plot(
+    iff(testeSerie, c, nil),
+    "TESTE SERIES",
+    "yellow",
+    1,
+    0,
+    style.points
+)
+
+------------------------------------------------------------
+-- FIM
+------------------------------------------------------------
