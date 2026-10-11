@@ -1,0 +1,497 @@
+--------------------------------------------------
+-- NEXT CANDLE PRO FUSION V1.0
+-- QCS / LUA - MOBILE
+-- CRUZAMENTO REAL + PADROES DE CANDLE
+-- ANGULO DAS MEDIAS + TENDENCIA + FILTROS
+-- SEM CALL / PUT
+-- SEM ORDENS AUTOMATICAS
+--------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE PRO FUSION V1.0",
+    short_name = "NCP FUSION",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACOES
+--------------------------------------------------
+
+input_group {
+    "Medias",
+    periodo_rapido = input(5, "EMA Rapida", input.integer, 2, 20, 1),
+    periodo_lento = input(13, "EMA Lenta", input.integer, 5, 50, 1),
+    periodo_tendencia = input(21, "EMA Tendencia", input.integer, 10, 100, 1),
+    periodo_macro = input(50, "EMA Macro", input.integer, 20, 200, 1)
+}
+
+input_group {
+    "Filtros",
+    periodo_rsi = input(7, "Periodo RSI", input.integer, 2, 30, 1),
+    periodo_angulo = input(3, "Periodo Angulo", input.integer, 1, 10, 1),
+    limite_angulo = input(0.08, "Limite Angulo", input.double, 0.01, 1.00, 0.01),
+    periodo_sr = input(20, "Suporte/Resistencia", input.integer, 5, 100, 1)
+}
+
+input_group {
+    "Cores",
+    cor_alta = input { default = "#168BFF", type = input.color },
+    cor_baixa = input { default = "#7628B9", type = input.color },
+    cor_lateral = input { default = "#A64B00", type = input.color },
+    cor_rev_alta = input { default = "#00D26A", type = input.color },
+    cor_rev_baixa = input { default = "#FF3030", type = input.color },
+    cor_cruzamento = input { default = "#FFD54F", type = input.color }
+}
+
+--------------------------------------------------
+-- 1. MEDIAS
+--------------------------------------------------
+
+ema5 = ema(close, periodo_rapido)
+ema13 = ema(close, periodo_lento)
+ema21 = ema(close, periodo_tendencia)
+ema50 = ema(close, periodo_macro)
+
+rsi_val = rsi(close, periodo_rsi)
+
+--------------------------------------------------
+-- 2. ATR PARA NORMALIZAR O ANGULO
+--------------------------------------------------
+
+tr0 = high - low
+
+dh = high - close[1]
+dh_abs = abs(dh)
+
+dl = low - close[1]
+dl_abs = abs(dl)
+
+tr_maior = max(dh_abs, dl_abs)
+tr_final = max(tr0, tr_maior)
+
+atr_base = ema(tr_final, 7)
+atr_seguro = max(atr_base, 0.0000001)
+
+angulo5 = (ema5 - ema5[periodo_angulo]) / atr_seguro
+angulo13 = (ema13 - ema13[periodo_angulo]) / atr_seguro
+angulo21 = (ema21 - ema21[periodo_angulo]) / atr_seguro
+
+medias_subindo =
+    angulo5 > limite_angulo and
+    angulo13 > limite_angulo
+
+medias_descendo =
+    angulo5 < -limite_angulo and
+    angulo13 < -limite_angulo
+
+medias_lateralizadas =
+    not medias_subindo and
+    not medias_descendo
+
+tendencia_alta =
+    ema5 > ema13 and
+    ema13 > ema21 and
+    close > ema21 and
+    medias_subindo
+
+tendencia_baixa =
+    ema5 < ema13 and
+    ema13 < ema21 and
+    close < ema21 and
+    medias_descendo
+
+tendencia_macro_alta = ema21 > ema50
+tendencia_macro_baixa = ema21 < ema50
+
+--------------------------------------------------
+-- 3. CRUZAMENTO REAL EMA 5 / EMA 13
+-- SEM CALL / PUT
+--------------------------------------------------
+
+cruzou_cima =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzou_baixo =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+--------------------------------------------------
+-- 4. ESTRUTURA DOS CANDLES
+--------------------------------------------------
+
+amplitude = high - low
+amplitude_segura = max(amplitude, 0.0000001)
+
+corpo = abs(close - open)
+corpo_seguro = max(corpo, 0.0000001)
+
+pavio_superior = high - max(open, close)
+pavio_inferior = min(open, close) - low
+
+posicao_fechamento =
+    (close - low) / amplitude_segura
+
+corpo_pequeno =
+    corpo / amplitude_segura <= 0.30
+
+vela_alta = close > open
+vela_baixa = close < open
+
+--------------------------------------------------
+-- 5. CONTEXTO ANTERIOR
+--------------------------------------------------
+
+contexto_baixa =
+    close[1] < close[2] and
+    close[2] <= close[3]
+
+contexto_alta =
+    close[1] > close[2] and
+    close[2] >= close[3]
+
+contexto_estrela_baixa =
+    close[3] < close[4] and
+    close[4] <= close[5]
+
+contexto_estrela_alta =
+    close[3] > close[4] and
+    close[4] >= close[5]
+
+--------------------------------------------------
+-- 6. REVERSOES DE ALTA
+--------------------------------------------------
+
+martelo =
+    contexto_baixa and
+    amplitude > 0 and
+    pavio_inferior >= corpo_seguro * 2 and
+    pavio_superior <= corpo_seguro and
+    posicao_fechamento >= 0.55
+
+engolfo_alta =
+    vela_alta and
+    close[1] < open[1] and
+    open <= close[1] and
+    close >= open[1] and
+    contexto_baixa
+
+corpo_ant1 = abs(close[1] - open[1])
+amplitude_ant1 = high[1] - low[1]
+meio_ant2 = (open[2] + close[2]) / 2
+
+estrela_manha =
+    contexto_estrela_baixa and
+    close[2] < open[2] and
+    amplitude_ant1 > 0 and
+    corpo_ant1 / max(amplitude_ant1, 0.0000001) <= 0.30 and
+    vela_alta and
+    close >= meio_ant2
+
+--------------------------------------------------
+-- 7. REVERSOES DE BAIXA
+--------------------------------------------------
+
+estrela_cadente =
+    contexto_alta and
+    amplitude > 0 and
+    pavio_superior >= corpo_seguro * 2 and
+    pavio_inferior <= corpo_seguro and
+    posicao_fechamento <= 0.45
+
+engolfo_baixa =
+    vela_baixa and
+    close[1] > open[1] and
+    open >= close[1] and
+    close <= open[1] and
+    contexto_alta
+
+estrela_noite =
+    contexto_estrela_alta and
+    close[2] > open[2] and
+    amplitude_ant1 > 0 and
+    corpo_ant1 / max(amplitude_ant1, 0.0000001) <= 0.30 and
+    vela_baixa and
+    close <= meio_ant2
+
+--------------------------------------------------
+-- 8. OUTROS PADROES
+--------------------------------------------------
+
+pin_alta =
+    amplitude > 0 and
+    pavio_inferior >= corpo_seguro * 2 and
+    posicao_fechamento >= 0.60
+
+pin_baixa =
+    amplitude > 0 and
+    pavio_superior >= corpo_seguro * 2 and
+    posicao_fechamento <= 0.40
+
+doji =
+    amplitude > 0 and
+    corpo / amplitude_segura <= 0.10
+
+--------------------------------------------------
+-- 9. SUPORTE / RESISTENCIA
+-- NIVEIS CALCULADOS COM CANDLES ANTERIORES
+--------------------------------------------------
+
+resistencia = highest(high, periodo_sr)[1]
+suporte = lowest(low, periodo_sr)[1]
+
+rompimento_alta =
+    close > resistencia and
+    close[1] <= resistencia
+
+rompimento_baixa =
+    close < suporte and
+    close[1] >= suporte
+
+falso_rompimento_alta =
+    high > resistencia and
+    close <= resistencia and
+    pavio_superior > corpo_seguro
+
+falso_rompimento_baixa =
+    low < suporte and
+    close >= suporte and
+    pavio_inferior > corpo_seguro
+
+--------------------------------------------------
+-- 10. MOMENTUM E CONFLITO
+--------------------------------------------------
+
+momentum_alta =
+    close > close[1] and
+    rsi_val >= 52
+
+momentum_baixa =
+    close < close[1] and
+    rsi_val <= 48
+
+conflito_alta =
+    tendencia_baixa and momentum_alta
+
+conflito_baixa =
+    tendencia_alta and momentum_baixa
+
+--------------------------------------------------
+-- 11. AGRUPAMENTO DOS PADROES
+--------------------------------------------------
+
+reversao_alta =
+    martelo or
+    engolfo_alta or
+    estrela_manha or
+    pin_alta
+
+reversao_baixa =
+    estrela_cadente or
+    engolfo_baixa or
+    estrela_noite or
+    pin_baixa
+
+--------------------------------------------------
+-- 12. COLORACAO DAS VELAS
+--------------------------------------------------
+
+cor_tendencia =
+    medias_lateralizadas and cor_lateral or
+    tendencia_alta and cor_alta or
+    tendencia_baixa and cor_baixa or
+    cor_lateral
+
+cor_final =
+    reversao_alta and cor_rev_alta or
+    reversao_baixa and cor_rev_baixa or
+    cor_tendencia
+
+plot_candle(
+    open, high, low, close,
+    "NCP FUSION",
+    cor_final
+)
+
+--------------------------------------------------
+-- 13. CRUZAMENTOS: SOMENTE PARA CIMA / PARA BAIXO
+--------------------------------------------------
+
+plot_shape(
+    cruzou_cima,
+    "CRUZOU CIMA",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_cruzamento,
+    shape_location.belowbar,
+    0,
+    "CRUZOU PARA CIMA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    cruzou_baixo,
+    "CRUZOU BAIXO",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_cruzamento,
+    shape_location.abovebar,
+    0,
+    "CRUZOU PARA BAIXO",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 14. PADROES DE REVERSAO DE ALTA
+--------------------------------------------------
+
+plot_shape(
+    martelo,
+    "MARTELO",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "MARTELO",
+    "#FFFFFF"
+)
+
+plot_shape(
+    engolfo_alta,
+    "ENGOLFO ALTA",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "ENGOLFO ALTA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    estrela_manha,
+    "ESTRELA MANHA",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "ESTRELA DA MANHA",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 15. PADROES DE REVERSAO DE BAIXA
+--------------------------------------------------
+
+plot_shape(
+    estrela_cadente,
+    "ESTRELA CADENTE",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ESTRELA CADENTE",
+    "#FFFFFF"
+)
+
+plot_shape(
+    engolfo_baixa,
+    "ENGOLFO BAIXA",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ENGOLFO BAIXA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    estrela_noite,
+    "ESTRELA NOITE",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ESTRELA DA NOITE",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 16. PIN BAR E DOJI
+--------------------------------------------------
+
+plot_shape(
+    pin_alta and not martelo,
+    "PIN ALTA",
+    shape_style.arrowup,
+    shape_size.normal,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "PIN BAR ALTA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    pin_baixa and not estrela_cadente,
+    "PIN BAIXA",
+    shape_style.arrowdown,
+    shape_size.normal,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "PIN BAR BAIXA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    doji,
+    "DOJI",
+    shape_style.circle,
+    shape_size.small,
+    cor_cruzamento,
+    shape_location.abovebar,
+    0,
+    "DOJI",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 17. ROMPIMENTOS
+--------------------------------------------------
+
+plot_shape(
+    rompimento_alta and not falso_rompimento_alta,
+    "ROMPIMENTO ALTA",
+    shape_style.triangleup,
+    shape_size.normal,
+    cor_alta,
+    shape_location.belowbar,
+    0,
+    "ROMPIMENTO ALTA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    rompimento_baixa and not falso_rompimento_baixa,
+    "ROMPIMENTO BAIXA",
+    shape_style.triangledown,
+    shape_size.normal,
+    cor_baixa,
+    shape_location.abovebar,
+    0,
+    "ROMPIMENTO BAIXA",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 18. FIM
+-- INDICADOR VISUAL
+-- NAO EXECUTA ORDENS
+-- NAO GERA CALL / PUT
+--------------------------------------------------
