@@ -1,0 +1,20 @@
+🤖📈 **ALGORITMOS QMC — COMO OPERAR** 🔥
+
+📊 **LINHAS:** a linha colorida indica a direção, mas pode representar uma retração. A segunda linha acompanha a força e a continuidade do movimento.
+
+📈 **EMA 30:** adicione nos Indicadores da IQ Option.
+
+ - Preço acima: favorecer **CALL**.
+-  Preço abaixo: favorecer **PUT**.
+
+🤖 **UTILIZE OS 3 ALGORITMOS:**
+
+- 🟢 **V2 MOBILE:** direção e força.
+- 📈 **V3 LITE:** confirmação da tendência.
+- ⚡ **V4 CROSS LITE:** cruzamentos; **opcional**.
+
+🎯 Priorize a concordância entre V2 e V3. O V4 pode servir como confirmação adicional.
+
+⏱️ **GRÁFICOS E TEMPOS:** utilize GRAFICO DE LINHAS ou GRAFICO DE BARRAS (OHLC), com tempos de **30 segundos, 1 minuto, 2 minutos ou 3 minutos**, conforme a disponibilidade da plataforma.
+
+🔥 **REGRA FINAL:** confirme a direção pela EMA 30, observe os sinais dos algoritmos e evite operar quando houver divergência ou lateralização.

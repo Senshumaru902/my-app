@@ -1,0 +1,128 @@
+--------------------------------------------------
+-- QMC LINHA PROBABILIDADE V4 CROSS LITE
+-- QCS MOBILE | TENDENCIA + CRUZAMENTO REAL
+-- DUAS LINHAS + SINAIS CALL / PUT
+-- FILTRO ATR LATERAL
+-- SEM ORDENS AUTOMATICAS
+--------------------------------------------------
+
+instrument {
+    name = "QMC LINHA V4 CROSS LITE",
+    short_name = "QMC CROSS LITE",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+periodo = input(3, "Linha principal", input.integer, 1, 10)
+periodoProb = input(8, "Suavizacao da segunda linha", input.integer, 2, 20)
+
+--------------------------------------------------
+-- MEDIAS
+--------------------------------------------------
+
+ema5 = ema(close, 5)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+linhaPrincipal = ema(close, periodo)
+linhaForca = ema(close, periodoProb)
+
+--------------------------------------------------
+-- TENDENCIA PRINCIPAL
+--------------------------------------------------
+
+alta =
+    ema5 > ema13 and
+    ema13 > ema21 and
+    ema21 > ema50 and
+    ema21 > ema21[3]
+
+baixa =
+    ema5 < ema13 and
+    ema13 < ema21 and
+    ema21 < ema50 and
+    ema21 < ema21[3]
+
+--------------------------------------------------
+-- ATR SIMPLES
+--------------------------------------------------
+
+tr1 = high - low
+tr2 = abs(high - close[1])
+tr3 = abs(low - close[1])
+
+trMaior = max(tr1, max(tr2, tr3))
+atr = sma(trMaior, 7)
+
+--------------------------------------------------
+-- FILTRO LATERAL
+--------------------------------------------------
+
+separacao = abs(ema5 - ema13)
+inclinacao = abs(ema21 - ema21[3])
+
+lateral =
+    atr > 0 and
+    separacao <= atr * 0.10 and
+    inclinacao <= atr * 0.10
+
+--------------------------------------------------
+-- CRUZAMENTO REAL EMA 5 / EMA 13
+--------------------------------------------------
+
+cruzouAlta =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzouBaixa =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+--------------------------------------------------
+-- SINAIS COM CONFLUENCIA
+--------------------------------------------------
+
+sinalCALL =
+    cruzouAlta and
+    alta and
+    not lateral and
+    close > ema21
+
+sinalPUT =
+    cruzouBaixa and
+    baixa and
+    not lateral and
+    close < ema21
+
+--------------------------------------------------
+-- LINHA PRINCIPAL COLORIDA
+--------------------------------------------------
+
+linhaNeutra = iff(alta or baixa, nan, linhaPrincipal)
+linhaAlta = iff(alta, linhaPrincipal, nan)
+linhaBaixa = iff(baixa, linhaPrincipal, nan)
+
+--------------------------------------------------
+-- SEGUNDA LINHA
+--------------------------------------------------
+
+plot(linhaNeutra, "NEUTRA", "#00E5FF", 5)
+plot(linhaAlta, "TENDENCIA ALTA", "#00C853", 5)
+plot(linhaBaixa, "TENDENCIA BAIXA", "#FF1744", 5)
+
+plot(linhaForca, "LINHA SUAVIZADA", "#FFD600", 3)
+
+--------------------------------------------------
+-- PONTOS DOS SINAIS
+--------------------------------------------------
+
+plot(iff(sinalCALL, close, nan), "CALL CRUZAMENTO", "#00C853", 5)
+plot(iff(sinalPUT, close, nan), "PUT CRUZAMENTO", "#FF1744", 5)
+
+--------------------------------------------------
+-- FIM | SOMENTE VISUAL
+--------------------------------------------------
