@@ -1,0 +1,105 @@
+--------------------------------------------------
+-- QMC LINHA PROBABILIDADE V3 LITE
+-- QCS MOBILE | TENDENCIA LONGA
+-- DUAS LINHAS + CALL / PUT
+-- SEM ORDENS AUTOMATICAS
+--------------------------------------------------
+
+instrument {
+    name = "QMC LINHA V3 LITE",
+    short_name = "QMC LITE",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+periodo = input(3, "Linha principal", input.integer, 1, 10)
+periodoProb = input(8, "Suavizacao da forca", input.integer, 2, 20)
+
+--------------------------------------------------
+-- MEDIAS
+--------------------------------------------------
+
+ema5 = ema(close, 5)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+linhaPrincipal = ema(close, periodo)
+
+--------------------------------------------------
+-- TENDENCIA LONGA
+--------------------------------------------------
+
+alta =
+    ema5 > ema13 and
+    ema13 > ema21 and
+    ema21 > ema50 and
+    ema21 > ema21[3] and
+    ema50 > ema50[3]
+
+baixa =
+    ema5 < ema13 and
+    ema13 < ema21 and
+    ema21 < ema50 and
+    ema21 < ema21[3] and
+    ema50 < ema50[3]
+
+--------------------------------------------------
+-- CONFIRMACAO DO MOVIMENTO
+--------------------------------------------------
+
+confirmacaoAlta =
+    close > ema21 and
+    close > close[1] and
+    close[1] >= close[2]
+
+confirmacaoBaixa =
+    close < ema21 and
+    close < close[1] and
+    close[1] <= close[2]
+
+--------------------------------------------------
+-- SINAIS NA ATIVACAO
+--------------------------------------------------
+
+continuacaoAlta = alta and confirmacaoAlta
+continuacaoBaixa = baixa and confirmacaoBaixa
+
+sinalCALL = continuacaoAlta and not continuacaoAlta[1]
+sinalPUT = continuacaoBaixa and not continuacaoBaixa[1]
+
+--------------------------------------------------
+-- LINHA PRINCIPAL COLORIDA
+--------------------------------------------------
+
+linhaNeutra = iff(alta or baixa, nan, linhaPrincipal)
+linhaAlta = iff(alta, linhaPrincipal, nan)
+linhaBaixa = iff(baixa, linhaPrincipal, nan)
+
+--------------------------------------------------
+-- SEGUNDA LINHA DE FORCA
+--------------------------------------------------
+
+forcaBruta = ema(close, periodoProb)
+
+linhaForca = ema(forcaBruta, periodoProb)
+
+--------------------------------------------------
+-- EXIBICAO
+--------------------------------------------------
+
+plot(linhaNeutra, "NEUTRA", "#00E5FF", 5)
+plot(linhaAlta, "TENDENCIA ALTA", "#00C853", 5)
+plot(linhaBaixa, "TENDENCIA BAIXA", "#FF1744", 5)
+
+plot(linhaForca, "LINHA DE FORCA", "#FFD600", 3)
+
+plot(iff(sinalCALL, close, nan), "CALL LONGO", "#00C853", 5)
+plot(iff(sinalPUT, close, nan), "PUT LONGO", "#FF1744", 5)
+
+--------------------------------------------------
+-- FIM | SOMENTE VISUAL
+--------------------------------------------------

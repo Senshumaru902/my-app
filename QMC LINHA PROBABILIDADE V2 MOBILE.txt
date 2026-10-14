@@ -1,0 +1,171 @@
+--------------------------------------------------
+-- QMC LINHA PROBABILIDADE V2 MOBILE
+-- LINHA PRINCIPAL + LINHA DE PROBABILIDADE
+-- COMPATIBILIDADE: BASE QMC TESTE V4
+-- SEM SETAS | SEM TEXTOS | SEM ORDENS AUTOMATICAS
+--------------------------------------------------
+
+instrument {
+    name = "QMC LINHA PROBABILIDADE V2",
+    short_name = "QMC PROB V2",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+periodo = input(
+    3,
+    "Periodo da linha principal",
+    input.integer,
+    1,
+    10
+)
+
+periodoProb = input(
+    8,
+    "Suavizacao da segunda linha",
+    input.integer,
+    2,
+    20
+)
+
+--------------------------------------------------
+-- MEDIAS DE DIRECAO
+--------------------------------------------------
+
+emaRapida = ema(close, 3)
+emaLenta = ema(close, 30)
+
+--------------------------------------------------
+-- LINHA PRINCIPAL
+--------------------------------------------------
+
+linhaPrincipal = ema(close, periodo)
+
+compra = emaRapida > emaLenta
+venda = emaRapida < emaLenta
+
+linhaNeutra = iff(
+    compra or venda,
+    nan,
+    linhaPrincipal
+)
+
+linhaCompra = iff(
+    compra,
+    linhaPrincipal,
+    nan
+)
+
+linhaVenda = iff(
+    venda,
+    linhaPrincipal,
+    nan
+)
+
+--------------------------------------------------
+-- ESTIMATIVA DA FORCA DE CONTINUACAO
+--------------------------------------------------
+
+rapidaSubindo = emaRapida > emaRapida[1]
+rapidaDescendo = emaRapida < emaRapida[1]
+
+lentaSubindo = emaLenta > emaLenta[1]
+lentaDescendo = emaLenta < emaLenta[1]
+
+precoSubindo = close > close[1]
+precoDescendo = close < close[1]
+
+precoAcimaRapida = close > emaRapida
+precoAbaixoRapida = close < emaRapida
+
+--------------------------------------------------
+-- PONTUACAO DA ALTA
+--------------------------------------------------
+
+pontosAlta =
+    iff(compra, 30, 0) +
+    iff(rapidaSubindo, 20, 0) +
+    iff(lentaSubindo, 20, 0) +
+    iff(precoSubindo, 15, 0) +
+    iff(precoAcimaRapida, 15, 0)
+
+--------------------------------------------------
+-- PONTUACAO DA BAIXA
+--------------------------------------------------
+
+pontosBaixa =
+    iff(venda, 30, 0) +
+    iff(rapidaDescendo, 20, 0) +
+    iff(lentaDescendo, 20, 0) +
+    iff(precoDescendo, 15, 0) +
+    iff(precoAbaixoRapida, 15, 0)
+
+--------------------------------------------------
+-- SEGUNDA LINHA
+-- ACOMPANHA A DIRECAO COM SUAVIZACAO
+--------------------------------------------------
+
+forcaDirecional = iff(
+    compra,
+    pontosAlta,
+    iff(venda, -pontosBaixa, 0)
+)
+
+linhaForcaBruta =
+    linhaPrincipal +
+    (forcaDirecional / 100) *
+    (emaRapida - emaLenta)
+
+linhaProbabilidade = ema(
+    linhaForcaBruta,
+    periodoProb
+)
+
+--------------------------------------------------
+-- CORES DA LINHA PRINCIPAL
+--------------------------------------------------
+
+plot(
+    linhaNeutra,
+    "PRINCIPAL NEUTRA",
+    "#00E5FF",
+    5
+)
+
+plot(
+    linhaCompra,
+    "PRINCIPAL ALTA",
+    "#00C853",
+    5
+)
+
+plot(
+    linhaVenda,
+    "PRINCIPAL BAIXA",
+    "#FF1744",
+    5
+)
+
+--------------------------------------------------
+-- SEGUNDA LINHA
+--------------------------------------------------
+
+corProbabilidade = iff(
+    compra,
+    "#FFD600",
+    iff(venda, "#FF9100", "#B388FF")
+)
+
+plot(
+    linhaProbabilidade,
+    "LINHA DE FORCA",
+    corProbabilidade,
+    3
+)
+
+--------------------------------------------------
+-- FIM DO ALGORITMO
+--------------------------------------------------
