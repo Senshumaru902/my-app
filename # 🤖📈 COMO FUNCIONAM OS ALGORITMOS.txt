@@ -1,0 +1,56 @@
+# 🤖📈 COMO FUNCIONAM OS ALGORITMOS QMC? 🔥
+
+📊 **ANÁLISE DO MERCADO**
+
+Os algoritmos analisam a direção do preço, a tendência e a força do movimento para ajudar a identificar possíveis oportunidades de operação.
+
+🟢🔴 **LINHA COLORIDA — DIREÇÃO DO MOVIMENTO**
+
+Indica a direção do movimento, mas uma linha verde ou vermelha também pode representar uma retração. Portanto, **não utilize a cor isoladamente para decidir a entrada.**
+
+🟡⚡ **SEGUNDA LINHA — FORÇA DO MOVIMENTO**
+
+Ajuda a acompanhar a força e a continuidade da tendência.
+
+## 📈 EMA 30 — FILTRO DE DIREÇÃO
+
+⚙️ Na IQ Option, acesse **Indicadores** e adicione a **Média Móvel Exponencial (EMA), período 30**, diretamente no gráfico.
+
+- **Preço acima da EMA 30:** favorece operações de COMPRA (CALL).
+- **Preço abaixo da EMA 30:** favorece operações de VENDA (PUT).
+
+⚠️ Utilize a EMA 30 como referência para identificar a direção principal e evitar confundir retrações com mudanças de tendência.
+
+## 🚀 COMO UTILIZAR OS 3 ALGORITMOS QMC
+
+🟢 **V2 MOBILE:** identifica a direção do movimento e estima sua força.
+
+📈 **V3 LITE:** confirma a tendência e ajuda a identificar oportunidades de continuidade.
+
+⚡ **V4 CROSS LITE:** identifica cruzamentos que podem indicar oportunidades de entrada. **Seu uso é opcional, não obrigatório.**
+
+🎯 **Orientação:** priorize a concordância entre o V2 MOBILE e o V3 LITE. O V4 CROSS LITE pode ser utilizado como confirmação adicional.
+
+
+⏱️ CONFIGURAÇÃO DAS OPERAÇÕES
+
+📊 Utilize o ##GRAFICO DE LINHA## OU ##⚡GRAFICO DE BARRAS (OHLC)⚡##, com tempo gráfico e expiração de 30 segundos ou mais, conforme a configuração disponível na IQ Option.
+
+-⏰ TEMPO GRAFICO
+
+-⚡30 segundos 
+- 1️⃣ **1 minuto**
+-  2️⃣ **2 minutos**
+-  3️⃣ **3 minutos**
+
+🎯 Escolha o tempo de expiração de acordo com o movimento do mercado e a confirmação dos sinais dos algoritmos.
+
+🔥 **RESUMO DA ESTRATÉGIA**
+
+🧠 Observe as linhas dos algoritmos, confirme a direção pela EMA 30 e aguarde a confluência dos sinais antes de operar.
+
+🟢 Direção de alta + confirmação = avaliar CALL.
+
+🔴 Direção de baixa + confirmação = avaliar PUT.
+
+⚠️ Se os sinais divergirem ou o mercado estiver lateralizado, prefira aguardar. Nenhum indicador garante resultados.
