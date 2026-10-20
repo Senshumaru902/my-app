@@ -1,0 +1,86 @@
+------------------------------------------------------------
+-- NEXT CANDLE CROSS ONLY
+-- V1.0 MOBILE
+-- SOMENTE CRUZAMENTO REAL EMA 5 / EMA 13
+-- SEM LINHAS, MICRO OU ROMPIMENTOS
+-- NAO ENVIA ORDENS
+------------------------------------------------------------
+
+instrument {
+    name = "4 - 1",
+    short_name = "CROSS ONLY",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACAO
+------------------------------------------------------------
+
+ema1_len = input(
+    5,
+    "EMA Rapida",
+    input.integer,
+    2,
+    20
+)
+
+ema2_len = input(
+    13,
+    "EMA Lenta",
+    input.integer,
+    3,
+    40
+)
+
+------------------------------------------------------------
+-- CALCULO DAS MEDIAS
+------------------------------------------------------------
+
+ema_rapida = ema(close, ema1_len)
+ema_lenta = ema(close, ema2_len)
+
+------------------------------------------------------------
+-- DETECCAO DO CRUZAMENTO
+------------------------------------------------------------
+
+cruzou_alta =
+    ema_rapida > ema_lenta and
+    ema_rapida[1] <= ema_lenta[1]
+
+cruzou_baixa =
+    ema_rapida < ema_lenta and
+    ema_rapida[1] >= ema_lenta[1]
+
+------------------------------------------------------------
+-- MARCACAO EXCLUSIVA DOS CRUZAMENTOS
+------------------------------------------------------------
+
+plot_shape(
+    cruzou_alta,
+    "CRUZAMENTO DE ALTA",
+    shape_style.labelup,
+    shape_size.large,
+    "green",
+    shape_location.belowbar,
+    0,
+    " CRUZOU",
+    "white"
+)
+
+plot_shape(
+    cruzou_baixa,
+    "CRUZAMENTO DE BAIXA",
+    shape_style.labeldown,
+    shape_size.large,
+    "red",
+    shape_location.abovebar,
+    0,
+    " CRUZOU",
+    "white"
+)
+
+------------------------------------------------------------
+-- FIM
+-- SOMENTE OS CRUZAMENTOS SAO PLOTADOS
+------------------------------------------------------------
+

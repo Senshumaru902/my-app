@@ -1,0 +1,31 @@
+📱🤖 **PYDROID 3 — CONFIGURAÇÃO PARA IQ OPTION**
+
+📥 **Aplicativo necessário:** [Pydroid 3 — Google Play Store](https://play.google.com/store/apps/details?id=ru.iiec.pydroid3)
+
+⚠️ **REQUISITO:** é necessário ter uma conta na **IQ Option** para utilizar o sistema de conexão com a plataforma.
+
+**1️⃣ Abra o Pydroid 3** no celular Android e acesse o **Terminal**.
+
+**2️⃣ Instale as bibliotecas**, executando um comando por vez:
+
+```bash
+pip install numpy pandas
+```
+
+```bash
+pip install websocket-client==0.56
+```
+
+```bash
+pip install iqoptionapi
+```
+
+Se a instalação convencional da API apresentar problemas, tente a alternativa pelo GitHub:
+
+```bash
+pip install https://github.com/iqoptionapi/iqoptionapi/archive/refs/heads/master.zip
+```
+
+**3️⃣ Aguarde a conclusão** de cada instalação e verifique se não aparecem mensagens de erro.
+
+🎯 **OBJETIVO:** preparar o ambiente Python no celular para executar o algoritmo e testar a conexão com a IQ Option.
