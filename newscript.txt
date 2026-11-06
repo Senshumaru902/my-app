@@ -1,0 +1,135 @@
+
+instrument {
+    name = "QMS BANDEIRAS DINAMICAS V4",
+    short_name = "QMS BANDEIRAS V4",
+    overlay = true
+}
+
+input_group {
+    "IMPULSO",
+    periodo = input(10, "Candles do impulso", input.integer, 3, 40),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 40),
+    fator_impulso = input(1.5, "Forca minima do impulso", input.double, 0.5, 6.0)
+}
+
+input_group {
+    "BANDEIRA",
+    retracao_maxima = input(0.55, "Retracao maxima", input.double, 0.15, 0.90),
+    limite_extensao = input(1.5, "Limite de amplitude ATR", input.double, 0.5, 5.0)
+}
+
+input_group {
+    "DIRECAO",
+    mostrar_alta = input(true, "Bandeira de alta", input.boolean),
+    mostrar_baixa = input(true, "Bandeira de baixa", input.boolean)
+}
+
+-- ==================================
+-- 1. ATR
+-- ==================================
+
+atr = sma(high - low, atr_periodo)
+
+-- ==================================
+-- 2. IMPULSO ANTERIOR
+-- ==================================
+
+topo = highest(high, periodo)[1]
+fundo = lowest(low, periodo)[1]
+
+amplitude = topo - fundo
+
+movimento = close[1] - close[periodo + 1]
+
+impulso_alta =
+    atr[1] > 0 and
+    amplitude >= atr[1] * fator_impulso and
+    movimento > 0
+
+impulso_baixa =
+    atr[1] > 0 and
+    amplitude >= atr[1] * fator_impulso and
+    movimento < 0
+
+-- ==================================
+-- 3. CORRECAO APOS SUBIDA
+-- ==================================
+
+recuo_alta = topo - low
+
+correcao_alta =
+    close < close[1] or
+    low < low[1]
+
+profundidade_alta =
+    amplitude > 0 and
+    recuo_alta > 0 and
+    recuo_alta <= amplitude * retracao_maxima
+
+faixa_alta =
+    atr > 0 and
+    (high - low) <= atr * limite_extensao
+
+-- ==================================
+-- 4. CORRECAO APOS QUEDA
+-- ==================================
+
+recuo_baixa = high - fundo
+
+correcao_baixa =
+    close > close[1] or
+    high > high[1]
+
+profundidade_baixa =
+    amplitude > 0 and
+    recuo_baixa > 0 and
+    recuo_baixa <= amplitude * retracao_maxima
+
+faixa_baixa =
+    atr > 0 and
+    (high - low) <= atr * limite_extensao
+
+-- ==================================
+-- 5. BANDEIRAS
+-- ==================================
+
+bandeira_alta =
+    impulso_alta and
+    correcao_alta and
+    profundidade_alta and
+    faixa_alta
+
+bandeira_baixa =
+    impulso_baixa and
+    correcao_baixa and
+    profundidade_baixa and
+    faixa_baixa
+
+-- ==================================
+-- 6. COLORACAO
+-- ==================================
+
+cor_candle = iff(
+    mostrar_alta and bandeira_alta,
+    "#00FF00",
+    iff(
+        mostrar_baixa and bandeira_baixa,
+        "#FF0000",
+        na
+    )
+)
+
+-- ==================================
+-- 7. PINTURA DOS CANDLESTICKS
+-- ==================================
+
+plot_candle(
+    open,
+    high,
+    low,
+    close,
+    "QMS BANDEIRAS",
+    cor_candle
+)
+
+-- FIM QMS BANDEIRAS V4

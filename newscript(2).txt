@@ -1,0 +1,155 @@
+
+instrument {
+    name = "QMS CRUZ APOS PERNADA FORTE W",
+    short_name = "QMS CRUZ FUNDO W",
+    overlay = true
+}
+
+input_group {
+    "FORCA DA PERNADA",
+    periodo = input(12, "Candles da queda", input.integer, 3, 50),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 50),
+    fator_forte = input(2.5, "Queda forte ATR", input.double, 1.0, 8.0),
+    fator_extremo = input(4.0, "Queda extrema ATR", input.double, 2.0, 12.0)
+}
+
+input_group {
+    "DETECCAO DO FUNDO W",
+    tolerancia_fundos = input(0.50, "Distancia entre fundos ATR", input.double, 0.05, 2.0),
+    recuperacao_minima = input(0.80, "Recuperacao minima ATR", input.double, 0.10, 4.0),
+    distancia_fundo = input(0.35, "Distancia do fundo ATR", input.double, 0.05, 2.0)
+}
+
+input_group {
+    "REJEICAO COMPRADORA",
+    corpo_maximo = input(0.45, "Corpo maximo da vela", input.double, 0.05, 0.80),
+    pavio_minimo = input(0.20, "Pavio inferior minimo", input.double, 0.05, 0.80)
+}
+
+input_group {
+    "VISUAL",
+    mostrar_forte = input(true, "Mostrar W forte", input.boolean),
+    mostrar_extrema = input(true, "Mostrar W extrema", input.boolean)
+}
+
+-- ==================================
+-- 1. MEDICAO DA PERNADA DE QUEDA
+-- ==================================
+
+atr = sma(high - low, atr_periodo)
+
+topo_perna = highest(high, periodo)[1]
+fundo_perna = lowest(low, periodo)[1]
+
+amplitude_perna = topo_perna - fundo_perna
+
+queda_forte =
+    atr > 0 and
+    amplitude_perna >= atr * fator_forte
+
+queda_extrema =
+    atr > 0 and
+    amplitude_perna >= atr * fator_extremo
+
+-- ==================================
+-- 2. IDENTIFICACAO DO PRIMEIRO FUNDO
+-- ==================================
+
+primeiro_fundo =
+    low[1] <= lowest(low, periodo)[2]
+
+-- ==================================
+-- 3. RECUPERACAO ENTRE OS FUNDOS
+-- ==================================
+
+recuperacao =
+    highest(high, periodo) - fundo_perna
+
+recuperou =
+    atr > 0 and
+    recuperacao >= atr * recuperacao_minima
+
+-- ==================================
+-- 4. SEGUNDO FUNDO
+-- ==================================
+
+fundo_anterior = lowest(low, periodo)[1]
+
+proximo_fundo =
+    atr > 0 and
+    abs(low - fundo_anterior) <= atr * tolerancia_fundos
+
+segundo_fundo =
+    low <= fundo_anterior + atr * tolerancia_fundos and
+    low >= fundo_anterior - atr * tolerancia_fundos
+
+-- ==================================
+-- 5. REJEICAO COMPRADORA
+-- ==================================
+
+amplitude_candle = high - low
+
+corpo = abs(close - open)
+
+pavio_inferior = min(open, close) - low
+
+rejeicao =
+    amplitude_candle > 0 and
+    pavio_inferior >= amplitude_candle * pavio_minimo
+
+corpo_controlado =
+    amplitude_candle > 0 and
+    corpo <= amplitude_candle * corpo_maximo
+
+fechamento_comprador =
+    close > open
+
+-- ==================================
+-- 6. VALIDACAO DO FUNDO DUPLO W
+-- ==================================
+
+fundo_proximo =
+    atr > 0 and
+    abs(low - fundo_anterior) <= atr * distancia_fundo
+
+w_formado =
+    queda_forte and
+    recuperou and
+    segundo_fundo and
+    fundo_proximo and
+    rejeicao and
+    corpo_controlado and
+    fechamento_comprador
+
+w_extremo =
+    queda_extrema and
+    recuperou and
+    segundo_fundo and
+    fundo_proximo and
+    rejeicao and
+    corpo_controlado and
+    fechamento_comprador
+
+-- ==================================
+-- 7. DESENHO NO GRAFICO
+-- ==================================
+
+plot_shape(
+    mostrar_forte and w_formado and not w_extremo,
+    "FUNDO DUPLO W FORTE",
+    shape_style.cross,
+    shape_size.large,
+    "#00FF66",
+    shape_location.belowbar
+)
+
+plot_shape(
+    mostrar_extrema and w_extremo,
+    "FUNDO DUPLO W EXTREMO",
+    shape_style.cross,
+    shape_size.large,
+    "#00BFFF",
+    shape_location.belowbar
+)
+
+-- FIM QMS CRUZ FUNDO DUPLO W
