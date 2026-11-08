@@ -1,0 +1,349 @@
+
+instrument {
+    name = "QMS DIRECIONAL V3 FLEXIVEL",
+    short_name = "QMS DIRECIONAL V3",
+    overlay = true
+}
+
+input_group {
+    "ESTRUTURA",
+
+    periodo = input(1, "Sensibilidade dos pivos", input.integer, 1, 5),
+
+    memoria = input(100, "Memoria estrutural", input.integer, 20, 150),
+
+    flexibilidade = input(2, "Flexibilidade estrutural", input.integer, 1, 3)
+}
+
+input_group {
+    "RETRACAO",
+
+    fib_min = input(0.25, "Retracao minima", input.double, 0.10, 0.80, 0.01),
+
+    fib_max = input(0.80, "Retracao maxima", input.double, 0.30, 0.95, 0.01),
+
+    usar_fibonacci = input(true, "Usar regiao de retracao", input.boolean)
+}
+
+input_group {
+    "CONFIRMACAO",
+
+    rejeicao_minima = input(15, "Rejeicao minima (%)", input.integer, 1, 80),
+
+    corpo_minimo = input(15, "Corpo minimo (%)", input.integer, 1, 80),
+
+    exigir_rejeicao = input(false, "Exigir rejeicao", input.boolean),
+
+    exigir_confirmacao = input(false, "Exigir confirmacao adicional", input.boolean)
+}
+
+input_group {
+    "VISUAL",
+
+    cor_compra = input {
+        default = "#00C853",
+        type = input.color
+    },
+
+    cor_venda = input {
+        default = "#FF1744",
+        type = input.color
+    },
+
+    cor_pivo = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    tamanho = input(4, "Tamanho", input.integer, 1, 5)
+}
+
+-- =================================
+-- PIVOS
+-- =================================
+
+local function topo_valido(indice)
+
+    local preco = high[indice]
+
+    for i = 1, periodo do
+
+        if preco < high[indice - i] then
+            return false
+        end
+
+        if preco < high[indice + i] then
+            return false
+        end
+
+    end
+
+    return true
+end
+
+local function fundo_valido(indice)
+
+    local preco = low[indice]
+
+    for i = 1, periodo do
+
+        if preco > low[indice - i] then
+            return false
+        end
+
+        if preco > low[indice + i] then
+            return false
+        end
+
+    end
+
+    return true
+end
+
+-- =================================
+-- BUSCA DOS PIVOS
+-- =================================
+
+local topo1 = 0
+local topo2 = 0
+local fundo1 = 0
+local fundo2 = 0
+
+local indice_topo = 0
+local indice_fundo = 0
+
+for i = periodo + 1, memoria do
+
+    if topo_valido(i) then
+
+        if topo1 == 0 then
+            topo1 = high[i]
+            indice_topo = i
+        elseif topo2 == 0 then
+            topo2 = high[i]
+        end
+
+    end
+
+    if fundo_valido(i) then
+
+        if fundo1 == 0 then
+            fundo1 = low[i]
+            indice_fundo = i
+        elseif fundo2 == 0 then
+            fundo2 = low[i]
+        end
+
+    end
+
+end
+
+-- =================================
+-- ESTRUTURA DINAMICA
+-- =================================
+
+local alta = false
+local baixa = false
+
+if topo1 > 0 and topo2 > 0
+and fundo1 > 0 and fundo2 > 0 then
+
+    alta =
+        topo1 > topo2
+        or fundo1 > fundo2
+
+    baixa =
+        topo1 < topo2
+        or fundo1 < fundo2
+
+end
+
+-- =================================
+-- FORCA DOS CANDLES
+-- =================================
+
+local forca_alta = 0
+local forca_baixa = 0
+
+for i = 1, 3 do
+
+    if close[i] > open[i] then
+        forca_alta = forca_alta + 1
+    end
+
+    if close[i] < open[i] then
+        forca_baixa = forca_baixa + 1
+    end
+
+end
+
+-- =================================
+-- RETRACAO FLEXIVEL
+-- =================================
+
+local zona_compra = false
+local zona_venda = false
+
+if topo1 > 0 and fundo1 > 0 then
+
+    local amplitude = math.abs(topo1 - fundo1)
+
+    if amplitude > 0 then
+
+        local fib_compra1 =
+            topo1 - amplitude * fib_min
+
+        local fib_compra2 =
+            topo1 - amplitude * fib_max
+
+        local fib_venda1 =
+            fundo1 + amplitude * fib_min
+
+        local fib_venda2 =
+            fundo1 + amplitude * fib_max
+
+        zona_compra =
+            low[1] <= fib_compra1
+            and high[1] >= fib_compra2
+
+        zona_venda =
+            high[1] >= fib_venda1
+            and low[1] <= fib_venda2
+
+    end
+
+end
+
+if not usar_fibonacci then
+    zona_compra = true
+    zona_venda = true
+end
+
+-- =================================
+-- REJEICAO
+-- =================================
+
+local amplitude_candle = high[1] - low[1]
+
+local rejeicao_compra = false
+local rejeicao_venda = false
+local corpo = 0
+
+if amplitude_candle > 0 then
+
+    local inferior =
+        math.min(open[1], close[1]) - low[1]
+
+    local superior =
+        high[1] - math.max(open[1], close[1])
+
+    rejeicao_compra =
+        inferior / amplitude_candle * 100
+        >= rejeicao_minima
+
+    rejeicao_venda =
+        superior / amplitude_candle * 100
+        >= rejeicao_minima
+
+    corpo =
+        math.abs(close[1] - open[1])
+        / amplitude_candle * 100
+
+end
+
+-- =================================
+-- CONFIRMACAO FLEXIVEL
+-- =================================
+
+local confirma_alta = close[1] > open[1]
+local confirma_baixa = close[1] < open[1]
+
+if exigir_confirmacao then
+
+    confirma_alta =
+        confirma_alta and close[1] > close[2]
+
+    confirma_baixa =
+        confirma_baixa and close[1] < close[2]
+
+end
+
+if exigir_rejeicao then
+
+    confirma_alta =
+        confirma_alta and rejeicao_compra
+
+    confirma_baixa =
+        confirma_baixa and rejeicao_venda
+
+end
+
+-- =================================
+-- DIRECAO FLEXIVEL
+-- =================================
+
+local compra =
+    alta and zona_compra
+    and confirma_alta
+    and (corpo >= corpo_minimo or rejeicao_compra)
+
+local venda =
+    baixa and zona_venda
+    and confirma_baixa
+    and (corpo >= corpo_minimo or rejeicao_venda)
+
+-- =================================
+-- PLOTAGEM
+-- =================================
+
+plot_shape(
+    compra,
+    "COMPRA DINAMICA",
+    shape_style.triangleup,
+    tamanho,
+    cor_compra,
+    shape_location.belowbar,
+    -1,
+    "ALTA",
+    cor_compra
+)
+
+plot_shape(
+    venda,
+    "VENDA DINAMICA",
+    shape_style.triangledown,
+    tamanho,
+    cor_venda,
+    shape_location.abovebar,
+    -1,
+    "BAIXA",
+    cor_venda
+)
+
+-- =================================
+-- HISTORICO DE PIVOS
+-- =================================
+
+plot_shape(
+    topo_valido(periodo),
+    "TOPO",
+    shape_style.circle,
+    2,
+    cor_pivo,
+    shape_location.abovebar,
+    -periodo,
+    "T",
+    cor_pivo
+)
+
+plot_shape(
+    fundo_valido(periodo),
+    "FUNDO",
+    shape_style.circle,
+    2,
+    cor_compra,
+    shape_location.belowbar,
+    -periodo,
+    "F",
+    cor_compra
+)
