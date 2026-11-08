@@ -1,0 +1,212 @@
+--------------------------------------------------
+-- QCS V4.1 LINE ONLY MOBILE
+-- 4 MEDIAS SEMPRE VISIVEIS
+-- SOMENTE LINHAS | SEM SETAS OU TEXTOS NO GRAFICO
+-- SEM ORDENS AUTOMATICAS
+--------------------------------------------------
+
+instrument {
+    name = "QCS V4.1 LINE ONLY MOBILE",
+    short_name = "QCS LINE V4.1",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+periodo = input(5, "EMA Rapida", input.integer, 1, 50)
+
+--------------------------------------------------
+-- CORES
+--------------------------------------------------
+
+azul = "#00BFFF"
+amarelo = "#FFD700"
+cinza = "#808080"
+branco = "#FFFFFF"
+verde = "#00FF00"
+vermelho = "#FF2020"
+dourado = "#FFD700"
+laranja = "#CC5500"
+
+--------------------------------------------------
+-- MEDIAS MOVEIS
+--------------------------------------------------
+
+ema5 = ema(close, periodo)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+--------------------------------------------------
+-- INDICADORES DE FORCA
+--------------------------------------------------
+
+rsi7 = rsi(close, 7)
+atr7 = sma(tr, 7)
+
+amplitude = high - low
+corpo = abs(close - open)
+
+forcaVela = 0
+
+if amplitude > 0 then
+    forcaVela = corpo / amplitude * 100
+end
+
+--------------------------------------------------
+-- INCLINACAO
+--------------------------------------------------
+
+inclinacao5 = ema5 - ema5[1]
+inclinacao13 = ema13 - ema13[1]
+inclinacao21 = ema21 - ema21[1]
+
+anguloAlta =
+    inclinacao13 > 0 and
+    inclinacao21 > 0
+
+anguloBaixa =
+    inclinacao13 < 0 and
+    inclinacao21 < 0
+
+--------------------------------------------------
+-- TENDENCIA PRINCIPAL
+--------------------------------------------------
+
+tendAlta =
+    ema13 > ema21 and
+    ema21 > ema50 and
+    anguloAlta
+
+tendBaixa =
+    ema13 < ema21 and
+    ema21 < ema50 and
+    anguloBaixa
+
+microAlta =
+    ema5 > ema13 and
+    inclinacao5 > 0
+
+microBaixa =
+    ema5 < ema13 and
+    inclinacao5 < 0
+
+--------------------------------------------------
+-- CRUZAMENTO REAL EMA 5 / EMA 13
+--------------------------------------------------
+
+cruzouAlta =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzouBaixa =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+--------------------------------------------------
+-- MOMENTUM E ACELERACAO
+--------------------------------------------------
+
+momentumAlta = close > close[1]
+momentumBaixa = close < close[1]
+
+acelAlta =
+    close - close[1] >
+    close[1] - close[2]
+
+acelBaixa =
+    close[1] - close >
+    close[2] - close[1]
+
+--------------------------------------------------
+-- LATERALIZACAO
+--------------------------------------------------
+
+lateral = false
+
+if atr7 > 0 then
+    lateral =
+        abs(ema5 - ema13) < atr7 * 0.10 and
+        abs(inclinacao21) < atr7 * 0.03 and
+        rsi7 >= 45 and
+        rsi7 <= 55
+end
+
+--------------------------------------------------
+-- FORCA DIRECIONAL
+--------------------------------------------------
+
+forteAlta =
+    tendAlta and
+    microAlta and
+    momentumAlta and
+    acelAlta and
+    forcaVela >= 60 and
+    not lateral
+
+forteBaixa =
+    tendBaixa and
+    microBaixa and
+    momentumBaixa and
+    acelBaixa and
+    forcaVela >= 60 and
+    not lateral
+
+--------------------------------------------------
+-- LINHAS PRINCIPAIS
+-- TODAS PERMANECEM VISIVEIS
+--------------------------------------------------
+
+plot(
+    ema5,
+    "EMA 5 RAPIDA",
+    azul,
+    2
+)
+
+plot(
+    ema13,
+    "EMA 13",
+    amarelo,
+    2
+)
+
+plot(
+    ema21,
+    "EMA 21",
+    cinza,
+    2
+)
+
+plot(
+    ema50,
+    "EMA 50",
+    branco,
+    2
+)
+
+--------------------------------------------------
+-- DESTAQUES CONDICIONAIS
+--------------------------------------------------
+
+plot(
+    (forteAlta or forteBaixa) and ema5 or nil,
+    "FORCA DO MOVIMENTO",
+    dourado,
+    4
+)
+
+plot(
+    lateral and ema13 or nil,
+    "LATERALIZACAO",
+    laranja,
+    4
+)
+
+--------------------------------------------------
+-- FIM
+-- SEM SETAS, SEM TEXTOS, SEM MARCADORES
+-- SEM ORDENS AUTOMATICAS
+--------------------------------------------------

@@ -1,133 +1,155 @@
 
 instrument {
-    name = "QMS RADAR LATERAL DINAMICO V4",
-    short_name = "QMS LATERAL V4",
+    name = "QMS CRUZ APOS PERNADA FORTE W",
+    short_name = "QMS CRUZ FUNDO W",
     overlay = true
 }
 
 input_group {
-    "CONFIGURACAO",
-
-    periodo = input(20, "Periodo dinamico", input.integer, 5, 100, 1),
-
-    margem = input(20, "Margem dos extremos (%)", input.integer, 5, 45, 1),
-
-    largura_max = input(1.50, "Largura maxima lateral (%)", input.double, 0.10, 5.00, 0.10)
+    "FORCA DA PERNADA",
+    periodo = input(12, "Candles da queda", input.integer, 3, 50),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 50),
+    fator_forte = input(2.5, "Queda forte ATR", input.double, 1.0, 8.0),
+    fator_extremo = input(4.0, "Queda extrema ATR", input.double, 2.0, 12.0)
 }
 
 input_group {
-    "EXIBICAO",
-
-    mostrar_faixa = input(true, "Mostrar faixa dinamica", input.boolean),
-
-    mostrar_meio = input(true, "Mostrar meio da faixa", input.boolean),
-
-    mostrar_rejeicao = input(true, "Mostrar rejeicoes", input.boolean)
+    "DETECCAO DO FUNDO W",
+    tolerancia_fundos = input(0.50, "Distancia entre fundos ATR", input.double, 0.05, 2.0),
+    recuperacao_minima = input(0.80, "Recuperacao minima ATR", input.double, 0.10, 4.0),
+    distancia_fundo = input(0.35, "Distancia do fundo ATR", input.double, 0.05, 2.0)
 }
 
 input_group {
-    "CORES",
-
-    cor_resistencia = input { default = "#FF5252", type = input.color },
-
-    cor_suporte = input { default = "#2196FF", type = input.color },
-
-    cor_meio = input { default = "#B0BEC5", type = input.color },
-
-    cor_venda = input { default = "#A020F0", type = input.color },
-
-    cor_compra = input { default = "#00BCD4", type = input.color }
+    "REJEICAO COMPRADORA",
+    corpo_maximo = input(0.45, "Corpo maximo da vela", input.double, 0.05, 0.80),
+    pavio_minimo = input(0.20, "Pavio inferior minimo", input.double, 0.05, 0.80)
 }
 
--- FAIXA DINAMICA
+input_group {
+    "VISUAL",
+    mostrar_forte = input(true, "Mostrar W forte", input.boolean),
+    mostrar_extrema = input(true, "Mostrar W extrema", input.boolean)
+}
 
-local resistencia = highest(high, periodo)
-local suporte = lowest(low, periodo)
+-- ==================================
+-- 1. MEDICAO DA PERNADA DE QUEDA
+-- ==================================
 
-local largura = resistencia - suporte
-local meio = (resistencia + suporte) / 2
+atr = sma(high - low, atr_periodo)
 
-local largura_pct = largura / close * 100
+topo_perna = highest(high, periodo)[1]
+fundo_perna = lowest(low, periodo)[1]
 
--- PROXIMIDADE DOS EXTREMOS
+amplitude_perna = topo_perna - fundo_perna
 
-local margem_preco = largura * margem / 100
+queda_forte =
+    atr > 0 and
+    amplitude_perna >= atr * fator_forte
 
-local perto_resistencia =
-    high >= resistencia - margem_preco
+queda_extrema =
+    atr > 0 and
+    amplitude_perna >= atr * fator_extremo
 
-local perto_suporte =
-    low <= suporte + margem_preco
+-- ==================================
+-- 2. IDENTIFICACAO DO PRIMEIRO FUNDO
+-- ==================================
 
--- FILTRO DE LATERALIZACAO
+primeiro_fundo =
+    low[1] <= lowest(low, periodo)[2]
 
-local lateral =
-    largura > 0 and
-    largura_pct <= largura_max
+-- ==================================
+-- 3. RECUPERACAO ENTRE OS FUNDOS
+-- ==================================
 
--- PAVIOS E CORPOS
+recuperacao =
+    highest(high, periodo) - fundo_perna
 
-local corpo_topo = math.max(open, close)
-local corpo_fundo = math.min(open, close)
+recuperou =
+    atr > 0 and
+    recuperacao >= atr * recuperacao_minima
 
-local pavio_cima = high - corpo_topo
-local pavio_baixo = corpo_fundo - low
+-- ==================================
+-- 4. SEGUNDO FUNDO
+-- ==================================
 
--- REJEICAO VENDEDORA
+fundo_anterior = lowest(low, periodo)[1]
 
-local rejeicao_venda =
-    lateral and
-    perto_resistencia and
-    close < open and
-    pavio_cima > pavio_baixo
+proximo_fundo =
+    atr > 0 and
+    abs(low - fundo_anterior) <= atr * tolerancia_fundos
 
--- REJEICAO COMPRADORA
+segundo_fundo =
+    low <= fundo_anterior + atr * tolerancia_fundos and
+    low >= fundo_anterior - atr * tolerancia_fundos
 
-local rejeicao_compra =
-    lateral and
-    perto_suporte and
-    close > open and
-    pavio_baixo > pavio_cima
+-- ==================================
+-- 5. REJEICAO COMPRADORA
+-- ==================================
 
--- FAIXA ACOMPANHANDO O PRECO
+amplitude_candle = high - low
 
-if mostrar_faixa then
-    plot(resistencia, "RESISTENCIA DINAMICA", cor_resistencia, 2)
-    plot(suporte, "SUPORTE DINAMICO", cor_suporte, 2)
-end
+corpo = abs(close - open)
 
--- LINHA CENTRAL
+pavio_inferior = min(open, close) - low
 
-if mostrar_meio then
-    plot(meio, "MEIO DA FAIXA", cor_meio, 1)
-end
+rejeicao =
+    amplitude_candle > 0 and
+    pavio_inferior >= amplitude_candle * pavio_minimo
 
--- REJEICOES
+corpo_controlado =
+    amplitude_candle > 0 and
+    corpo <= amplitude_candle * corpo_maximo
 
-if mostrar_rejeicao then
+fechamento_comprador =
+    close > open
 
-    plot_shape(
-        rejeicao_venda,
-        "REJEICAO VENDA",
-        shape_style.triangledown,
-        shape_size.small,
-        cor_venda,
-        shape_location.abovebar,
-        0,
-        "REJ VENDA",
-        cor_venda
-    )
+-- ==================================
+-- 6. VALIDACAO DO FUNDO DUPLO W
+-- ==================================
 
-    plot_shape(
-        rejeicao_compra,
-        "REJEICAO COMPRA",
-        shape_style.triangleup,
-        shape_size.small,
-        cor_compra,
-        shape_location.belowbar,
-        0,
-        "REJ COMPRA",
-        cor_compra
-    )
+fundo_proximo =
+    atr > 0 and
+    abs(low - fundo_anterior) <= atr * distancia_fundo
 
-end
+w_formado =
+    queda_forte and
+    recuperou and
+    segundo_fundo and
+    fundo_proximo and
+    rejeicao and
+    corpo_controlado and
+    fechamento_comprador
+
+w_extremo =
+    queda_extrema and
+    recuperou and
+    segundo_fundo and
+    fundo_proximo and
+    rejeicao and
+    corpo_controlado and
+    fechamento_comprador
+
+-- ==================================
+-- 7. DESENHO NO GRAFICO
+-- ==================================
+
+plot_shape(
+    mostrar_forte and w_formado and not w_extremo,
+    "FUNDO DUPLO W FORTE",
+    shape_style.cross,
+    shape_size.large,
+    "#00FF66",
+    shape_location.belowbar
+)
+
+plot_shape(
+    mostrar_extrema and w_extremo,
+    "FUNDO DUPLO W EXTREMO",
+    shape_style.cross,
+    shape_size.large,
+    "#00BFFF",
+    shape_location.belowbar
+)
+
+-- FIM QMS CRUZ FUNDO DUPLO W

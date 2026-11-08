@@ -1,133 +1,135 @@
 
 instrument {
-    name = "QMS CRUZ APOS PERNADA FORTE",
-    short_name = "QMS CRUZ TOPO",
+    name = "QMS BANDEIRAS DINAMICAS V4",
+    short_name = "QMS BANDEIRAS V4",
     overlay = true
 }
 
 input_group {
-    "FORCA DA PERNADA",
-    periodo = input(12, "Candles da pernada", input.integer, 3, 50),
-    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 50),
-    fator_forte = input(2.5, "Alta forte ATR", input.double, 1.0, 8.0),
-    fator_extremo = input(4.0, "Alta extrema ATR", input.double, 2.0, 12.0)
+    "IMPULSO",
+    periodo = input(10, "Candles do impulso", input.integer, 3, 40),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 40),
+    fator_impulso = input(1.5, "Forca minima do impulso", input.double, 0.5, 6.0)
 }
 
 input_group {
-    "DETECCAO DA CRUZ",
-    corpo_maximo = input(0.30, "Corpo maximo da vela", input.double, 0.05, 0.60),
-    pavio_minimo = input(0.20, "Pavio minimo (%)", input.double, 0.05, 0.80),
-    distancia_topo = input(0.35, "Distancia do topo ATR", input.double, 0.05, 2.0)
+    "BANDEIRA",
+    retracao_maxima = input(0.55, "Retracao maxima", input.double, 0.15, 0.90),
+    limite_extensao = input(1.5, "Limite de amplitude ATR", input.double, 0.5, 5.0)
 }
 
 input_group {
-    "VISUAL",
-    mostrar_forte = input(true, "Mostrar cruz forte", input.boolean),
-    mostrar_extrema = input(true, "Mostrar cruz extrema", input.boolean)
+    "DIRECAO",
+    mostrar_alta = input(true, "Bandeira de alta", input.boolean),
+    mostrar_baixa = input(true, "Bandeira de baixa", input.boolean)
 }
 
 -- ==================================
--- 1. MEDICAO DA PERNADA DE ALTA
+-- 1. ATR
 -- ==================================
 
 atr = sma(high - low, atr_periodo)
 
-fundo_perna = lowest(low, periodo)[1]
-topo_perna = highest(high, periodo)[1]
+-- ==================================
+-- 2. IMPULSO ANTERIOR
+-- ==================================
 
-amplitude_perna = topo_perna - fundo_perna
+topo = highest(high, periodo)[1]
+fundo = lowest(low, periodo)[1]
 
-alta_forte =
+amplitude = topo - fundo
+
+movimento = close[1] - close[periodo + 1]
+
+impulso_alta =
+    atr[1] > 0 and
+    amplitude >= atr[1] * fator_impulso and
+    movimento > 0
+
+impulso_baixa =
+    atr[1] > 0 and
+    amplitude >= atr[1] * fator_impulso and
+    movimento < 0
+
+-- ==================================
+-- 3. CORRECAO APOS SUBIDA
+-- ==================================
+
+recuo_alta = topo - low
+
+correcao_alta =
+    close < close[1] or
+    low < low[1]
+
+profundidade_alta =
+    amplitude > 0 and
+    recuo_alta > 0 and
+    recuo_alta <= amplitude * retracao_maxima
+
+faixa_alta =
     atr > 0 and
-    amplitude_perna >= atr * fator_forte
+    (high - low) <= atr * limite_extensao
 
-alta_extrema =
+-- ==================================
+-- 4. CORRECAO APOS QUEDA
+-- ==================================
+
+recuo_baixa = high - fundo
+
+correcao_baixa =
+    close > close[1] or
+    high > high[1]
+
+profundidade_baixa =
+    amplitude > 0 and
+    recuo_baixa > 0 and
+    recuo_baixa <= amplitude * retracao_maxima
+
+faixa_baixa =
     atr > 0 and
-    amplitude_perna >= atr * fator_extremo
+    (high - low) <= atr * limite_extensao
 
 -- ==================================
--- 2. CONFIRMACAO DA SUBIDA
+-- 5. BANDEIRAS
 -- ==================================
 
-preco_subiu =
-    close[1] > close[2] and
-    close[2] > close[3]
+bandeira_alta =
+    impulso_alta and
+    correcao_alta and
+    profundidade_alta and
+    faixa_alta
 
-preco_acima =
-    close[1] > fundo_perna + amplitude_perna * 0.65
-
-perna_confirmada =
-    preco_subiu and
-    preco_acima
-
--- ==================================
--- 3. IDENTIFICACAO DA CRUZ
--- ==================================
-
-amplitude_candle = high - low
-
-corpo = abs(close - open)
-
-pavio_superior = high - max(open, close)
-pavio_inferior = min(open, close) - low
-
-corpo_pequeno =
-    amplitude_candle > 0 and
-    corpo <= amplitude_candle * corpo_maximo
-
-pavio_presente =
-    amplitude_candle > 0 and
-    (pavio_superior + pavio_inferior) >=
-    amplitude_candle * pavio_minimo
-
-cruz =
-    corpo_pequeno and
-    pavio_presente
+bandeira_baixa =
+    impulso_baixa and
+    correcao_baixa and
+    profundidade_baixa and
+    faixa_baixa
 
 -- ==================================
--- 4. PROXIMIDADE DO PICO
+-- 6. COLORACAO
 -- ==================================
 
-proximo_topo =
-    atr > 0 and
-    (topo_perna - high) <= atr * distancia_topo
-
--- ==================================
--- 5. CRUZ APOS SUBIDA FORTE
--- ==================================
-
-cruz_forte =
-    alta_forte and
-    perna_confirmada and
-    cruz and
-    proximo_topo
-
-cruz_extrema =
-    alta_extrema and
-    perna_confirmada and
-    cruz and
-    proximo_topo
-
--- ==================================
--- 6. DESENHO NO GRAFICO
--- ==================================
-
-plot_shape(
-    mostrar_forte and cruz_forte and not cruz_extrema,
-    "CRUZ ALTA FORTE",
-    shape_style.cross,
-    shape_size.large,
-    "#FFD700",
-    shape_location.abovebar
+cor_candle = iff(
+    mostrar_alta and bandeira_alta,
+    "#00FF00",
+    iff(
+        mostrar_baixa and bandeira_baixa,
+        "#FF0000",
+        na
+    )
 )
 
-plot_shape(
-    mostrar_extrema and cruz_extrema,
-    "CRUZ ALTA EXTREMA",
-    shape_style.cross,
-    shape_size.large,
-    "#FF2020",
-    shape_location.abovebar
+-- ==================================
+-- 7. PINTURA DOS CANDLESTICKS
+-- ==================================
+
+plot_candle(
+    open,
+    high,
+    low,
+    close,
+    "QMS BANDEIRAS",
+    cor_candle
 )
 
--- FIM QMS CRUZ APOS PERNADA FORTE
+-- FIM QMS BANDEIRAS V4

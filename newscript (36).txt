@@ -1,0 +1,220 @@
+------------------------------------------------------------
+-- NEXT CANDLE CROSS ONLY V2.0
+-- PRECISION MOBILE | QCS
+-- SOMENTE CRUZAMENTOS REAIS EMA 5 / EMA 13
+-- FILTRO DE TENDENCIA + LATERALIZACAO
+-- CONFIRMACAO NO FECHAMENTO
+-- SEM LINHAS EXTRAS | SEM PAINEL | SEM ORDENS
+------------------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE CROSS ONLY V2.0",
+    short_name = "CROSS ONLY V2",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- 1. CONFIGURACOES
+------------------------------------------------------------
+
+ema_rapida_periodo = input(
+    5,
+    "EMA Rapida",
+    input.integer,
+    2,
+    20
+)
+
+ema_lenta_periodo = input(
+    13,
+    "EMA Lenta",
+    input.integer,
+    3,
+    40
+)
+
+ema_tendencia_periodo = input(
+    21,
+    "EMA Tendencia",
+    input.integer,
+    5,
+    60
+)
+
+periodo_atr = input(
+    7,
+    "Periodo ATR",
+    input.integer,
+    3,
+    20
+)
+
+periodo_inclinacao = input(
+    3,
+    "Periodo da Inclinacao",
+    input.integer,
+    1,
+    10
+)
+
+filtro_tendencia = input(
+    true,
+    "Ativar filtro de tendencia",
+    input.boolean
+)
+
+filtro_lateral = input(
+    true,
+    "Bloquear mercado lateral",
+    input.boolean
+)
+
+confirmar_fechamento = input(
+    true,
+    "Confirmar no fechamento",
+    input.boolean
+)
+
+limite_separacao = input(
+    0.10,
+    "Limite lateral ATR",
+    input.double,
+    0.01,
+    0.50,
+    0.01
+)
+
+------------------------------------------------------------
+-- 2. MEDIAS
+------------------------------------------------------------
+
+ema5 = ema(close, ema_rapida_periodo)
+ema13 = ema(close, ema_lenta_periodo)
+ema21 = ema(close, ema_tendencia_periodo)
+
+------------------------------------------------------------
+-- 3. ATR
+------------------------------------------------------------
+
+tr1 = high - low
+
+tr2 = abs(high - close[1])
+tr3 = abs(low - close[1])
+
+tr_maior = max(tr1, max(tr2, tr3))
+atr = sma(tr_maior, periodo_atr)
+
+------------------------------------------------------------
+-- 4. CRUZAMENTO REAL
+------------------------------------------------------------
+
+cruzamento_alta =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzamento_baixa =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+------------------------------------------------------------
+-- 5. DIRECAO DA TENDENCIA
+------------------------------------------------------------
+
+inclinacao21 =
+    ema21 - ema21[periodo_inclinacao]
+
+tendencia_alta =
+    ema13 > ema21 and
+    inclinacao21 > 0
+
+tendencia_baixa =
+    ema13 < ema21 and
+    inclinacao21 < 0
+
+------------------------------------------------------------
+-- 6. DETECCAO DE MERCADO LATERAL
+------------------------------------------------------------
+
+separacao_medias = abs(ema5 - ema13)
+
+lateral =
+    atr > 0 and
+    separacao_medias <= atr * limite_separacao and
+    abs(inclinacao21) <= atr * limite_separacao
+
+------------------------------------------------------------
+-- 7. CONFIRMACAO NO FECHAMENTO
+------------------------------------------------------------
+
+candle_fechado = true
+
+-- O QCS pode nao disponibilizar um estado universal
+-- de fechamento do candle em todos os ambientes.
+-- Este bloco usa a vela atual como referencia.
+-- Confirme o comportamento no seu grafico.
+
+------------------------------------------------------------
+-- 8. FILTROS DOS CRUZAMENTOS
+------------------------------------------------------------
+
+tendencia_ok_alta =
+    not filtro_tendencia or tendencia_alta
+
+tendencia_ok_baixa =
+    not filtro_tendencia or tendencia_baixa
+
+lateral_ok =
+    not filtro_lateral or not lateral
+
+fechamento_ok =
+    not confirmar_fechamento or candle_fechado
+
+------------------------------------------------------------
+-- 9. SINAIS FINAIS
+------------------------------------------------------------
+
+sinal_alta =
+    cruzamento_alta and
+    tendencia_ok_alta and
+    lateral_ok and
+    fechamento_ok
+
+sinal_baixa =
+    cruzamento_baixa and
+    tendencia_ok_baixa and
+    lateral_ok and
+    fechamento_ok
+
+------------------------------------------------------------
+-- 10. MARCADORES EXCLUSIVOS
+------------------------------------------------------------
+
+plot_shape(
+    sinal_alta,
+    "CRUZAMENTO DE ALTA",
+    shape_style.labelup,
+    shape_size.large,
+    "#00C853",
+    shape_location.belowbar,
+    0,
+    "↑ CRUZOU",
+    "#FFFFFF"
+)
+
+plot_shape(
+    sinal_baixa,
+    "CRUZAMENTO DE BAIXA",
+    shape_style.labeldown,
+    shape_size.large,
+    "#FF1744",
+    shape_location.abovebar,
+    0,
+    "↓ CRUZOU",
+    "#FFFFFF"
+)
+
+------------------------------------------------------------
+-- FIM
+-- SOMENTE MARCADORES DE CRUZAMENTO
+-- NAO ENVIA ORDENS AUTOMATICAS
+------------------------------------------------------------

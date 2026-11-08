@@ -1,75 +1,203 @@
 
 instrument {
-    name = "QMS TRES SOLDADOS E TRES CORVOS",
-    short_name = "QMS 3S3C",
+    name = "QMS BANDEIRAS ALTA E BAIXA V1",
+    short_name = "QMS FLAG",
     overlay = true
 }
 
+-- =========================================
+-- CONFIGURACOES
+-- =========================================
+
+periodo_bandeira = input(10, "Velas da bandeira", input.integer, 5, 30)
+periodo_impulso = input(12, "Velas da pernada", input.integer, 5, 40)
+periodo_atr = input(14, "Periodo ATR", input.integer, 5, 30)
+
+forca_impulso = input(2.0, "Forca minima da pernada (ATR)", input.double, 0.5, 5.0)
+max_correcao = input(0.65, "Correcao maxima da pernada", input.double, 0.2, 0.9)
+
 input_group {
-    "CORES",
-    cor_soldados = input { default = "#FFFF00", type = input.color },
-    cor_corvos = input { default = "#000000", type = input.color }
+    "SUPORTE E RESISTENCIA",
+
+    cor_resistencia = input {
+        default = "#FF3030",
+        type = input.color
+    },
+
+    cor_suporte = input {
+        default = "#00C853",
+        type = input.color
+    },
+
+    largura = input {
+        default = 2,
+        type = input.line_width
+    }
 }
 
 input_group {
-    "CONFIGURACAO",
-    exigir_progressao = input(true, "Exigir progressao dos candles", input.boolean),
-    corpo_minimo = input(30, "Corpo minimo (%)", input.integer, 1, 100)
+    "SINAIS",
+
+    cor_alta = input {
+        default = "#FFD600",
+        type = input.color
+    },
+
+    cor_baixa = input {
+        default = "#2196FF",
+        type = input.color
+    }
 }
 
--- Identificacao dos candles
-alta1 = close[2] > open[2]
-alta2 = close[1] > open[1]
-alta3 = close > open
+-- =========================================
+-- VOLATILIDADE
+-- =========================================
 
-baixa1 = close[2] < open[2]
-baixa2 = close[1] < open[1]
-baixa3 = close < open
+atr_valor = sma(tr, periodo_atr)
 
--- Tamanho dos corpos
-range1 = high[2] - low[2]
-range2 = high[1] - low[1]
-range3 = high - low
+-- =========================================
+-- ESTRUTURA DA BANDEIRA
+-- Utiliza velas fechadas
+-- =========================================
 
-corpo1 = abs(close[2] - open[2])
-corpo2 = abs(close[1] - open[1])
-corpo3 = abs(close - open)
+topo_bandeira = highest(high[1], periodo_bandeira)
+fundo_bandeira = lowest(low[1], periodo_bandeira)
 
-forte1 = range1 > 0 and corpo1 / range1 * 100 >= corpo_minimo
-forte2 = range2 > 0 and corpo2 / range2 * 100 >= corpo_minimo
-forte3 = range3 > 0 and corpo3 / range3 * 100 >= corpo_minimo
+amplitude_bandeira = topo_bandeira - fundo_bandeira
 
--- Progressao dos tres soldados
-progressao_alta =
-    close[1] > close[2] and
-    close > close[1] and
-    open[1] >= open[2] and
-    open <= close[1]
+-- =========================================
+-- PERNADA ANTERIOR
+-- =========================================
 
--- Progressao dos tres corvos
-progressao_baixa =
-    close[1] < close[2] and
-    close < close[1] and
-    open[1] <= open[2] and
-    open >= close[1]
+topo_impulso = highest(high[periodo_bandeira + 1], periodo_impulso)
 
--- Padrao tres soldados
-soldados =
-    alta1 and alta2 and alta3 and
-    forte1 and forte2 and forte3 and
-    (not exigir_progressao or progressao_alta)
+fundo_impulso = lowest(low[periodo_bandeira + 1], periodo_impulso)
 
--- Padrao tres corvos
-corvos =
-    baixa1 and baixa2 and baixa3 and
-    forte1 and forte2 and forte3 and
-    (not exigir_progressao or progressao_baixa)
+movimento_alta =
+    close[periodo_bandeira + 1] -
+    close[periodo_bandeira + periodo_impulso + 1]
 
--- Coloracao historica e dinamica
-cor_candle = iff(
-    soldados,
-    cor_soldados,
-    iff(corvos, cor_corvos, na)
+movimento_baixa =
+    close[periodo_bandeira + periodo_impulso + 1] -
+    close[periodo_bandeira + 1]
+
+-- =========================================
+-- BANDEIRA DE ALTA
+-- =========================================
+
+impulso_alta =
+    movimento_alta > atr_valor[1] * forca_impulso
+
+correcao_alta =
+    fundo_bandeira > topo_impulso -
+    movimento_alta * max_correcao
+
+canal_alta =
+    close[1] < close[periodo_bandeira] and
+    amplitude_bandeira < movimento_alta * 0.80
+
+bandeira_alta =
+    impulso_alta and
+    correcao_alta and
+    canal_alta
+
+-- =========================================
+-- BANDEIRA DE BAIXA
+-- =========================================
+
+impulso_baixa =
+    movimento_baixa > atr_valor[1] * forca_impulso
+
+correcao_baixa =
+    topo_bandeira < fundo_impulso +
+    movimento_baixa * max_correcao
+
+canal_baixa =
+    close[1] > close[periodo_bandeira] and
+    amplitude_bandeira < movimento_baixa * 0.80
+
+bandeira_baixa =
+    impulso_baixa and
+    correcao_baixa and
+    canal_baixa
+
+-- =========================================
+-- ROMPIMENTOS
+-- =========================================
+
+resistencia_anterior = highest(high[2], periodo_bandeira)
+suporte_anterior = lowest(low[2], periodo_bandeira)
+
+rompimento_alta =
+    bandeira_alta and
+    close[1] > resistencia_anterior
+
+rompimento_baixa =
+    bandeira_baixa and
+    close[1] < suporte_anterior
+
+-- =========================================
+-- LINHAS DINAMICAS
+-- =========================================
+
+resistencia_alta = iff(bandeira_alta, topo_bandeira, nil)
+suporte_alta = iff(bandeira_alta, fundo_bandeira, nil)
+
+resistencia_baixa = iff(bandeira_baixa, topo_bandeira, nil)
+suporte_baixa = iff(bandeira_baixa, fundo_bandeira, nil)
+
+plot(
+    resistencia_alta,
+    "Resistencia Bandeira Alta",
+    cor_resistencia,
+    largura
 )
 
-plot_candle(open, high, low, close, "QMS 3S3C", cor_candle)
+plot(
+    suporte_alta,
+    "Suporte Bandeira Alta",
+    cor_suporte,
+    largura
+)
+
+plot(
+    resistencia_baixa,
+    "Resistencia Bandeira Baixa",
+    cor_resistencia,
+    largura
+)
+
+plot(
+    suporte_baixa,
+    "Suporte Bandeira Baixa",
+    cor_suporte,
+    largura
+)
+
+-- =========================================
+-- MARCACAO DOS ROMPIMENTOS
+-- =========================================
+
+plot_shape(
+    rompimento_alta,
+    "ROMPIMENTO ALTA",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_alta,
+    shape_location.belowbar,
+    -1,
+    "BANDEIRA ALTA",
+    cor_alta
+)
+
+plot_shape(
+    rompimento_baixa,
+    "ROMPIMENTO BAIXA",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_baixa,
+    shape_location.abovebar,
+    -1,
+    "BANDEIRA BAIXA",
+    cor_baixa
+)

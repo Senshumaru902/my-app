@@ -1,0 +1,196 @@
+
+-- ============================================================
+-- QMS SCANNER HISTORICO 3 SOLDADOS / 3 CORVOS V2
+-- IQ OPTION QCS MOBILE
+-- SOMENTE LEITURA | SEM ORDENS AUTOMATICAS
+-- ============================================================
+
+instrument {
+    name = "QMS SCANNER HISTORICO 3S3C V2",
+    short_name = "QMS 3S3C V2",
+    overlay = true
+}
+
+input_group {
+    "Padroes",
+    mostrar_soldados = input(true, "Mostrar tres soldados", input.boolean),
+    mostrar_corvos = input(true, "Mostrar tres corvos", input.boolean)
+}
+
+input_group {
+    "Filtros de qualidade",
+    exigir_progressao = input(true, "Exigir progressao", input.boolean),
+    filtrar_corpo = input(true, "Exigir corpo forte", input.boolean),
+    filtrar_sombras = input(true, "Filtrar sombras grandes", input.boolean)
+}
+
+input_group {
+    "Parametros",
+    corpo_minimo = input(55, "Corpo minimo (%)", input.integer, 1, 100),
+    sombra_maxima = input(35, "Sombra contraria maxima (%)", input.integer, 0, 100)
+}
+
+input_group {
+    "Cores",
+    cor_soldados = input {
+        default = "#2196FF",
+        type = input.color
+    },
+    cor_corvos = input {
+        default = "#A020F0",
+        type = input.color
+    },
+    cor_fraco = input {
+        default = "#FFB300",
+        type = input.color
+    }
+}
+
+-- ------------------------------------------------------------
+-- CANDLE ATUAL E ANTERIORES
+-- ------------------------------------------------------------
+
+amplitude0 = high - low
+amplitude1 = high[1] - low[1]
+amplitude2 = high[2] - low[2]
+
+corpo0 = abs(close - open)
+corpo1 = abs(close[1] - open[1])
+corpo2 = abs(close[2] - open[2])
+
+-- Evita divisao por zero.
+-- Amplitudes nulas nao passam nos filtros de qualidade.
+
+corpo_pct0 = iff(amplitude0 > 0, corpo0 / amplitude0 * 100, 0)
+corpo_pct1 = iff(amplitude1 > 0, corpo1 / amplitude1 * 100, 0)
+corpo_pct2 = iff(amplitude2 > 0, corpo2 / amplitude2 * 100, 0)
+
+-- ------------------------------------------------------------
+-- TRES SOLDADOS
+-- ------------------------------------------------------------
+
+soldados_base =
+    close > open and
+    close[1] > open[1] and
+    close[2] > open[2]
+
+soldados_progressao =
+    close > close[1] and
+    close[1] > close[2]
+
+soldados_corpo =
+    corpo_pct0 >= corpo_minimo and
+    corpo_pct1 >= corpo_minimo and
+    corpo_pct2 >= corpo_minimo
+
+-- Sombra superior: resistencia/rejeicao acima do corpo.
+sombra_sup0 = high - max(open, close)
+sombra_sup1 = high[1] - max(open[1], close[1])
+sombra_sup2 = high[2] - max(open[2], close[2])
+
+sombra_sup_pct0 = iff(amplitude0 > 0, sombra_sup0 / amplitude0 * 100, 100)
+sombra_sup_pct1 = iff(amplitude1 > 0, sombra_sup1 / amplitude1 * 100, 100)
+sombra_sup_pct2 = iff(amplitude2 > 0, sombra_sup2 / amplitude2 * 100, 100)
+
+soldados_sombras =
+    sombra_sup_pct0 <= sombra_maxima and
+    sombra_sup_pct1 <= sombra_maxima and
+    sombra_sup_pct2 <= sombra_maxima
+
+soldados_ok = soldados_base
+
+if exigir_progressao then
+    soldados_ok = soldados_ok and soldados_progressao
+end
+
+if filtrar_corpo then
+    soldados_ok = soldados_ok and soldados_corpo
+end
+
+if filtrar_sombras then
+    soldados_ok = soldados_ok and soldados_sombras
+end
+
+-- ------------------------------------------------------------
+-- TRES CORVOS
+-- ------------------------------------------------------------
+
+corvos_base =
+    close < open and
+    close[1] < open[1] and
+    close[2] < open[2]
+
+corvos_progressao =
+    close < close[1] and
+    close[1] < close[2]
+
+corvos_corpo =
+    corpo_pct0 >= corpo_minimo and
+    corpo_pct1 >= corpo_minimo and
+    corpo_pct2 >= corpo_minimo
+
+-- Sombra inferior: rejeicao abaixo do corpo.
+sombra_inf0 = min(open, close) - low
+sombra_inf1 = min(open[1], close[1]) - low[1]
+sombra_inf2 = min(open[2], close[2]) - low[2]
+
+sombra_inf_pct0 = iff(amplitude0 > 0, sombra_inf0 / amplitude0 * 100, 100)
+sombra_inf_pct1 = iff(amplitude1 > 0, sombra_inf1 / amplitude1 * 100, 100)
+sombra_inf_pct2 = iff(amplitude2 > 0, sombra_inf2 / amplitude2 * 100, 100)
+
+corvos_sombras =
+    sombra_inf_pct0 <= sombra_maxima and
+    sombra_inf_pct1 <= sombra_maxima and
+    sombra_inf_pct2 <= sombra_maxima
+
+corvos_ok = corvos_base
+
+if exigir_progressao then
+    corvos_ok = corvos_ok and corvos_progressao
+end
+
+if filtrar_corpo then
+    corvos_ok = corvos_ok and corvos_corpo
+end
+
+if filtrar_sombras then
+    corvos_ok = corvos_ok and corvos_sombras
+end
+
+-- ------------------------------------------------------------
+-- MARCACAO HISTORICA
+-- ------------------------------------------------------------
+
+ponto_soldados = iff(
+    mostrar_soldados and soldados_ok,
+    low,
+    nil
+)
+
+ponto_corvos = iff(
+    mostrar_corvos and corvos_ok,
+    high,
+    nil
+)
+
+-- ------------------------------------------------------------
+-- PLOTAGEM
+-- ------------------------------------------------------------
+
+plot(
+    ponto_soldados,
+    "QMS TRES SOLDADOS CONFIRMADOS",
+    cor_soldados,
+    4,
+    0,
+    style.points
+)
+
+plot(
+    ponto_corvos,
+    "QMS TRES CORVOS CONFIRMADOS",
+    cor_corvos,
+    4,
+    0,
+    style.points
+)

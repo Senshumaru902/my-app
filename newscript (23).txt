@@ -1,0 +1,504 @@
+------------------------------------------------------------
+-- QUANTUM MARKET STRUCTURE V2.1 LINE MOBILE OCULTACAO
+-- GRAFICO DE LINHA | RETRACAO + REVERSAO
+-- TOPOS / FUNDOS / FIBONACCI / EMA / SUPORTE / RESISTENCIA
+-- LATERALIZACAO + CONFLUENCIA DE REVERSAO
+-- HISTORICO DE SINAIS
+-- BREAK UP / BREAK DOWN OCULTOS
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------
+
+instrument {
+    name = "QUANTUM MARKET STRUCTURE V2.1 LINE",
+    short_name = "QMS LINE V2.1",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- 1. CONFIGURACOES
+------------------------------------------------------------
+
+periodoSwing = input(30, "Periodo do swing", input.integer, 10, 100)
+periodoSR = input(20, "Periodo suporte/resistencia", input.integer, 5, 100)
+periodoRSI = input(7, "Periodo RSI", input.integer, 2, 30)
+periodoVol = input(14, "Periodo volatilidade", input.integer, 3, 50)
+periodoLateral = input(10, "Periodo lateral", input.integer, 3, 30)
+
+------------------------------------------------------------
+-- 2. MEDIAS MOVEIS
+------------------------------------------------------------
+
+ema5 = ema(close, 5)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+------------------------------------------------------------
+-- 3. RSI E VOLATILIDADE DA LINHA
+------------------------------------------------------------
+
+rsiAtual = rsi(close, periodoRSI)
+
+variacao = abs(close - close[1])
+volatilidade = sma(variacao, periodoVol)
+volSegura = max(volatilidade, 0.000001)
+
+movimento = close - close[1]
+movimentoAnterior = close[1] - close[2]
+
+inclinacao5 = ema5 - ema5[3]
+inclinacao13 = ema13 - ema13[3]
+inclinacao21 = ema21 - ema21[3]
+
+------------------------------------------------------------
+-- 4. TENDENCIA E MICRO TENDENCIA
+------------------------------------------------------------
+
+tendenciaAlta =
+    ema5 > ema13 and
+    ema13 > ema21 and
+    close > ema21 and
+    inclinacao13 > 0
+
+tendenciaBaixa =
+    ema5 < ema13 and
+    ema13 < ema21 and
+    close < ema21 and
+    inclinacao13 < 0
+
+macroAlta = ema21 > ema50
+macroBaixa = ema21 < ema50
+
+microAlta = ema5 > ema13 and inclinacao5 > 0
+microBaixa = ema5 < ema13 and inclinacao5 < 0
+
+------------------------------------------------------------
+-- 5. CRUZAMENTOS
+------------------------------------------------------------
+
+cruzamentoAlta =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzamentoBaixa =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+------------------------------------------------------------
+-- 6. TOPOS E FUNDOS DO GRAFICO DE LINHA
+------------------------------------------------------------
+
+topoSwing = highest(close, periodoSwing)
+fundoSwing = lowest(close, periodoSwing)
+
+amplitudeSwing = topoSwing - fundoSwing
+amplitudeSegura = max(amplitudeSwing, 0.000001)
+
+topoLocal =
+    close[1] > close[2] and
+    close[1] > close
+
+fundoLocal =
+    close[1] < close[2] and
+    close[1] < close
+
+------------------------------------------------------------
+-- 7. FIBONACCI PARA MOVIMENTO DE ALTA
+------------------------------------------------------------
+
+fibAlta382 = topoSwing - amplitudeSwing * 0.382
+fibAlta500 = topoSwing - amplitudeSwing * 0.500
+fibAlta618 = topoSwing - amplitudeSwing * 0.618
+
+------------------------------------------------------------
+-- 8. FIBONACCI PARA MOVIMENTO DE BAIXA
+------------------------------------------------------------
+
+fibBaixa382 = fundoSwing + amplitudeSwing * 0.382
+fibBaixa500 = fundoSwing + amplitudeSwing * 0.500
+fibBaixa618 = fundoSwing + amplitudeSwing * 0.618
+
+------------------------------------------------------------
+-- 9. DIRECAO DO SWING
+------------------------------------------------------------
+
+swingAlta = ema21 > ema50
+swingBaixa = ema21 < ema50
+
+------------------------------------------------------------
+-- 10. SUPORTE E RESISTENCIA
+------------------------------------------------------------
+
+suporte = lowest(close[1], periodoSR)
+resistencia = highest(close[1], periodoSR)
+
+-- LOGICA INTERNA MANTIDA
+-- NAO DESENHAR BREAK UP / BREAK DOWN
+
+rompimentoAlta =
+    close > resistencia and
+    close[1] <= resistencia
+
+rompimentoBaixa =
+    close < suporte and
+    close[1] >= suporte
+
+------------------------------------------------------------
+-- 11. LATERALIZACAO
+------------------------------------------------------------
+
+distanciaMedias =
+    abs(ema5 - ema13) / volSegura
+
+forcaTendencia =
+    abs(inclinacao21) / volSegura
+
+amplitudeLateral =
+    highest(close, periodoLateral) -
+    lowest(close, periodoLateral)
+
+lateral =
+    distanciaMedias < 0.25 and
+    forcaTendencia < 0.20 and
+    rsiAtual >= 45 and
+    rsiAtual <= 55 and
+    amplitudeLateral <= volSegura * periodoLateral
+
+------------------------------------------------------------
+-- 12. PROXIMIDADE DOS NIVEIS FIBONACCI
+------------------------------------------------------------
+
+pertoFibAlta382 =
+    abs(close - fibAlta382) <= volSegura * 0.60
+
+pertoFibAlta500 =
+    abs(close - fibAlta500) <= volSegura * 0.60
+
+pertoFibAlta618 =
+    abs(close - fibAlta618) <= volSegura * 0.60
+
+pertoFibBaixa382 =
+    abs(close - fibBaixa382) <= volSegura * 0.60
+
+pertoFibBaixa500 =
+    abs(close - fibBaixa500) <= volSegura * 0.60
+
+pertoFibBaixa618 =
+    abs(close - fibBaixa618) <= volSegura * 0.60
+
+pertoFibAlta =
+    pertoFibAlta382 or
+    pertoFibAlta500 or
+    pertoFibAlta618
+
+pertoFibBaixa =
+    pertoFibBaixa382 or
+    pertoFibBaixa500 or
+    pertoFibBaixa618
+
+------------------------------------------------------------
+-- 13. PROXIMIDADE DO SUPORTE E RESISTENCIA
+------------------------------------------------------------
+
+pertoSuporte =
+    abs(close - suporte) <= volSegura * 0.60
+
+pertoResistencia =
+    abs(close - resistencia) <= volSegura * 0.60
+
+------------------------------------------------------------
+-- 14. CONFLUENCIA COM MEDIAS
+------------------------------------------------------------
+
+pertoEMA13 =
+    abs(close - ema13) <= volSegura * 0.60
+
+pertoEMA21 =
+    abs(close - ema21) <= volSegura * 0.60
+
+confluenciaMedia =
+    pertoEMA13 or pertoEMA21
+
+------------------------------------------------------------
+-- 15. CONFIRMACAO DE REVERSAO DE ALTA
+------------------------------------------------------------
+
+confirmacaoAlta =
+    close > close[1] and
+    close[1] <= close[2] and
+    rsiAtual > rsiAtual[1] and
+    ema5 >= ema5[1]
+
+------------------------------------------------------------
+-- 16. CONFIRMACAO DE REVERSAO DE BAIXA
+------------------------------------------------------------
+
+confirmacaoBaixa =
+    close < close[1] and
+    close[1] >= close[2] and
+    rsiAtual < rsiAtual[1] and
+    ema5 <= ema5[1]
+
+------------------------------------------------------------
+-- 17. CONFLUENCIA LATERAL DE ALTA
+------------------------------------------------------------
+
+confluenciaAlta =
+    (pertoSuporte or pertoFibAlta) and
+    (confluenciaMedia or pertoFibAlta) and
+    confirmacaoAlta
+
+------------------------------------------------------------
+-- 18. CONFLUENCIA LATERAL DE BAIXA
+------------------------------------------------------------
+
+confluenciaBaixa =
+    (pertoResistencia or pertoFibBaixa) and
+    (confluenciaMedia or pertoFibBaixa) and
+    confirmacaoBaixa
+
+------------------------------------------------------------
+-- 19. SINAIS LATERAIS DE REVERSAO
+------------------------------------------------------------
+
+lateralReversaoAlta =
+    lateral and
+    confluenciaAlta and
+    not rompimentoBaixa
+
+lateralReversaoBaixa =
+    lateral and
+    confluenciaBaixa and
+    not rompimentoAlta
+
+sinalLateralAlta =
+    lateralReversaoAlta and
+    not lateralReversaoAlta[1]
+
+sinalLateralBaixa =
+    lateralReversaoBaixa and
+    not lateralReversaoBaixa[1]
+
+------------------------------------------------------------
+-- 20. POSSIVEL REVERSAO FORA DA LATERALIZACAO
+------------------------------------------------------------
+
+possivelReversaoAlta =
+    not lateral and
+    (pertoSuporte or pertoFibAlta or pertoEMA21) and
+    confirmacaoAlta
+
+possivelReversaoBaixa =
+    not lateral and
+    (pertoResistencia or pertoFibBaixa or pertoEMA21) and
+    confirmacaoBaixa
+
+------------------------------------------------------------
+-- 21. LINHAS DAS MEDIAS
+------------------------------------------------------------
+
+plot(ema5, "EMA 5", "#00C853", 1)
+plot(ema13, "EMA 13", "#FFD600", 1)
+plot(ema21, "EMA 21", "#29B6F6", 2)
+plot(ema50, "EMA 50", "#AB47BC", 3)
+
+------------------------------------------------------------
+-- 22. SUPORTE E RESISTENCIA
+------------------------------------------------------------
+
+plot(suporte, "SUPORTE", "#26A69A", 1)
+plot(resistencia, "RESISTENCIA", "#EF5350", 1)
+
+------------------------------------------------------------
+-- 23. FIBONACCI DE ALTA
+------------------------------------------------------------
+
+plot(
+    iff(swingAlta, fibAlta382, nil),
+    "FIB ALTA 38.2",
+    "#FFD54F",
+    1
+)
+
+plot(
+    iff(swingAlta, fibAlta500, nil),
+    "FIB ALTA 50",
+    "#FF9800",
+    2
+)
+
+plot(
+    iff(swingAlta, fibAlta618, nil),
+    "FIB ALTA 61.8",
+    "#FF5722",
+    2
+)
+
+------------------------------------------------------------
+-- 24. FIBONACCI DE BAIXA
+------------------------------------------------------------
+
+plot(
+    iff(swingBaixa, fibBaixa382, nil),
+    "FIB BAIXA 38.2",
+    "#80CBC4",
+    1
+)
+
+plot(
+    iff(swingBaixa, fibBaixa500, nil),
+    "FIB BAIXA 50",
+    "#26A69A",
+    2
+)
+
+plot(
+    iff(swingBaixa, fibBaixa618, nil),
+    "FIB BAIXA 61.8",
+    "#00897B",
+    2
+)
+
+------------------------------------------------------------
+-- 25. HISTORICO DOS CRUZAMENTOS
+------------------------------------------------------------
+
+plot_shape(
+    cruzamentoAlta,
+    "CROSS UP",
+    shape_style.labelup,
+    shape_size.small,
+    "#00C853",
+    shape_location.belowbar,
+    0,
+    "CROSS UP",
+    "white"
+)
+
+plot_shape(
+    cruzamentoBaixa,
+    "CROSS DOWN",
+    shape_style.labeldown,
+    shape_size.small,
+    "#FF1744",
+    shape_location.abovebar,
+    0,
+    "CROSS DOWN",
+    "white"
+)
+
+------------------------------------------------------------
+-- 26. ROMPIMENTOS OCULTOS
+-- BREAK UP / BREAK DOWN NAO SAO DESENHADOS
+-- ROMPIMENTOS CONTINUAM NOS CALCULOS INTERNOS
+------------------------------------------------------------
+
+-- Intencionalmente sem plot_shape para rompimentoAlta
+-- Intencionalmente sem plot_shape para rompimentoBaixa
+
+------------------------------------------------------------
+-- 27. REVERSAO NA LATERALIZACAO
+------------------------------------------------------------
+
+plot_shape(
+    sinalLateralAlta,
+    "LATERAL REVERSAO ALTA",
+    shape_style.labelup,
+    shape_size.large,
+    "#00E676",
+    shape_location.belowbar,
+    0,
+    "LAT + REV ALTA",
+    "white"
+)
+
+plot_shape(
+    sinalLateralBaixa,
+    "LATERAL REVERSAO BAIXA",
+    shape_style.labeldown,
+    shape_size.large,
+    "#FF1744",
+    shape_location.abovebar,
+    0,
+    "LAT + REV BAIXA",
+    "white"
+)
+
+------------------------------------------------------------
+-- 28. POSSIVEL REVERSAO GERAL
+------------------------------------------------------------
+
+plot_shape(
+    possivelReversaoAlta,
+    "POSSIVEL REVERSAO ALTA",
+    shape_style.triangleup,
+    shape_size.normal,
+    "#00C853",
+    shape_location.belowbar,
+    0,
+    "REV ALTA",
+    "white"
+)
+
+plot_shape(
+    possivelReversaoBaixa,
+    "POSSIVEL REVERSAO BAIXA",
+    shape_style.triangledown,
+    shape_size.normal,
+    "#FF1744",
+    shape_location.abovebar,
+    0,
+    "REV BAIXA",
+    "white"
+)
+
+------------------------------------------------------------
+-- 29. TOPOS E FUNDOS
+------------------------------------------------------------
+
+plot_shape(
+    topoLocal,
+    "TOPO LOCAL",
+    shape_style.triangledown,
+    shape_size.small,
+    "#FF5252",
+    shape_location.abovebar,
+    0,
+    "TOPO",
+    "white"
+)
+
+plot_shape(
+    fundoLocal,
+    "FUNDO LOCAL",
+    shape_style.triangleup,
+    shape_size.small,
+    "#00E676",
+    shape_location.belowbar,
+    0,
+    "FUNDO",
+    "white"
+)
+
+------------------------------------------------------------
+-- 30. ESTADO LATERAL
+------------------------------------------------------------
+
+plot_shape(
+    lateral,
+    "MERCADO LATERAL",
+    shape_style.circle,
+    shape_size.small,
+    "#C87519",
+    shape_location.abovebar,
+    0,
+    "LATERAL",
+    "white"
+)
+
+------------------------------------------------------------
+-- FIM DO QMS V2.1 LINE MOBILE
+-- ANALISE PELO FECHAMENTO
+-- BREAK UP / BREAK DOWN OCULTOS
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------

@@ -1,0 +1,235 @@
+
+instrument {
+    name = "QMS QUALIFICADOR DINAMICO DE REJEICAO",
+    short_name = "QMS REJEICAO",
+    overlay = true
+}
+
+input_group {
+    "MEDIA E TENDENCIA",
+
+    periodo = input(13, "Periodo da media", input.integer, 2, 100),
+    suavizacao = input(2, "Suavizacao", input.integer, 1, 10)
+}
+
+input_group {
+    "QUALIFICADOR DE REJEICAO",
+
+    pavio_minimo = input(0.8, "Pavio minimo / corpo", input.double, 0.1, 5, 0.1),
+
+    pavio_forte = input(2.0, "Pavio forte / corpo", input.double, 0.5, 8, 0.1),
+
+    corpo_minimo = input(0.10, "Corpo minimo relativo", input.double, 0.01, 0.8, 0.01),
+
+    fechamento_minimo = input(0.35, "Fechamento proximo da minima", input.double, 0.05, 0.8, 0.05)
+}
+
+input_group {
+    "CORES DA MEDIA",
+
+    cor_forte = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_fraca = input {
+        default = "#FFD600",
+        type = input.color
+    },
+
+    cor_neutra = input {
+        default = "#808080",
+        type = input.color
+    }
+}
+
+input_group {
+    "CORES DAS REJEICOES",
+
+    cor_rej_forte = input {
+        default = "#00E676",
+        type = input.color
+    },
+
+    cor_rej_media = input {
+        default = "#FF9800",
+        type = input.color
+    },
+
+    cor_rej_fraca = input {
+        default = "#FF1744",
+        type = input.color
+    }
+}
+
+-- =====================================
+-- MEDIA DINAMICA
+-- =====================================
+
+media_base = ema(close, periodo)
+media_final = ema(media_base, suavizacao)
+
+-- =====================================
+-- IDENTIFICACAO DA TENDENCIA
+-- =====================================
+
+queda1 = media_final < media_final[1]
+
+queda2 =
+    queda1 and
+    media_final[1] < media_final[2]
+
+queda3 =
+    queda2 and
+    media_final[2] < media_final[3]
+
+queda4 =
+    queda3 and
+    media_final[3] < media_final[4]
+
+queda5 =
+    queda4 and
+    media_final[4] < media_final[5]
+
+tendencia_forte = queda5
+
+tendencia_fraca =
+    queda1 and not queda5
+
+tendencia_ativa = queda1
+
+-- =====================================
+-- MEDIA
+-- =====================================
+
+cor_linha = iff(
+    tendencia_forte,
+    cor_forte,
+    iff(
+        tendencia_fraca,
+        cor_fraca,
+        cor_neutra
+    )
+)
+
+plot(
+    media_final,
+    "MEDIA",
+    cor_linha,
+    2
+)
+
+-- =====================================
+-- ANALISE DO CANDLE FECHADO
+-- =====================================
+
+corpo = abs(close[1] - open[1])
+
+amplitude = high[1] - low[1]
+
+amplitude_segura =
+    max(amplitude, 0.00000001)
+
+corpo_seguro =
+    max(corpo, amplitude_segura * 0.05)
+
+pavio_superior =
+    high[1] - max(open[1], close[1])
+
+fechamento_relativo =
+    (close[1] - low[1]) / amplitude_segura
+
+corpo_relativo =
+    corpo / amplitude_segura
+
+relacao_pavio =
+    pavio_superior / corpo_seguro
+
+-- =====================================
+-- PONTUACAO DA REJEICAO
+-- =====================================
+
+nota_pavio =
+    min(100, relacao_pavio / pavio_forte * 100)
+
+nota_fechamento =
+    max(0, min(100,
+    (1 - fechamento_relativo) * 100))
+
+nota_corpo =
+    min(100, corpo_relativo * 200)
+
+nota_direcao = iff(
+    close[1] < open[1],
+    100,
+    35
+)
+
+pontuacao =
+    nota_pavio * 0.35 +
+    nota_fechamento * 0.30 +
+    nota_corpo * 0.15 +
+    nota_direcao * 0.20
+
+pontuacao_final =
+    min(100, max(0, pontuacao))
+
+-- =====================================
+-- QUALIFICADOR
+-- =====================================
+
+rejeicao_valida =
+    tendencia_ativa and
+    pavio_superior >= corpo_seguro * pavio_minimo and
+    corpo_relativo >= corpo_minimo and
+    fechamento_relativo <= fechamento_minimo
+
+rejeicao_forte =
+    rejeicao_valida and
+    pontuacao_final >= 75
+
+rejeicao_moderada =
+    rejeicao_valida and
+    pontuacao_final >= 50 and
+    pontuacao_final < 75
+
+rejeicao_fraca =
+    rejeicao_valida and
+    pontuacao_final < 50
+
+-- =====================================
+-- HISTORICO DE REJEICOES
+-- =====================================
+
+plot_shape(
+    rejeicao_forte,
+    "REJEICAO FORTE",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_rej_forte,
+    shape_location.abovebar,
+    0,
+    "FORTE"
+)
+
+plot_shape(
+    rejeicao_moderada,
+    "REJEICAO MODERADA",
+    shape_style.triangledown,
+    shape_size.normal,
+    cor_rej_media,
+    shape_location.abovebar,
+    0,
+    "MEDIA"
+)
+
+plot_shape(
+    rejeicao_fraca,
+    "REJEICAO FRACA",
+    shape_style.triangledown,
+    shape_size.small,
+    cor_rej_fraca,
+    shape_location.abovebar,
+    0,
+    "FRACA"
+)

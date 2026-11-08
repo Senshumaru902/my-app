@@ -1,0 +1,116 @@
+------------------------------------------------------------
+-- QMC ADX DMI FUSION V11 MOBILE
+-- LINHA CONTINUA NO GRAFICO
+-- VERDE = DMI COMPRADOR
+-- VERMELHO = DMI VENDEDOR
+-- AZUL = ADX FORTALECENDO
+-- LARANJA = ADX FRACO / LATERAL
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------
+
+instrument {
+    name = "QMC ADX DMI FUSION V11",
+    short_name = "ADX DMI V11",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- PARAMETROS
+------------------------------------------------------------
+
+periodo = input(14, "Periodo ADX DMI", input.integer, 2, 50)
+distancia = input(3, "Distancia da linha", input.integer, 1, 20)
+adxMinimo = input(20, "ADX minimo", input.integer, 5, 50)
+
+------------------------------------------------------------
+-- DMI
+------------------------------------------------------------
+
+movCima = high - high[1]
+movBaixo = low[1] - low
+
+dmMais = iff(movCima > movBaixo and movCima > 0, movCima, 0)
+dmMenos = iff(movBaixo > movCima and movBaixo > 0, movBaixo, 0)
+
+trA = high - low
+trB = abs(high - close[1])
+trC = abs(low - close[1])
+trAtual = max(trA, max(trB, trC))
+
+somaTR = sum(trAtual, periodo)
+somaMais = sum(dmMais, periodo)
+somaMenos = sum(dmMenos, periodo)
+
+trSeguro = iff(somaTR > 0, somaTR, 0.0001)
+
+diMais = 100 * somaMais / trSeguro
+diMenos = 100 * somaMenos / trSeguro
+
+------------------------------------------------------------
+-- ADX
+------------------------------------------------------------
+
+adxValor = adx(periodo)
+adxSubindo = adxValor > adxValor[1]
+
+------------------------------------------------------------
+-- POSICAO DA LINHA
+-- MESMA ESTRUTURA DA VERSAO FUNCIONAL
+------------------------------------------------------------
+
+variacao = abs(close - close[1])
+amplitude = sma(variacao, 14)
+amplitudeSegura = iff(amplitude > 0, amplitude, 0.0001)
+
+linha = high + amplitudeSegura * distancia
+
+------------------------------------------------------------
+-- ESTADO DIRECIONAL
+------------------------------------------------------------
+
+corLinha = iff(
+    adxValor < adxMinimo,
+    "#CC5500",
+    iff(
+        diMais > diMenos,
+        "#00FF00",
+        "#FF0000"
+    )
+)
+
+------------------------------------------------------------
+-- LINHA PRINCIPAL CONTINUA
+------------------------------------------------------------
+
+plot(linha, "QMC ADX DMI", corLinha, 3)
+
+------------------------------------------------------------
+-- CRUZAMENTOS DMI
+------------------------------------------------------------
+
+compra = diMais > diMenos and diMais[1] <= diMenos[1]
+venda = diMenos > diMais and diMenos[1] <= diMais[1]
+
+plot_shape(
+    compra,
+    "DMI ALTA",
+    shape_style.triangleup,
+    shape_size.large,
+    "#00FF00",
+    shape_location.belowbar,
+    0,
+    "DMI+",
+    "#00FF00"
+)
+
+plot_shape(
+    venda,
+    "DMI BAIXA",
+    shape_style.triangledown,
+    shape_size.large,
+    "#FF0000",
+    shape_location.abovebar,
+    0,
+    "DMI-",
+    "#FF0000"
+)

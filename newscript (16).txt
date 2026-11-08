@@ -1,0 +1,612 @@
+
+-- ============================================================
+-- QMS FIBONACCI DINAMICO M1 V11
+-- IQ OPTION / QUADCODE SCRIPT
+--
+-- VISUAL: SOMENTE UMA LINHA
+--
+-- VERDE    = CONFLUENCIA DE ALTA / CALL
+-- VERMELHO = CONFLUENCIA DE BAIXA / PUT
+-- AMARELO  = TESTE FIBONACCI
+-- BRANCO   = ROMPIMENTO / INVALIDACAO ESTRUTURAL
+-- CINZA    = NEUTRO
+--
+-- PROCESSAMENTO INTERNO:
+-- FIBONACCI 61.8 / 78.6 / 91.8
+-- TOPOS E FUNDOS
+-- EMA 3 / 30 / 60 / 200
+-- MACD
+-- MOMENTUM
+-- ENGOLFO
+-- TRES SOLDADOS / TRES CORVOS
+-- REJEICAO
+-- ROMPIMENTO
+-- PROJECAO DE ALVO
+-- INVALIDACAO
+--
+-- SOMENTE LEITURA
+-- SEM ORDENS AUTOMATICAS
+-- SEM MARTINGALE
+-- ============================================================
+
+instrument {
+    name = "QMS FIBONACCI DINAMICO M1 V11",
+    short_name = "QMS FIB DYN V11",
+    overlay = true
+}
+
+-- ============================================================
+-- CONFIGURACOES
+-- ============================================================
+
+input_group {
+    "Fibonacci",
+
+    periodo = input(60, "Janela da estrutura",
+        input.integer, 20, 200),
+
+    tolerancia = input(0.005, "Tolerancia do toque",
+        input.double, 0.001, 0.030, 0.001),
+
+    corpo_minimo = input(0.30, "Corpo minimo",
+        input.double, 0.10, 0.90, 0.05)
+}
+
+input_group {
+    "Medias Moveis",
+
+    periodo_ema_rapida = input(3, "EMA rapida",
+        input.integer, 2, 20),
+
+    periodo_ema_media = input(30, "EMA media",
+        input.integer, 10, 100),
+
+    periodo_ema_tendencia = input(60, "EMA tendencia",
+        input.integer, 20, 150),
+
+    periodo_ema_longa = input(200, "EMA longa",
+        input.integer, 50, 300)
+}
+
+input_group {
+    "Filtros",
+
+    exigir_ema200 = input(true, "Filtrar EMA 200",
+        input.boolean),
+
+    exigir_macd = input(true, "Confirmar MACD",
+        input.boolean),
+
+    exigir_momentum = input(true, "Confirmar Momentum",
+        input.boolean),
+
+    exigir_padrao = input(false, "Exigir padrao de candle",
+        input.boolean)
+}
+
+input_group {
+    "Linha QMS",
+
+    espessura_linha = input(5, "Espessura",
+        input.integer, 1, 5)
+}
+
+input_group {
+    "Projecao",
+
+    extensao_alvo = input(1.272, "Multiplicador do alvo",
+        input.double, 1.100, 2.000, 0.001)
+}
+
+-- ============================================================
+-- CORES
+-- ============================================================
+
+input_group {
+    "Cores da linha",
+
+    cor_call = input {
+        default = "#00FF66",
+        type = input.color
+    },
+
+    cor_put = input {
+        default = "#FF1744",
+        type = input.color
+    },
+
+    cor_teste = input {
+        default = "#FFD600",
+        type = input.color
+    },
+
+    cor_rompimento = input {
+        default = "#FFFFFF",
+        type = input.color
+    },
+
+    cor_neutro = input {
+        default = "#808080",
+        type = input.color
+    }
+}
+
+-- ============================================================
+-- EMAS INTERNAS
+-- ============================================================
+
+ema3 = ema(close, periodo_ema_rapida)
+ema30 = ema(close, periodo_ema_media)
+ema60 = ema(close, periodo_ema_tendencia)
+ema200 = ema(close, periodo_ema_longa)
+
+-- ============================================================
+-- DIRECAO
+-- ============================================================
+
+tendencia_alta =
+    ema3[1] > ema30[1] and
+    ema30[1] > ema60[1] and
+    close[1] > ema30[1]
+
+tendencia_baixa =
+    ema3[1] < ema30[1] and
+    ema30[1] < ema60[1] and
+    close[1] < ema30[1]
+
+direcao_alta =
+    tendencia_alta or
+    (
+        not tendencia_baixa and
+        close[1] > close[periodo + 1]
+    )
+
+direcao_baixa =
+    tendencia_baixa or
+    (
+        not tendencia_alta and
+        close[1] < close[periodo + 1]
+    )
+
+-- ============================================================
+-- FILTRO EMA 200
+-- ============================================================
+
+filtro_ema200_alta =
+    not exigir_ema200 or
+    close[1] > ema200[1]
+
+filtro_ema200_baixa =
+    not exigir_ema200 or
+    close[1] < ema200[1]
+
+-- ============================================================
+-- ESTRUTURA
+-- ============================================================
+
+topo = highest(high[1], periodo)
+fundo = lowest(low[1], periodo)
+
+amplitude = topo - fundo
+
+estrutura_valida = amplitude > 0
+
+-- ============================================================
+-- FIBONACCI 61.8 / 78.6 / 91.8
+-- ============================================================
+
+fib618_alta =
+    topo - amplitude * 0.618
+
+fib786_alta =
+    topo - amplitude * 0.786
+
+fib918_alta =
+    topo - amplitude * 0.918
+
+fib618_baixa =
+    fundo + amplitude * 0.618
+
+fib786_baixa =
+    fundo + amplitude * 0.786
+
+fib918_baixa =
+    fundo + amplitude * 0.918
+
+fib618 = iff(
+    direcao_alta,
+    fib618_alta,
+    fib618_baixa
+)
+
+fib786 = iff(
+    direcao_alta,
+    fib786_alta,
+    fib786_baixa
+)
+
+fib918 = iff(
+    direcao_alta,
+    fib918_alta,
+    fib918_baixa
+)
+
+-- ============================================================
+-- CANDLE FECHADO
+-- ============================================================
+
+o = open[1]
+c = close[1]
+h = high[1]
+l = low[1]
+
+amplitude_candle = h - l
+
+corpo = abs(c - o)
+
+corpo_relativo = iff(
+    amplitude_candle > 0,
+    corpo / amplitude_candle,
+    0
+)
+
+corpo_forte =
+    corpo_relativo >= corpo_minimo
+
+candle_verde = c > o
+candle_vermelho = c < o
+
+pavio_superior =
+    h - max(o, c)
+
+pavio_inferior =
+    min(o, c) - l
+
+-- ============================================================
+-- TOLERANCIA
+-- ============================================================
+
+margem = amplitude * tolerancia
+
+-- ============================================================
+-- TESTES FIBONACCI
+-- ============================================================
+
+toque618 =
+    estrutura_valida and
+    h >= fib618[1] - margem[1] and
+    l <= fib618[1] + margem[1]
+
+toque786 =
+    estrutura_valida and
+    h >= fib786[1] - margem[1] and
+    l <= fib786[1] + margem[1]
+
+toque918 =
+    estrutura_valida and
+    h >= fib918[1] - margem[1] and
+    l <= fib918[1] + margem[1]
+
+teste_fibonacci =
+    toque618 or
+    toque786 or
+    toque918
+
+-- ============================================================
+-- REJEICAO DE ALTA
+-- ============================================================
+
+rejeicao618_alta =
+    toque618 and
+    candle_verde and
+    c > fib618[1] and
+    pavio_inferior > pavio_superior
+
+rejeicao786_alta =
+    toque786 and
+    candle_verde and
+    c > fib786[1] and
+    pavio_inferior > pavio_superior
+
+rejeicao918_alta =
+    toque918 and
+    candle_verde and
+    c > fib918[1] and
+    pavio_inferior > pavio_superior
+
+-- ============================================================
+-- REJEICAO DE BAIXA
+-- ============================================================
+
+rejeicao618_baixa =
+    toque618 and
+    candle_vermelho and
+    c < fib618[1] and
+    pavio_superior > pavio_inferior
+
+rejeicao786_baixa =
+    toque786 and
+    candle_vermelho and
+    c < fib786[1] and
+    pavio_superior > pavio_inferior
+
+rejeicao918_baixa =
+    toque918 and
+    candle_vermelho and
+    c < fib918[1] and
+    pavio_superior > pavio_inferior
+
+rejeicao_alta =
+    rejeicao618_alta or
+    rejeicao786_alta or
+    rejeicao918_alta
+
+rejeicao_baixa =
+    rejeicao618_baixa or
+    rejeicao786_baixa or
+    rejeicao918_baixa
+
+-- ============================================================
+-- MACD
+-- ============================================================
+
+macd_linha =
+    ema(close, 12) - ema(close, 26)
+
+macd_sinal =
+    ema(macd_linha, 9)
+
+macd_alta =
+    macd_linha[1] > macd_sinal[1]
+
+macd_baixa =
+    macd_linha[1] < macd_sinal[1]
+
+filtro_macd_alta =
+    not exigir_macd or macd_alta
+
+filtro_macd_baixa =
+    not exigir_macd or macd_baixa
+
+-- ============================================================
+-- MOMENTUM
+-- ============================================================
+
+momentum_alta =
+    close[1] > close[11]
+
+momentum_baixa =
+    close[1] < close[11]
+
+filtro_momentum_alta =
+    not exigir_momentum or momentum_alta
+
+filtro_momentum_baixa =
+    not exigir_momentum or momentum_baixa
+
+-- ============================================================
+-- PADROES DE CANDLE
+-- ============================================================
+
+engolfo_alta =
+    close[2] < open[2] and
+    close[1] > open[1] and
+    open[1] <= close[2] and
+    close[1] >= open[2]
+
+engolfo_baixa =
+    close[2] > open[2] and
+    close[1] < open[1] and
+    open[1] >= close[2] and
+    close[1] <= open[2]
+
+tres_soldados =
+    close[3] > open[3] and
+    close[2] > open[2] and
+    close[1] > open[1] and
+    close[2] > close[3] and
+    close[1] > close[2]
+
+tres_corvos =
+    close[3] < open[3] and
+    close[2] < open[2] and
+    close[1] < open[1] and
+    close[2] < close[3] and
+    close[1] < close[2]
+
+padrao_alta =
+    engolfo_alta or tres_soldados
+
+padrao_baixa =
+    engolfo_baixa or tres_corvos
+
+filtro_padrao_alta =
+    not exigir_padrao or padrao_alta
+
+filtro_padrao_baixa =
+    not exigir_padrao or padrao_baixa
+
+-- ============================================================
+-- CONFIRMACAO CALL / PUT
+-- ============================================================
+
+sinal_call =
+    estrutura_valida and
+    direcao_alta and
+    rejeicao_alta and
+    filtro_ema200_alta and
+    filtro_macd_alta and
+    filtro_momentum_alta and
+    filtro_padrao_alta
+
+sinal_put =
+    estrutura_valida and
+    direcao_baixa and
+    rejeicao_baixa and
+    filtro_ema200_baixa and
+    filtro_macd_baixa and
+    filtro_momentum_baixa and
+    filtro_padrao_baixa
+
+-- ============================================================
+-- CONFLUENCIA DIRECIONAL
+--
+-- PERMITE VERDE E VERMELHO MESMO SEM REJEICAO.
+-- NAO SIGNIFICA ENTRADA CONFIRMADA.
+-- ============================================================
+
+confluencia_alta =
+    estrutura_valida and
+    direcao_alta and
+    filtro_ema200_alta and
+    filtro_macd_alta and
+    filtro_momentum_alta and
+    filtro_padrao_alta
+
+confluencia_baixa =
+    estrutura_valida and
+    direcao_baixa and
+    filtro_ema200_baixa and
+    filtro_macd_baixa and
+    filtro_momentum_baixa and
+    filtro_padrao_baixa
+
+-- ============================================================
+-- ROMPIMENTO FIBONACCI
+--
+-- IDENTIFICA O CRUZAMENTO DO NIVEL.
+-- NAO FICA BRANCO APENAS POR ESTAR ABAIXO
+-- OU ACIMA DO NIVEL.
+-- ============================================================
+
+rompe618_alta =
+    direcao_alta and
+    close[2] >= fib618[2] and
+    c < fib618[1]
+
+rompe786_alta =
+    direcao_alta and
+    close[2] >= fib786[2] and
+    c < fib786[1]
+
+rompe918_alta =
+    direcao_alta and
+    close[2] >= fib918[2] and
+    c < fib918[1]
+
+rompe618_baixa =
+    direcao_baixa and
+    close[2] <= fib618[2] and
+    c > fib618[1]
+
+rompe786_baixa =
+    direcao_baixa and
+    close[2] <= fib786[2] and
+    c > fib786[1]
+
+rompe918_baixa =
+    direcao_baixa and
+    close[2] <= fib918[2] and
+    c > fib918[1]
+
+rompimento =
+    rompe618_alta or
+    rompe786_alta or
+    rompe918_alta or
+    rompe618_baixa or
+    rompe786_baixa or
+    rompe918_baixa
+
+-- ============================================================
+-- INVALIDACAO ESTRUTURAL
+--
+-- COMPARA COM A ESTRUTURA ANTERIOR.
+-- EVITA COMPARAR O CANDLE COM SEU PROPRIO EXTREMO.
+-- ============================================================
+
+invalidacao_alta =
+    direcao_alta and
+    c < fundo[1]
+
+invalidacao_baixa =
+    direcao_baixa and
+    c > topo[1]
+
+invalidacao_estrutural =
+    invalidacao_alta or
+    invalidacao_baixa
+
+-- ============================================================
+-- PROJECAO DE ALVO INTERNA
+-- ============================================================
+
+alvo_alta =
+    topo + amplitude * (extensao_alvo - 1)
+
+alvo_baixa =
+    fundo - amplitude * (extensao_alvo - 1)
+
+alvo = iff(
+    direcao_alta,
+    alvo_alta,
+    iff(
+        direcao_baixa,
+        alvo_baixa,
+        close[1]
+    )
+)
+
+-- ============================================================
+-- ESTADO VISUAL
+--
+-- PRIORIDADE:
+-- 1 CALL CONFIRMADO
+-- 2 PUT CONFIRMADO
+-- 3 ROMPIMENTO / INVALIDACAO
+-- 4 TESTE FIBONACCI
+-- 5 CONFLUENCIA DIRECIONAL
+-- 6 NEUTRO
+-- ============================================================
+
+cor_linha = iff(
+    sinal_call,
+    cor_call,
+    iff(
+        sinal_put,
+        cor_put,
+        iff(
+            rompimento or invalidacao_estrutural,
+            cor_rompimento,
+            iff(
+                teste_fibonacci,
+                cor_teste,
+                iff(
+                    confluencia_alta,
+                    cor_call,
+                    iff(
+                        confluencia_baixa,
+                        cor_put,
+                        cor_neutro
+                    )
+                )
+            )
+        )
+    )
+)
+
+-- ============================================================
+-- UNICA LINHA VISIVEL
+-- ============================================================
+
+linha_qms = ema(close, 3)
+
+plot(
+    linha_qms,
+    "QMS LINHA DIRECIONAL",
+    cor_linha,
+    espessura_linha
+)
+
+-- ============================================================
+-- FIM QMS FIBONACCI DINAMICO M1 V11
+-- ============================================================

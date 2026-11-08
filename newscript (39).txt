@@ -1,0 +1,78 @@
+--------------------------------------------------
+-- NEXT CANDLE PRO V1.0
+-- PREVISAO DAS PROXIMAS 3 VELAS
+-- AZUL = ALTA | ROXO = BAIXA
+-- SEM ORDENS | SEM PAINEL | SEM SETAS
+--------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE PRO V1.0",
+    short_name = "NEXT3",
+    overlay = true
+}
+
+input_group {
+    "Configuracao",
+    periodo_rapido = input(5, "EMA Rapida", input.integer, 2, 20, 1),
+    periodo_lento = input(13, "EMA Lenta", input.integer, 5, 50, 1),
+    periodo_forca = input(7, "RSI", input.integer, 2, 20, 1)
+}
+
+input_group {
+    "Cores",
+    cor_alta = input { default = "#168BFF", type = input.color },
+    cor_baixa = input { default = "#7628B9", type = input.color }
+}
+
+-- INDICADORES
+ema_fast = ema(close, periodo_rapido)
+ema_slow = ema(close, periodo_lento)
+rsi_val = rsi(close, periodo_forca)
+
+-- DIRECAO E MOMENTUM
+tendencia = ema_fast - ema_slow
+momentum1 = close - close[1]
+momentum2 = close[1] - close[2]
+momentum3 = close[2] - close[3]
+
+-- PREVISOES PARA 1, 2 E 3 VELAS
+-- Cada horizonte recebe uma pontuacao propria.
+
+p1 = tendencia + momentum1
+p2 = tendencia + momentum1 + momentum2
+p3 = tendencia + momentum1 + momentum2 + momentum3
+
+-- FORCA RELATIVA
+forca_alta = rsi_val >= 52
+forca_baixa = rsi_val <= 48
+
+-- VOTOS DAS TRES PREVISOES
+votos_alta =
+    (p1 > 0 and 1 or 0) +
+    (p2 > 0 and 1 or 0) +
+    (p3 > 0 and 1 or 0)
+
+votos_baixa =
+    (p1 < 0 and 1 or 0) +
+    (p2 < 0 and 1 or 0) +
+    (p3 < 0 and 1 or 0)
+
+-- FILTRO DE CONFLITO
+alta = tendencia > 0 and votos_alta >= 2 and forca_alta
+baixa = tendencia < 0 and votos_baixa >= 2 and forca_baixa
+
+-- SEM CONFLITO: AZUL OU ROXO
+-- Na indefinicao, mantem a ultima direcao.
+direcao = alta and 1 or baixa and -1 or nz(direcao[1], 1)
+
+cor_candle = direcao == 1 and cor_alta or cor_baixa
+
+-- COLORACAO DOS CANDLES
+plot_candle(
+    open,
+    high,
+    low,
+    close,
+    "Previsao NEXT3",
+    cor_candle
+)

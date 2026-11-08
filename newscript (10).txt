@@ -1,0 +1,133 @@
+
+instrument {
+    name = "QMS CRUZ APOS PERNADA FORTE",
+    short_name = "QMS CRUZ TOPO",
+    overlay = true
+}
+
+input_group {
+    "FORCA DA PERNADA",
+    periodo = input(12, "Candles da pernada", input.integer, 3, 50),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 50),
+    fator_forte = input(2.5, "Alta forte ATR", input.double, 1.0, 8.0),
+    fator_extremo = input(4.0, "Alta extrema ATR", input.double, 2.0, 12.0)
+}
+
+input_group {
+    "DETECCAO DA CRUZ",
+    corpo_maximo = input(0.30, "Corpo maximo da vela", input.double, 0.05, 0.60),
+    pavio_minimo = input(0.20, "Pavio minimo (%)", input.double, 0.05, 0.80),
+    distancia_topo = input(0.35, "Distancia do topo ATR", input.double, 0.05, 2.0)
+}
+
+input_group {
+    "VISUAL",
+    mostrar_forte = input(true, "Mostrar cruz forte", input.boolean),
+    mostrar_extrema = input(true, "Mostrar cruz extrema", input.boolean)
+}
+
+-- ==================================
+-- 1. MEDICAO DA PERNADA DE ALTA
+-- ==================================
+
+atr = sma(high - low, atr_periodo)
+
+fundo_perna = lowest(low, periodo)[1]
+topo_perna = highest(high, periodo)[1]
+
+amplitude_perna = topo_perna - fundo_perna
+
+alta_forte =
+    atr > 0 and
+    amplitude_perna >= atr * fator_forte
+
+alta_extrema =
+    atr > 0 and
+    amplitude_perna >= atr * fator_extremo
+
+-- ==================================
+-- 2. CONFIRMACAO DA SUBIDA
+-- ==================================
+
+preco_subiu =
+    close[1] > close[2] and
+    close[2] > close[3]
+
+preco_acima =
+    close[1] > fundo_perna + amplitude_perna * 0.65
+
+perna_confirmada =
+    preco_subiu and
+    preco_acima
+
+-- ==================================
+-- 3. IDENTIFICACAO DA CRUZ
+-- ==================================
+
+amplitude_candle = high - low
+
+corpo = abs(close - open)
+
+pavio_superior = high - max(open, close)
+pavio_inferior = min(open, close) - low
+
+corpo_pequeno =
+    amplitude_candle > 0 and
+    corpo <= amplitude_candle * corpo_maximo
+
+pavio_presente =
+    amplitude_candle > 0 and
+    (pavio_superior + pavio_inferior) >=
+    amplitude_candle * pavio_minimo
+
+cruz =
+    corpo_pequeno and
+    pavio_presente
+
+-- ==================================
+-- 4. PROXIMIDADE DO PICO
+-- ==================================
+
+proximo_topo =
+    atr > 0 and
+    (topo_perna - high) <= atr * distancia_topo
+
+-- ==================================
+-- 5. CRUZ APOS SUBIDA FORTE
+-- ==================================
+
+cruz_forte =
+    alta_forte and
+    perna_confirmada and
+    cruz and
+    proximo_topo
+
+cruz_extrema =
+    alta_extrema and
+    perna_confirmada and
+    cruz and
+    proximo_topo
+
+-- ==================================
+-- 6. DESENHO NO GRAFICO
+-- ==================================
+
+plot_shape(
+    mostrar_forte and cruz_forte and not cruz_extrema,
+    "CRUZ ALTA FORTE",
+    shape_style.cross,
+    shape_size.large,
+    "#FFD700",
+    shape_location.abovebar
+)
+
+plot_shape(
+    mostrar_extrema and cruz_extrema,
+    "CRUZ ALTA EXTREMA",
+    shape_style.cross,
+    shape_size.large,
+    "#FF2020",
+    shape_location.abovebar
+)
+
+-- FIM QMS CRUZ APOS PERNADA FORTE

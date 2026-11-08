@@ -1,0 +1,623 @@
+--------------------------------------------------
+-- NEXT CANDLE PRO FUSION V2.1 ELITE
+-- QCS / LUA MOBILE
+-- CRUZAMENTO + REVERSAO + ROMPIMENTO
+-- FILTRO DE TENDENCIA / ANGULO / MOMENTUM
+-- SINAIS BASEADOS NO CANDLE ANTERIOR FECHADO
+-- SEM CALL / PUT | SEM ORDENS AUTOMATICAS
+--------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE PRO FUSION V2.1 ELITE",
+    short_name = "NCP FUSION",
+    overlay = true
+}
+
+--------------------------------------------------
+-- 1. CONFIGURACOES
+--------------------------------------------------
+
+input_group {
+    "Medias",
+    periodo_rapido = input(5, "EMA Rapida", input.integer, 2, 20, 1),
+    periodo_lento = input(13, "EMA Lenta", input.integer, 5, 50, 1),
+    periodo_tendencia = input(21, "EMA Tendencia", input.integer, 10, 100, 1),
+    periodo_macro = input(50, "EMA Macro", input.integer, 20, 200, 1)
+}
+
+input_group {
+    "Filtros Elite",
+    periodo_rsi = input(7, "Periodo RSI", input.integer, 2, 30, 1),
+    periodo_angulo = input(3, "Periodo Angulo", input.integer, 1, 10, 1),
+    limite_angulo = input(0.10, "Angulo Minimo", input.double, 0.01, 1.00, 0.01),
+    periodo_sr = input(20, "Suporte / Resistencia", input.integer, 5, 100, 1),
+    periodo_atr = input(7, "Periodo ATR", input.integer, 2, 30, 1)
+}
+
+input_group {
+    "Cores",
+    cor_alta = input { default = "#168BFF", type = input.color },
+    cor_baixa = input { default = "#7628B9", type = input.color },
+    cor_lateral = input { default = "#A64B00", type = input.color },
+    cor_rev_alta = input { default = "#00D26A", type = input.color },
+    cor_rev_baixa = input { default = "#FF3030", type = input.color },
+    cor_cruzamento = input { default = "#FFD54F", type = input.color }
+}
+
+--------------------------------------------------
+-- 2. MEDIAS E RSI
+--------------------------------------------------
+
+ema5 = ema(close, periodo_rapido)
+ema13 = ema(close, periodo_lento)
+ema21 = ema(close, periodo_tendencia)
+ema50 = ema(close, periodo_macro)
+
+rsi_val = rsi(close, periodo_rsi)
+
+--------------------------------------------------
+-- 3. ATR
+--------------------------------------------------
+
+tr0 = high - low
+tr1 = abs(high - close[1])
+tr2 = abs(low - close[1])
+
+tr_maior = max(tr1, tr2)
+tr_final = max(tr0, tr_maior)
+
+atr_base = ema(tr_final, periodo_atr)
+atr_seguro = max(atr_base, 0.0000001)
+
+--------------------------------------------------
+-- 4. ANGULO DAS MEDIAS
+--------------------------------------------------
+
+angulo5 =
+    (ema5 - ema5[periodo_angulo]) / atr_seguro
+
+angulo13 =
+    (ema13 - ema13[periodo_angulo]) / atr_seguro
+
+angulo21 =
+    (ema21 - ema21[periodo_angulo]) / atr_seguro
+
+medias_subindo =
+    angulo5 > limite_angulo and
+    angulo13 > limite_angulo and
+    angulo21 > 0
+
+medias_descendo =
+    angulo5 < -limite_angulo and
+    angulo13 < -limite_angulo and
+    angulo21 < 0
+
+medias_lateralizadas =
+    not medias_subindo and
+    not medias_descendo
+
+distancia_medias =
+    abs(ema5 - ema13) / atr_seguro
+
+lateral =
+    medias_lateralizadas or
+    distancia_medias < 0.08
+
+--------------------------------------------------
+-- 5. TENDENCIA
+--------------------------------------------------
+
+tendencia_alta =
+    ema5 > ema13 and
+    ema13 > ema21 and
+    close > ema21 and
+    medias_subindo and
+    ema21 > ema50
+
+tendencia_baixa =
+    ema5 < ema13 and
+    ema13 < ema21 and
+    close < ema21 and
+    medias_descendo and
+    ema21 < ema50
+
+--------------------------------------------------
+-- 6. MOMENTUM
+--------------------------------------------------
+
+momentum_alta =
+    close > close[1] and
+    close[1] >= close[2] and
+    rsi_val >= 55
+
+momentum_baixa =
+    close < close[1] and
+    close[1] <= close[2] and
+    rsi_val <= 45
+
+--------------------------------------------------
+-- 7. ESTRUTURA DO CANDLE
+--------------------------------------------------
+
+amplitude = high - low
+amplitude_segura = max(amplitude, 0.0000001)
+
+corpo = abs(close - open)
+corpo_seguro = max(corpo, 0.0000001)
+
+pavio_superior = high - max(open, close)
+pavio_inferior = min(open, close) - low
+
+posicao_fechamento =
+    (close - low) / amplitude_segura
+
+corpo_forte =
+    corpo / amplitude_segura >= 0.50
+
+fechamento_forte_alta =
+    posicao_fechamento >= 0.70
+
+fechamento_forte_baixa =
+    posicao_fechamento <= 0.30
+
+vela_alta = close > open
+vela_baixa = close < open
+
+--------------------------------------------------
+-- 8. CRUZAMENTO REAL EMA5 / EMA13
+--------------------------------------------------
+
+cruzou_cima_bruto =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzou_baixo_bruto =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+cruzou_cima =
+    cruzou_cima_bruto and
+    tendencia_alta and
+    momentum_alta and
+    not lateral
+
+cruzou_baixo =
+    cruzou_baixo_bruto and
+    tendencia_baixa and
+    momentum_baixa and
+    not lateral
+
+--------------------------------------------------
+-- 9. CONTEXTO ANTERIOR
+--------------------------------------------------
+
+contexto_baixa =
+    close[1] < close[2] and
+    close[2] <= close[3]
+
+contexto_alta =
+    close[1] > close[2] and
+    close[2] >= close[3]
+
+contexto_estrela_baixa =
+    close[3] < close[4] and
+    close[4] <= close[5]
+
+contexto_estrela_alta =
+    close[3] > close[4] and
+    close[4] >= close[5]
+
+--------------------------------------------------
+-- 10. REVERSAO DE ALTA
+--------------------------------------------------
+
+martelo =
+    amplitude > 0 and
+    pavio_inferior >= corpo_seguro * 2 and
+    pavio_superior <= corpo_seguro and
+    posicao_fechamento >= 0.65 and
+    contexto_baixa
+
+engolfo_alta =
+    vela_alta and
+    close[1] < open[1] and
+    open <= close[1] and
+    close >= open[1] and
+    contexto_baixa and
+    corpo_forte
+
+corpo_ant1 = abs(close[1] - open[1])
+amplitude_ant1 = high[1] - low[1]
+meio_ant2 = (open[2] + close[2]) / 2
+
+estrela_manha =
+    contexto_estrela_baixa and
+    close[2] < open[2] and
+    amplitude_ant1 > 0 and
+    corpo_ant1 / max(amplitude_ant1, 0.0000001) <= 0.30 and
+    vela_alta and
+    close >= meio_ant2 and
+    fechamento_forte_alta
+
+pin_alta =
+    amplitude > 0 and
+    pavio_inferior >= corpo_seguro * 2.5 and
+    posicao_fechamento >= 0.70 and
+    contexto_baixa
+
+--------------------------------------------------
+-- 11. REVERSAO DE BAIXA
+--------------------------------------------------
+
+estrela_cadente =
+    amplitude > 0 and
+    pavio_superior >= corpo_seguro * 2 and
+    pavio_inferior <= corpo_seguro and
+    posicao_fechamento <= 0.35 and
+    contexto_alta
+
+engolfo_baixa =
+    vela_baixa and
+    close[1] > open[1] and
+    open >= close[1] and
+    close <= open[1] and
+    contexto_alta and
+    corpo_forte
+
+estrela_noite =
+    contexto_estrela_alta and
+    close[2] > open[2] and
+    amplitude_ant1 > 0 and
+    corpo_ant1 / max(amplitude_ant1, 0.0000001) <= 0.30 and
+    vela_baixa and
+    close <= meio_ant2 and
+    fechamento_forte_baixa
+
+pin_baixa =
+    amplitude > 0 and
+    pavio_superior >= corpo_seguro * 2.5 and
+    posicao_fechamento <= 0.30 and
+    contexto_alta
+
+--------------------------------------------------
+-- 12. SUPORTE E RESISTENCIA
+--------------------------------------------------
+
+resistencia = highest(high, periodo_sr)[1]
+suporte = lowest(low, periodo_sr)[1]
+
+rompimento_alta_bruto =
+    close > resistencia and
+    close[1] <= resistencia
+
+rompimento_baixa_bruto =
+    close < suporte and
+    close[1] >= suporte
+
+falso_rompimento_alta =
+    high > resistencia and
+    close <= resistencia and
+    pavio_superior > corpo_seguro
+
+falso_rompimento_baixa =
+    low < suporte and
+    close >= suporte and
+    pavio_inferior > corpo_seguro
+
+rompimento_alta =
+    rompimento_alta_bruto and
+    not falso_rompimento_alta and
+    fechamento_forte_alta and
+    corpo_forte and
+    momentum_alta and
+    tendencia_alta and
+    distancia_medias >= 0.10
+
+rompimento_baixa =
+    rompimento_baixa_bruto and
+    not falso_rompimento_baixa and
+    fechamento_forte_baixa and
+    corpo_forte and
+    momentum_baixa and
+    tendencia_baixa and
+    distancia_medias >= 0.10
+
+--------------------------------------------------
+-- 13. FILTRO FINAL DE REVERSAO
+--------------------------------------------------
+
+reversao_alta_bruta =
+    martelo or
+    engolfo_alta or
+    estrela_manha or
+    pin_alta
+
+reversao_baixa_bruta =
+    estrela_cadente or
+    engolfo_baixa or
+    estrela_noite or
+    pin_baixa
+
+reversao_alta =
+    reversao_alta_bruta and
+    not lateral and
+    not falso_rompimento_baixa and
+    fechamento_forte_alta
+
+reversao_baixa =
+    reversao_baixa_bruta and
+    not lateral and
+    not falso_rompimento_alta and
+    fechamento_forte_baixa
+
+--------------------------------------------------
+-- 14. DOJI
+-- IDENTIFICACAO VISUAL, SEM SINAL DE ENTRADA
+--------------------------------------------------
+
+doji =
+    amplitude > 0 and
+    corpo / amplitude_segura <= 0.10
+
+--------------------------------------------------
+-- 15. PRIORIDADE DOS SINAIS
+--------------------------------------------------
+
+sinal_cruzamento =
+    cruzou_cima or cruzou_baixo
+
+sinal_reversao =
+    reversao_alta or reversao_baixa
+
+plot_martelo =
+    martelo and
+    not sinal_cruzamento
+
+plot_engolfo_alta =
+    engolfo_alta and
+    not sinal_cruzamento
+
+plot_estrela_manha =
+    estrela_manha and
+    not sinal_cruzamento
+
+plot_pin_alta =
+    pin_alta and
+    not martelo and
+    not engolfo_alta and
+    not estrela_manha and
+    not sinal_cruzamento
+
+plot_estrela_cadente =
+    estrela_cadente and
+    not sinal_cruzamento
+
+plot_engolfo_baixa =
+    engolfo_baixa and
+    not sinal_cruzamento
+
+plot_estrela_noite =
+    estrela_noite and
+    not sinal_cruzamento
+
+plot_pin_baixa =
+    pin_baixa and
+    not estrela_cadente and
+    not engolfo_baixa and
+    not estrela_noite and
+    not sinal_cruzamento
+
+plot_rompimento_alta =
+    rompimento_alta and
+    not sinal_cruzamento and
+    not sinal_reversao
+
+plot_rompimento_baixa =
+    rompimento_baixa and
+    not sinal_cruzamento and
+    not sinal_reversao
+
+--------------------------------------------------
+-- 16. CORES DAS VELAS
+--------------------------------------------------
+
+cor_tendencia =
+    lateral and cor_lateral or
+    tendencia_alta and cor_alta or
+    tendencia_baixa and cor_baixa or
+    cor_lateral
+
+cor_final =
+    reversao_alta and cor_rev_alta or
+    reversao_baixa and cor_rev_baixa or
+    cor_tendencia
+
+plot_candle(
+    open, high, low, close,
+    "NCP FUSION V2.1",
+    cor_final
+)
+
+--------------------------------------------------
+-- 17. CRUZAMENTOS
+-- CONDICAO CALCULADA NO CANDLE ANTERIOR
+--------------------------------------------------
+
+plot_shape(
+    cruzou_cima[1],
+    "CRUZAMENTO ALTA",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_cruzamento,
+    shape_location.belowbar,
+    0,
+    "CRUZOU CIMA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    cruzou_baixo[1],
+    "CRUZAMENTO BAIXA",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_cruzamento,
+    shape_location.abovebar,
+    0,
+    "CRUZOU BAIXO",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 18. REVERSOES DE ALTA CONFIRMADAS
+--------------------------------------------------
+
+plot_shape(
+    plot_martelo[1],
+    "MARTELO",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "MARTELO",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_engolfo_alta[1],
+    "ENGOLFO ALTA",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "ENGOLFO ALTA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_estrela_manha[1],
+    "ESTRELA MANHA",
+    shape_style.arrowup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "ESTRELA MANHA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_pin_alta[1],
+    "PIN ALTA",
+    shape_style.arrowup,
+    shape_size.normal,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "PIN BAR ALTA",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 19. REVERSOES DE BAIXA CONFIRMADAS
+--------------------------------------------------
+
+plot_shape(
+    plot_estrela_cadente[1],
+    "ESTRELA CADENTE",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ESTRELA CADENTE",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_engolfo_baixa[1],
+    "ENGOLFO BAIXA",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ENGOLFO BAIXA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_estrela_noite[1],
+    "ESTRELA NOITE",
+    shape_style.arrowdown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ESTRELA NOITE",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_pin_baixa[1],
+    "PIN BAIXA",
+    shape_style.arrowdown,
+    shape_size.normal,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "PIN BAR BAIXA",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 20. ROMPIMENTOS CONFIRMADOS
+--------------------------------------------------
+
+plot_shape(
+    plot_rompimento_alta[1],
+    "ROMPIMENTO ALTA",
+    shape_style.triangleup,
+    shape_size.normal,
+    cor_alta,
+    shape_location.belowbar,
+    0,
+    "ROMPIMENTO ALTA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    plot_rompimento_baixa[1],
+    "ROMPIMENTO BAIXA",
+    shape_style.triangledown,
+    shape_size.normal,
+    cor_baixa,
+    shape_location.abovebar,
+    0,
+    "ROMPIMENTO BAIXA",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- 21. DOJI
+--------------------------------------------------
+
+plot_shape(
+    doji[1],
+    "DOJI",
+    shape_style.circle,
+    shape_size.small,
+    cor_cruzamento,
+    shape_location.abovebar,
+    0,
+    "DOJI",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- FIM
+-- INDICADOR VISUAL
+-- SEM ORDENS AUTOMATICAS
+-- SEM CALL / PUT
+--------------------------------------------------

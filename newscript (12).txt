@@ -1,0 +1,68 @@
+
+instrument {
+    name = "QMS M APOS ALTA E REJEICAO",
+    short_name = "QMS M ALTA",
+    overlay = true
+}
+
+input_group {
+    "CONFIGURACAO",
+
+    distancia = input(8, "Distancia entre topos", input.integer, 3, 30),
+
+    tolerancia = input(1.0, "Tolerancia dos topos (%)", input.double, 0.1, 3.0),
+
+    alta_minima = input(3, "Candles de alta anteriores", input.integer, 1, 10),
+
+    pavio_minimo = input(25, "Rejeicao minima (%)", input.integer, 10, 90)
+}
+
+input_group {
+    "VISUAL",
+
+    cor = input {
+        default = "#A020F0",
+        type = input.color
+    }
+}
+
+-- TOPO DUPLO
+topo2 = high[1]
+topo1 = high[distancia + 1]
+
+diferenca = abs(topo2 - topo1) /
+    max(topo1, 0.000001) * 100
+
+m =
+    high[1] >= high[2] and
+    high[1] >= high[0] and
+    high[distancia + 1] >= high[distancia + 2] and
+    high[distancia + 1] >= high[distancia] and
+    diferenca <= tolerancia
+
+-- ALTA ANTES DO PRIMEIRO TOPO
+alta =
+    close[distancia + 2] > close[distancia + 2 + alta_minima]
+
+-- REJEICAO APOS SEGUNDO TOPO
+amplitude = high - low
+pavio = high - max(open, close)
+
+rejeicao =
+    amplitude > 0 and
+    close < open and
+    pavio >= amplitude * pavio_minimo / 100
+
+-- RESULTADO
+sinal = m and alta and rejeicao
+
+plot_shape(
+    sinal,
+    "M APOS ALTA COM REJEICAO",
+    shape_style.triangledown,
+    shape_size.large,
+    cor,
+    shape_location.abovebar,
+    0,
+    "M"
+)

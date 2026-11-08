@@ -1,0 +1,133 @@
+
+instrument {
+    name = "QMS RADAR LATERAL DINAMICO V4",
+    short_name = "QMS LATERAL V4",
+    overlay = true
+}
+
+input_group {
+    "CONFIGURACAO",
+
+    periodo = input(20, "Periodo dinamico", input.integer, 5, 100, 1),
+
+    margem = input(20, "Margem dos extremos (%)", input.integer, 5, 45, 1),
+
+    largura_max = input(1.50, "Largura maxima lateral (%)", input.double, 0.10, 5.00, 0.10)
+}
+
+input_group {
+    "EXIBICAO",
+
+    mostrar_faixa = input(true, "Mostrar faixa dinamica", input.boolean),
+
+    mostrar_meio = input(true, "Mostrar meio da faixa", input.boolean),
+
+    mostrar_rejeicao = input(true, "Mostrar rejeicoes", input.boolean)
+}
+
+input_group {
+    "CORES",
+
+    cor_resistencia = input { default = "#FF5252", type = input.color },
+
+    cor_suporte = input { default = "#2196FF", type = input.color },
+
+    cor_meio = input { default = "#B0BEC5", type = input.color },
+
+    cor_venda = input { default = "#A020F0", type = input.color },
+
+    cor_compra = input { default = "#00BCD4", type = input.color }
+}
+
+-- FAIXA DINAMICA
+
+local resistencia = highest(high, periodo)
+local suporte = lowest(low, periodo)
+
+local largura = resistencia - suporte
+local meio = (resistencia + suporte) / 2
+
+local largura_pct = largura / close * 100
+
+-- PROXIMIDADE DOS EXTREMOS
+
+local margem_preco = largura * margem / 100
+
+local perto_resistencia =
+    high >= resistencia - margem_preco
+
+local perto_suporte =
+    low <= suporte + margem_preco
+
+-- FILTRO DE LATERALIZACAO
+
+local lateral =
+    largura > 0 and
+    largura_pct <= largura_max
+
+-- PAVIOS E CORPOS
+
+local corpo_topo = math.max(open, close)
+local corpo_fundo = math.min(open, close)
+
+local pavio_cima = high - corpo_topo
+local pavio_baixo = corpo_fundo - low
+
+-- REJEICAO VENDEDORA
+
+local rejeicao_venda =
+    lateral and
+    perto_resistencia and
+    close < open and
+    pavio_cima > pavio_baixo
+
+-- REJEICAO COMPRADORA
+
+local rejeicao_compra =
+    lateral and
+    perto_suporte and
+    close > open and
+    pavio_baixo > pavio_cima
+
+-- FAIXA ACOMPANHANDO O PRECO
+
+if mostrar_faixa then
+    plot(resistencia, "RESISTENCIA DINAMICA", cor_resistencia, 2)
+    plot(suporte, "SUPORTE DINAMICO", cor_suporte, 2)
+end
+
+-- LINHA CENTRAL
+
+if mostrar_meio then
+    plot(meio, "MEIO DA FAIXA", cor_meio, 1)
+end
+
+-- REJEICOES
+
+if mostrar_rejeicao then
+
+    plot_shape(
+        rejeicao_venda,
+        "REJEICAO VENDA",
+        shape_style.triangledown,
+        shape_size.small,
+        cor_venda,
+        shape_location.abovebar,
+        0,
+        "REJ VENDA",
+        cor_venda
+    )
+
+    plot_shape(
+        rejeicao_compra,
+        "REJEICAO COMPRA",
+        shape_style.triangleup,
+        shape_size.small,
+        cor_compra,
+        shape_location.belowbar,
+        0,
+        "REJ COMPRA",
+        cor_compra
+    )
+
+end

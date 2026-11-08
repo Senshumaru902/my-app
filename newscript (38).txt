@@ -1,0 +1,371 @@
+--------------------------------------------------
+-- NEXT CANDLE PRO V1.7 MOBILE
+-- PREVISAO DAS PROXIMAS 3 VELAS
+-- EMA 5 / EMA 13 + ANGULO DAS MEDIAS
+-- CALL / PUT COM FILTRO DE INCLINACAO
+-- REVERSAO: MARTELO / ESTRELA / ENGOLFO
+-- LATERAL: LARANJA ESCURO
+-- INDICADOR VISUAL - NAO ENVIA ORDENS
+--------------------------------------------------
+
+instrument {
+    name = "NEXT CANDLE PRO V1.7",
+    short_name = "NEXT17",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACOES
+--------------------------------------------------
+
+input_group {
+    "Indicadores",
+    periodo_rapido = input(5, "EMA Rapida", input.integer, 2, 20, 1),
+    periodo_lento = input(13, "EMA Lenta", input.integer, 5, 50, 1),
+    periodo_forca = input(7, "RSI", input.integer, 2, 20, 1),
+    periodo_inclinacao = input(3, "Periodo do Angulo", input.integer, 1, 10, 1),
+    limite_angulo = input(0.08, "Limite do Angulo", input.double, 0.01, 1.00, 0.01)
+}
+
+input_group {
+    "Cores",
+    cor_alta = input { default = "#168BFF", type = input.color },
+    cor_baixa = input { default = "#7628B9", type = input.color },
+    cor_rev_alta = input { default = "#00D26A", type = input.color },
+    cor_rev_baixa = input { default = "#FF3030", type = input.color },
+    cor_lateral = input { default = "#C65D00", type = input.color }
+}
+
+--------------------------------------------------
+-- MEDIAS E FORCA
+--------------------------------------------------
+
+ema_fast = ema(close, periodo_rapido)
+ema_slow = ema(close, periodo_lento)
+rsi_val = rsi(close, periodo_forca)
+
+tendencia = ema_fast - ema_slow
+
+--------------------------------------------------
+-- ATR PARA NORMALIZAR A INCLINACAO
+--------------------------------------------------
+
+tr0 = high - low
+
+dhigh = high - close[1]
+dhigh_abs = dhigh >= 0 and dhigh or -dhigh
+
+dlow = low - close[1]
+dlow_abs = dlow >= 0 and dlow or -dlow
+
+tr_maior = dhigh_abs > dlow_abs and dhigh_abs or dlow_abs
+tr_final = tr0 > tr_maior and tr0 or tr_maior
+
+atr_base = ema(tr_final, 7)
+
+--------------------------------------------------
+-- ANGULO / INCLINACAO DAS DUAS MEDIAS
+--------------------------------------------------
+
+inclinacao_fast = ema_fast - ema_fast[periodo_inclinacao]
+inclinacao_slow = ema_slow - ema_slow[periodo_inclinacao]
+
+angulo_fast = atr_base > 0 and inclinacao_fast / atr_base or 0
+angulo_slow = atr_base > 0 and inclinacao_slow / atr_base or 0
+
+-- AS DUAS MEDIAS PRECISAM APONTAR NA MESMA DIRECAO
+
+medias_subindo =
+    angulo_fast > limite_angulo and
+    angulo_slow > limite_angulo
+
+medias_descendo =
+    angulo_fast < -limite_angulo and
+    angulo_slow < -limite_angulo
+
+medias_lateralizadas =
+    not medias_subindo and not medias_descendo
+
+--------------------------------------------------
+-- PREVISAO DAS PROXIMAS 3 VELAS
+--------------------------------------------------
+
+momentum1 = close - close[1]
+momentum2 = close[1] - close[2]
+momentum3 = close[2] - close[3]
+
+p1 = tendencia + momentum1
+p2 = tendencia + momentum1 + momentum2
+p3 = tendencia + momentum1 + momentum2 + momentum3
+
+votos_alta =
+    (p1 > 0 and 1 or 0) +
+    (p2 > 0 and 1 or 0) +
+    (p3 > 0 and 1 or 0)
+
+votos_baixa =
+    (p1 < 0 and 1 or 0) +
+    (p2 < 0 and 1 or 0) +
+    (p3 < 0 and 1 or 0)
+
+previsao_alta =
+    medias_subindo and
+    votos_alta >= 2 and
+    rsi_val >= 52
+
+previsao_baixa =
+    medias_descendo and
+    votos_baixa >= 2 and
+    rsi_val <= 48
+
+--------------------------------------------------
+-- CRUZAMENTO REAL EMA 5 / EMA 13
+--------------------------------------------------
+
+cruzou_alta =
+    ema_fast > ema_slow and
+    ema_fast[1] <= ema_slow[1]
+
+cruzou_baixa =
+    ema_fast < ema_slow and
+    ema_fast[1] >= ema_slow[1]
+
+--------------------------------------------------
+-- DETECCAO DE REVERSAO
+--------------------------------------------------
+
+tendencia_anterior_baixa =
+    close[1] < close[2] and
+    close[2] <= close[3]
+
+tendencia_anterior_alta =
+    close[1] > close[2] and
+    close[2] >= close[3]
+
+amplitude = high - low
+corpo = close - open
+corpo_abs = corpo >= 0 and corpo or -corpo
+
+pavio_sup = high - (close > open and close or open)
+pavio_inf = (close < open and close or open) - low
+
+corpo_pequeno =
+    amplitude > 0 and
+    corpo_abs / amplitude <= 0.40
+
+-- MARTELO
+
+martelo =
+    tendencia_anterior_baixa and
+    corpo_pequeno and
+    pavio_inf >= corpo_abs * 2 and
+    pavio_sup <= corpo_abs and
+    amplitude > 0 and
+    close >= low + amplitude * 0.55
+
+-- ESTRELA CADENTE
+
+estrela_cadente =
+    tendencia_anterior_alta and
+    corpo_pequeno and
+    pavio_sup >= corpo_abs * 2 and
+    pavio_inf <= corpo_abs and
+    amplitude > 0 and
+    close <= low + amplitude * 0.45
+
+-- ENGOLFO DE ALTA
+
+engolfo_alta =
+    close > open and
+    close[1] < open[1] and
+    open <= close[1] and
+    close >= open[1] and
+    tendencia_anterior_baixa
+
+-- ENGOLFO DE BAIXA
+
+engolfo_baixa =
+    close < open and
+    close[1] > open[1] and
+    open >= close[1] and
+    close <= open[1] and
+    tendencia_anterior_alta
+
+-- ESTRELA DA MANHA / ESTRELA DA NOITE
+
+corpo_ant1 = close[1] - open[1]
+corpo_ant1_abs =
+    corpo_ant1 >= 0 and corpo_ant1 or -corpo_ant1
+
+amplitude_ant1 = high[1] - low[1]
+meio_ant2 = (open[2] + close[2]) / 2
+
+estrela_manha =
+    close[2] < open[2] and
+    amplitude_ant1 > 0 and
+    corpo_ant1_abs / amplitude_ant1 <= 0.30 and
+    close > open and
+    close >= meio_ant2 and
+    tendencia_anterior_baixa
+
+estrela_noite =
+    close[2] > open[2] and
+    amplitude_ant1 > 0 and
+    corpo_ant1_abs / amplitude_ant1 <= 0.30 and
+    close < open and
+    close <= meio_ant2 and
+    tendencia_anterior_alta
+
+reversao_alta =
+    martelo or engolfo_alta or estrela_manha
+
+reversao_baixa =
+    estrela_cadente or engolfo_baixa or estrela_noite
+
+--------------------------------------------------
+-- ENTRADAS CONFIRMADAS
+-- ANGULO E OBRIGATORIO PARA CALL E PUT
+--------------------------------------------------
+
+call_confirmado =
+    cruzou_alta and
+    medias_subindo and
+    angulo_fast > limite_angulo and
+    angulo_slow > limite_angulo and
+    rsi_val >= 52 and
+    votos_alta >= 2 and
+    not reversao_baixa
+
+put_confirmado =
+    cruzou_baixa and
+    medias_descendo and
+    angulo_fast < -limite_angulo and
+    angulo_slow < -limite_angulo and
+    rsi_val <= 48 and
+    votos_baixa >= 2 and
+    not reversao_alta
+
+--------------------------------------------------
+-- COLORACAO DOS CANDLES
+--------------------------------------------------
+
+cor_base =
+    medias_lateralizadas and cor_lateral or
+    previsao_alta and cor_alta or
+    previsao_baixa and cor_baixa or
+    cor_lateral
+
+cor_final =
+    reversao_alta and cor_rev_alta or
+    reversao_baixa and cor_rev_baixa or
+    cor_base
+
+plot_candle(
+    open, high, low, close,
+    "NEXT CANDLE PRO",
+    cor_final
+)
+
+--------------------------------------------------
+-- MARCADORES DE ENTRADA
+--------------------------------------------------
+
+plot_shape(
+    call_confirmado,
+    "CALL",
+    shape_style.labelup,
+    shape_size.large,
+    cor_alta,
+    shape_location.belowbar,
+    0,
+    "CALL",
+    "#FFFFFF"
+)
+
+plot_shape(
+    put_confirmado,
+    "PUT",
+    shape_style.labeldown,
+    shape_size.large,
+    cor_baixa,
+    shape_location.abovebar,
+    0,
+    "PUT",
+    "#FFFFFF"
+)
+
+--------------------------------------------------
+-- NOMES DOS PADROES DE REVERSAO
+--------------------------------------------------
+
+plot_shape(
+    martelo and not engolfo_alta and not estrela_manha,
+    "MARTELO",
+    shape_style.labelup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "MARTELO",
+    "#FFFFFF"
+)
+
+plot_shape(
+    engolfo_alta,
+    "ENGOLFO ALTA",
+    shape_style.labelup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "ENGOLFO ALTA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    estrela_manha,
+    "ESTRELA MANHA",
+    shape_style.labelup,
+    shape_size.large,
+    cor_rev_alta,
+    shape_location.belowbar,
+    0,
+    "ESTRELA MANHA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    estrela_cadente and not engolfo_baixa and not estrela_noite,
+    "ESTRELA CADENTE",
+    shape_style.labeldown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ESTRELA CADENTE",
+    "#FFFFFF"
+)
+
+plot_shape(
+    engolfo_baixa,
+    "ENGOLFO BAIXA",
+    shape_style.labeldown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ENGOLFO BAIXA",
+    "#FFFFFF"
+)
+
+plot_shape(
+    estrela_noite,
+    "ESTRELA NOITE",
+    shape_style.labeldown,
+    shape_size.large,
+    cor_rev_baixa,
+    shape_location.abovebar,
+    0,
+    "ESTRELA NOITE",
+    "#FFFFFF"
+)

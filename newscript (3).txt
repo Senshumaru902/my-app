@@ -1,133 +1,387 @@
 
 instrument {
-    name = "QMS RADAR LATERAL DINAMICO V4",
-    short_name = "QMS LATERAL V4",
+    name = "QMS RADAR UNIFICADO V2",
+    short_name = "QMS UNIFICADO",
     overlay = true
 }
 
-input_group {
-    "CONFIGURACAO",
-
-    periodo = input(20, "Periodo dinamico", input.integer, 5, 100, 1),
-
-    margem = input(20, "Margem dos extremos (%)", input.integer, 5, 45, 1),
-
-    largura_max = input(1.50, "Largura maxima lateral (%)", input.double, 0.10, 5.00, 0.10)
-}
+-- ==========================================
+-- 1. CONFIGURACAO GERAL
+-- ==========================================
 
 input_group {
-    "EXIBICAO",
+    "FORCA DO MOVIMENTO",
 
-    mostrar_faixa = input(true, "Mostrar faixa dinamica", input.boolean),
-
-    mostrar_meio = input(true, "Mostrar meio da faixa", input.boolean),
-
-    mostrar_rejeicao = input(true, "Mostrar rejeicoes", input.boolean)
+    periodo = input(12, "Periodo da pernada", input.integer, 3, 50),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 50),
+    fator_forte = input(2.5, "Forca minima ATR", input.double, 1.0, 8.0),
+    fator_extremo = input(4.0, "Forca extrema ATR", input.double, 2.0, 12.0)
 }
+
+-- ==========================================
+-- 2. CONFIGURACAO DO W E CRUZ
+-- ==========================================
 
 input_group {
-    "CORES",
+    "REVERSAO",
 
-    cor_resistencia = input { default = "#FF5252", type = input.color },
-
-    cor_suporte = input { default = "#2196FF", type = input.color },
-
-    cor_meio = input { default = "#B0BEC5", type = input.color },
-
-    cor_venda = input { default = "#A020F0", type = input.color },
-
-    cor_compra = input { default = "#00BCD4", type = input.color }
+    tolerancia = input(0.50, "Tolerancia dos fundos ATR", input.double, 0.05, 2.0),
+    recuperacao = input(0.80, "Recuperacao minima ATR", input.double, 0.10, 4.0),
+    corpo_maximo = input(0.30, "Corpo maximo da cruz", input.double, 0.05, 0.60),
+    pavio_minimo = input(0.20, "Pavio minimo", input.double, 0.05, 0.80),
+    distancia_extremo = input(0.50, "Distancia do extremo ATR", input.double, 0.05, 2.0)
 }
 
--- FAIXA DINAMICA
+-- ==========================================
+-- 3. CONFIGURACAO DAS BANDEIRAS
+-- ==========================================
 
-local resistencia = highest(high, periodo)
-local suporte = lowest(low, periodo)
+input_group {
+    "CONTINUACAO",
 
-local largura = resistencia - suporte
-local meio = (resistencia + suporte) / 2
+    retracao_maxima = input(0.55, "Retracao maxima", input.double, 0.15, 0.90),
+    limite_extensao = input(1.50, "Amplitude maxima ATR", input.double, 0.5, 5.0)
+}
 
-local largura_pct = largura / close * 100
+-- ==========================================
+-- 4. CONFIGURACAO LATERAL
+-- ==========================================
 
--- PROXIMIDADE DOS EXTREMOS
+input_group {
+    "LATERALIZACAO",
 
-local margem_preco = largura * margem / 100
+    periodo_lateral = input(20, "Periodo lateral", input.integer, 5, 100),
+    margem = input(20, "Margem dos extremos (%)", input.integer, 5, 45),
+    largura_max = input(1.50, "Largura maxima (%)", input.double, 0.10, 5.0),
+    mostrar_faixa = input(false, "Mostrar faixa lateral", input.boolean)
+}
 
-local perto_resistencia =
-    high >= resistencia - margem_preco
+-- ==========================================
+-- 5. VISUAL
+-- ==========================================
 
-local perto_suporte =
-    low <= suporte + margem_preco
+input_group {
+    "SINAL UNICO",
 
--- FILTRO DE LATERALIZACAO
+    mostrar_compra = input(true, "Mostrar COMPRA", input.boolean),
+    mostrar_venda = input(true, "Mostrar VENDA", input.boolean)
+}
 
-local lateral =
+-- ==========================================
+-- 6. ATR
+-- ==========================================
+
+atr = sma(high - low, atr_periodo)
+
+-- ==========================================
+-- 7. REVERSAO COMPRADORA - FUNDO W
+-- ==========================================
+
+topo_w = highest(high, periodo)[2]
+fundo_w = lowest(low, periodo)[2]
+
+amplitude_w = topo_w - fundo_w
+
+queda_w =
+    atr[2] > 0 and
+    amplitude_w >= atr[2] * fator_forte and
+    close[2] < close[periodo + 2]
+
+recuperacao_w_valor =
+    highest(high, periodo)[1] - fundo_w
+
+recuperou_w =
+    atr[1] > 0 and
+    recuperacao_w_valor >= atr[1] * recuperacao
+
+segundo_fundo =
+    atr[1] > 0 and
+    abs(low[1] - fundo_w) <= atr[1] * tolerancia
+
+amplitude_w_candle = high[1] - low[1]
+
+corpo_w = abs(close[1] - open[1])
+
+pavio_w =
+    min(open[1], close[1]) - low[1]
+
+rejeicao_w =
+    amplitude_w_candle > 0 and
+    pavio_w >= amplitude_w_candle * pavio_minimo and
+    corpo_w <= amplitude_w_candle * 0.45 and
+    close[1] > open[1]
+
+confirmacao_w =
+    close > high[1] and
+    close > open
+
+sistema_w =
+    queda_w and
+    recuperou_w and
+    segundo_fundo and
+    rejeicao_w and
+    confirmacao_w
+
+-- ==========================================
+-- 8. REVERSAO VENDEDORA - CRUZ NO TOPO
+-- ==========================================
+
+topo_pre = highest(high, periodo)[2]
+fundo_pre = lowest(low, periodo)[2]
+
+amplitude_topo = topo_pre - fundo_pre
+
+alta_forte =
+    atr[2] > 0 and
+    amplitude_topo >= atr[2] * fator_forte and
+    close[2] > close[periodo + 2] and
+    close[2] > fundo_pre + amplitude_topo * 0.65
+
+amplitude_cruz = high[1] - low[1]
+
+corpo_cruz = abs(close[1] - open[1])
+
+pavio_superior =
+    high[1] - max(open[1], close[1])
+
+cruz_topo =
+    amplitude_cruz > 0 and
+    corpo_cruz <= amplitude_cruz * corpo_maximo and
+    pavio_superior >= amplitude_cruz * pavio_minimo
+
+proximo_topo =
+    atr[1] > 0 and
+    high[1] >= topo_pre - atr[1] * distancia_extremo
+
+confirmacao_topo =
+    close < low[1] and
+    close < open
+
+sistema_topo =
+    alta_forte and
+    cruz_topo and
+    proximo_topo and
+    confirmacao_topo
+
+-- ==========================================
+-- 9. BANDEIRA DE ALTA
+-- ==========================================
+
+topo_alta = highest(high, periodo)[3]
+fundo_alta = lowest(low, periodo)[3]
+
+amplitude_alta = topo_alta - fundo_alta
+
+impulso_alta =
+    atr[3] > 0 and
+    amplitude_alta >= atr[3] * fator_forte and
+    close[3] > close[periodo + 3]
+
+max_correcao_alta = highest(high, 2)[1]
+min_correcao_alta = lowest(low, 2)[1]
+
+recuo_alta = topo_alta - min_correcao_alta
+
+correcao_alta =
+    close[1] < close[2] or
+    low[1] < low[2]
+
+profundidade_alta =
+    amplitude_alta > 0 and
+    recuo_alta > 0 and
+    recuo_alta <= amplitude_alta * retracao_maxima
+
+faixa_alta =
+    atr[1] > 0 and
+    (max_correcao_alta - min_correcao_alta)
+    <= atr[1] * limite_extensao
+
+bandeira_alta =
+    impulso_alta and
+    correcao_alta and
+    profundidade_alta and
+    faixa_alta
+
+rompimento_alta =
+    close > max_correcao_alta and
+    close > open
+
+sistema_bandeira_alta =
+    bandeira_alta and
+    rompimento_alta
+
+-- ==========================================
+-- 10. BANDEIRA DE BAIXA
+-- ==========================================
+
+topo_baixa = highest(high, periodo)[3]
+fundo_baixa = lowest(low, periodo)[3]
+
+amplitude_baixa = topo_baixa - fundo_baixa
+
+impulso_baixa =
+    atr[3] > 0 and
+    amplitude_baixa >= atr[3] * fator_forte and
+    close[3] < close[periodo + 3]
+
+max_correcao_baixa = highest(high, 2)[1]
+min_correcao_baixa = lowest(low, 2)[1]
+
+recuo_baixa =
+    max_correcao_baixa - fundo_baixa
+
+correcao_baixa =
+    close[1] > close[2] or
+    high[1] > high[2]
+
+profundidade_baixa =
+    amplitude_baixa > 0 and
+    recuo_baixa > 0 and
+    recuo_baixa <= amplitude_baixa * retracao_maxima
+
+faixa_baixa =
+    atr[1] > 0 and
+    (max_correcao_baixa - min_correcao_baixa)
+    <= atr[1] * limite_extensao
+
+bandeira_baixa =
+    impulso_baixa and
+    correcao_baixa and
+    profundidade_baixa and
+    faixa_baixa
+
+rompimento_baixa =
+    close < min_correcao_baixa and
+    close < open
+
+sistema_bandeira_baixa =
+    bandeira_baixa and
+    rompimento_baixa
+
+-- ==========================================
+-- 11. LATERALIZACAO DINAMICA
+-- ==========================================
+
+resistencia =
+    highest(high, periodo_lateral)[2]
+
+suporte =
+    lowest(low, periodo_lateral)[2]
+
+largura = resistencia - suporte
+
+meio = (resistencia + suporte) / 2
+
+largura_pct =
+    close[2] > 0 and
+    largura / close[2] * 100 or 999
+
+lateral =
     largura > 0 and
     largura_pct <= largura_max
 
--- PAVIOS E CORPOS
+margem_preco =
+    largura * margem / 100
 
-local corpo_topo = math.max(open, close)
-local corpo_fundo = math.min(open, close)
+perto_resistencia =
+    high[1] >= resistencia - margem_preco
 
-local pavio_cima = high - corpo_topo
-local pavio_baixo = corpo_fundo - low
+perto_suporte =
+    low[1] <= suporte + margem_preco
 
--- REJEICAO VENDEDORA
+pavio_cima =
+    high[1] - max(open[1], close[1])
 
-local rejeicao_venda =
+pavio_baixo =
+    min(open[1], close[1]) - low[1]
+
+rejeicao_vendedora =
     lateral and
     perto_resistencia and
-    close < open and
+    close[1] < open[1] and
     pavio_cima > pavio_baixo
 
--- REJEICAO COMPRADORA
-
-local rejeicao_compra =
+rejeicao_compradora =
     lateral and
     perto_suporte and
-    close > open and
+    close[1] > open[1] and
     pavio_baixo > pavio_cima
 
--- FAIXA ACOMPANHANDO O PRECO
+sistema_lateral_compra =
+    rejeicao_compradora and
+    close > high[1] and
+    close > open
+
+sistema_lateral_venda =
+    rejeicao_vendedora and
+    close < low[1] and
+    close < open
+
+-- ==========================================
+-- 12. UNIFICACAO DE TODAS AS POSSIBILIDADES
+-- ==========================================
+
+possibilidade_compra =
+    sistema_w or
+    sistema_bandeira_alta or
+    sistema_lateral_compra
+
+possibilidade_venda =
+    sistema_topo or
+    sistema_bandeira_baixa or
+    sistema_lateral_venda
+
+-- ==========================================
+-- 13. DECISAO UNICA
+-- ==========================================
+
+-- Se os dois lados coincidirem,
+-- o sistema fica sem sinal.
+
+entrada_compra =
+    possibilidade_compra and
+    not possibilidade_venda
+
+entrada_venda =
+    possibilidade_venda and
+    not possibilidade_compra
+
+-- ==========================================
+-- 14. FAIXA VISUAL OPCIONAL
+-- ==========================================
 
 if mostrar_faixa then
-    plot(resistencia, "RESISTENCIA DINAMICA", cor_resistencia, 2)
-    plot(suporte, "SUPORTE DINAMICO", cor_suporte, 2)
-end
 
--- LINHA CENTRAL
+    plot(resistencia, "RESISTENCIA", "#FF5252", 2)
 
-if mostrar_meio then
-    plot(meio, "MEIO DA FAIXA", cor_meio, 1)
-end
+    plot(suporte, "SUPORTE", "#2196FF", 2)
 
--- REJEICOES
-
-if mostrar_rejeicao then
-
-    plot_shape(
-        rejeicao_venda,
-        "REJEICAO VENDA",
-        shape_style.triangledown,
-        shape_size.small,
-        cor_venda,
-        shape_location.abovebar,
-        0,
-        "REJ VENDA",
-        cor_venda
-    )
-
-    plot_shape(
-        rejeicao_compra,
-        "REJEICAO COMPRA",
-        shape_style.triangleup,
-        shape_size.small,
-        cor_compra,
-        shape_location.belowbar,
-        0,
-        "REJ COMPRA",
-        cor_compra
-    )
+    plot(meio, "CENTRO", "#B0BEC5", 1)
 
 end
+
+-- ==========================================
+-- 15. SOMENTE DUAS SETAS
+-- ==========================================
+
+plot_shape(
+    mostrar_compra and entrada_compra,
+    "COMPRA",
+    shape_style.arrowup,
+    shape_size.large,
+    "#00FF00",
+    shape_location.belowbar
+)
+
+plot_shape(
+    mostrar_venda and entrada_venda,
+    "VENDA",
+    shape_style.arrowdown,
+    shape_size.large,
+    "#FF0000",
+    shape_location.abovebar
+)
+
+-- ==========================================
+-- FIM QMS RADAR UNIFICADO V2
+-- ==========================================

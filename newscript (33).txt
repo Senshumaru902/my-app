@@ -1,0 +1,268 @@
+
+--------------------------------------------------
+-- QCS V4.2 SINGLE LINE COLOR
+-- MOBILE + NOTEBOOK
+-- EMA 5 / EMA 13 / EMA 21 / EMA 50
+-- UMA LINHA VISUAL COM REGRA DE COLORACAO
+-- SEM SETAS | SEM TEXTOS | SEM ORDENS
+--------------------------------------------------
+
+instrument {
+    name = "QCS V4.2 SINGLE LINE COLOR",
+    short_name = "QCS 1LINE",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+periodo = input(5, "EMA Principal", input.integer, 1, 50)
+periodoLateral = input(10, "Sensibilidade Lateral", input.integer, 3, 30)
+
+--------------------------------------------------
+-- CORES
+--------------------------------------------------
+
+verde   = "#00D957"
+vermelho = "#FF3030"
+dourado = "#FFD700"
+laranja = "#CC5500"
+cinza   = "#808080"
+
+--------------------------------------------------
+-- MEDIAS MOVEIS
+-- SOMENTE A EMA PRINCIPAL SERA DESENHADA
+--------------------------------------------------
+
+ema5  = ema(close, periodo)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+--------------------------------------------------
+-- INDICADORES DE CONTEXTO
+--------------------------------------------------
+
+rsi7 = rsi(close, 7)
+atr7 = sma(tr, 7)
+
+--------------------------------------------------
+-- INCLINACAO DAS MEDIAS
+--------------------------------------------------
+
+incl5  = ema5 - ema5[1]
+incl13 = ema13 - ema13[1]
+incl21 = ema21 - ema21[1]
+incl50 = ema50 - ema50[1]
+
+--------------------------------------------------
+-- FORCA DO CANDLE
+--------------------------------------------------
+
+amplitude = high - low
+corpo = abs(close - open)
+
+forcaVela = 0
+
+if amplitude > 0 then
+    forcaVela = corpo / amplitude * 100
+end
+
+--------------------------------------------------
+-- TENDENCIA PRINCIPAL
+-- CONFIRMACAO PELAS EMA 13 / 21 / 50
+--------------------------------------------------
+
+tendAlta =
+    ema13 > ema21 and
+    ema21 > ema50 and
+    incl13 > 0 and
+    incl21 > 0 and
+    incl50 >= 0
+
+tendBaixa =
+    ema13 < ema21 and
+    ema21 < ema50 and
+    incl13 < 0 and
+    incl21 < 0 and
+    incl50 <= 0
+
+--------------------------------------------------
+-- MICRO TENDENCIA
+-- EMA PRINCIPAL CONTRA EMA 13
+--------------------------------------------------
+
+microAlta =
+    ema5 > ema13 and
+    incl5 > 0
+
+microBaixa =
+    ema5 < ema13 and
+    incl5 < 0
+
+--------------------------------------------------
+-- CRUZAMENTO REAL EMA PRINCIPAL / EMA 13
+-- USADO COMO CONTEXTO, SEM MARCADOR VISUAL
+--------------------------------------------------
+
+cruzouAlta =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzouBaixa =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+--------------------------------------------------
+-- MOMENTUM E ACELERACAO
+--------------------------------------------------
+
+momentumAlta = close > close[1]
+momentumBaixa = close < close[1]
+
+acelAlta =
+    close - close[1] >
+    close[1] - close[2]
+
+acelBaixa =
+    close[1] - close >
+    close[2] - close[1]
+
+--------------------------------------------------
+-- LATERALIZACAO
+-- PROXIMIDADE DAS MEDIAS + BAIXA INCLINACAO
+--------------------------------------------------
+
+lateral = false
+
+if atr7 > 0 then
+    lateral =
+        abs(ema5 - ema13) < atr7 * 0.12 and
+        abs(ema13 - ema21) < atr7 * 0.25 and
+        abs(incl21) < atr7 * 0.04 and
+        rsi7 >= 43 and
+        rsi7 <= 57
+end
+
+--------------------------------------------------
+-- FILTRO DE CONFLITO
+--------------------------------------------------
+
+conflito =
+    (tendAlta and microBaixa) or
+    (tendBaixa and microAlta)
+
+--------------------------------------------------
+-- FORCA DIRECIONAL
+--------------------------------------------------
+
+forteAlta =
+    tendAlta and
+    microAlta and
+    momentumAlta and
+    acelAlta and
+    forcaVela >= 60 and
+    not lateral and
+    not conflito
+
+forteBaixa =
+    tendBaixa and
+    microBaixa and
+    momentumBaixa and
+    acelBaixa and
+    forcaVela >= 60 and
+    not lateral and
+    not conflito
+
+--------------------------------------------------
+-- ESTADO DE ALTA
+--------------------------------------------------
+
+estadoAlta =
+    (tendAlta or microAlta) and
+    not lateral and
+    not conflito
+
+--------------------------------------------------
+-- ESTADO DE BAIXA
+--------------------------------------------------
+
+estadoBaixa =
+    (tendBaixa or microBaixa) and
+    not lateral and
+    not conflito
+
+--------------------------------------------------
+-- ESTADO DE TRANSICAO
+-- MERCADO SEM DIRECAO CLARA
+--------------------------------------------------
+
+transicao =
+    not lateral and
+    not estadoAlta and
+    not estadoBaixa
+
+--------------------------------------------------
+-- UMA LINHA VISUAL COLORIDA
+--
+-- PRIORIDADE:
+-- 1. DOURADO = MOVIMENTO FORTE
+-- 2. LARANJA = LATERALIZACAO
+-- 3. VERDE = ALTA
+-- 4. VERMELHO = BAIXA
+-- 5. CINZA = TRANSICAO
+--
+-- OS PLOTS SAO TRECHOS DA MESMA EMA.
+-- NAO REPRESENTAM MEDIAS DIFERENTES.
+--------------------------------------------------
+
+plot(
+    forteAlta and ema5 or nil,
+    "LINHA FORTE ALTA",
+    dourado,
+    4
+)
+
+plot(
+    forteBaixa and ema5 or nil,
+    "LINHA FORTE BAIXA",
+    dourado,
+    4
+)
+
+plot(
+    lateral and ema5 or nil,
+    "LINHA LATERAL",
+    laranja,
+    3
+)
+
+plot(
+    estadoAlta and not forteAlta and ema5 or nil,
+    "LINHA DE ALTA",
+    verde,
+    3
+)
+
+plot(
+    estadoBaixa and not forteBaixa and ema5 or nil,
+    "LINHA DE BAIXA",
+    vermelho,
+    3
+)
+
+plot(
+    transicao and ema5 or nil,
+    "LINHA DE TRANSICAO",
+    cinza,
+    3
+)
+
+--------------------------------------------------
+-- FIM
+-- SEM ORDENS
+-- SEM SETAS
+-- SEM TEXTOS NO GRAFICO
+-- EMA 13 / 21 / 50 SOMENTE INTERNAS
+--------------------------------------------------

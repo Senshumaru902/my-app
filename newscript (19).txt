@@ -1,0 +1,493 @@
+------------------------------------------------------------
+-- QMC NEXT CANDLE PREDICTOR V7.1 ELITE RETEST
+-- ANALISE TECNICA + GRAFICA + CANDLESTICKS
+-- MICRO TENDENCIA + ESTRUTURA DE MERCADO
+-- ROMPIMENTO + RETESTE + CONFIRMACAO
+-- SMART BARRIER + FILTRO ANTI ROMPIMENTO FALSO
+-- QCS MOBILE | SEM ORDENS AUTOMATICAS
+------------------------------------------------------------
+
+instrument {
+    name = "QMC NEXT CANDLE PREDICTOR V7.1 ELITE",
+    short_name = "QMC ELITE V7.1",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- 1. CONFIGURACAO
+------------------------------------------------------------
+
+periodoLinha = input(3, "Linha principal", input.integer, 1, 10)
+periodoMicro = input(3, "Micro tendencia", input.integer, 2, 8)
+periodoForca = input(8, "Linha auxiliar", input.integer, 2, 20)
+
+periodoSR = input(20, "Periodo suporte resistencia", input.integer, 5, 100)
+
+distanciaBarreira = input(
+    0.60,
+    "Proximidade barreira ATR",
+    input.double, 0.10, 2.00, 0.05
+)
+
+toquesMinimos = input(
+    2,
+    "Toques minimos",
+    input.integer, 2, 5
+)
+
+------------------------------------------------------------
+-- 2. MEDIAS
+------------------------------------------------------------
+
+ema5 = ema(close, 5)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+linhaPrincipal = ema(close, periodoLinha)
+linhaForca = ema(close, periodoForca)
+mediaMicro = ema(close, periodoMicro)
+
+------------------------------------------------------------
+-- 3. MICRO MOVIMENTO
+------------------------------------------------------------
+
+variacao1 = close - close[1]
+variacao2 = close[1] - close[2]
+variacao3 = close[2] - close[3]
+
+microAlta =
+    variacao1 > 0 and
+    variacao2 >= 0
+
+microBaixa =
+    variacao1 < 0 and
+    variacao2 <= 0
+
+aceleracaoAlta =
+    variacao1 > variacao2 and
+    variacao1 > 0
+
+aceleracaoBaixa =
+    variacao1 < variacao2 and
+    variacao1 < 0
+
+microDirecaoAlta =
+    close > mediaMicro and
+    mediaMicro >= mediaMicro[1]
+
+microDirecaoBaixa =
+    close < mediaMicro and
+    mediaMicro <= mediaMicro[1]
+
+------------------------------------------------------------
+-- 4. TENDENCIA E ESTRUTURA
+------------------------------------------------------------
+
+tendenciaAlta =
+    ema21 > ema50 and
+    ema21 > ema21[3]
+
+tendenciaBaixa =
+    ema21 < ema50 and
+    ema21 < ema21[3]
+
+estruturaAlta =
+    ema5 > ema13 and
+    ema13 > ema21
+
+estruturaBaixa =
+    ema5 < ema13 and
+    ema13 < ema21
+
+inclinacaoAlta =
+    ema5 > ema5[1] and
+    ema13 > ema13[1]
+
+inclinacaoBaixa =
+    ema5 < ema5[1] and
+    ema13 < ema13[1]
+
+------------------------------------------------------------
+-- 5. ATR E FORCA DA VELA
+------------------------------------------------------------
+
+tr1 = high - low
+tr2 = abs(high - close[1])
+tr3 = abs(low - close[1])
+
+trMaior = max(tr1, max(tr2, tr3))
+atr = sma(trMaior, 7)
+
+amplitudeVela = high - low
+corpoVela = abs(close - open)
+
+corpoSeguro = max(corpoVela, atr * 0.01)
+
+pavioSuperior = high - max(open, close)
+pavioInferior = min(open, close) - low
+
+corpoForte =
+    atr > 0 and
+    corpoVela >= atr * 0.35
+
+velaExcessiva =
+    atr > 0 and
+    amplitudeVela >= atr * 2.50
+
+precoEsticado =
+    atr > 0 and
+    abs(close - ema21) > atr * 1.50
+
+------------------------------------------------------------
+-- 6. PADROES DE CANDLESTICK
+------------------------------------------------------------
+
+velaAlta = close > open
+velaBaixa = close < open
+
+engolfoAlta =
+    velaAlta and
+    close[1] < open[1] and
+    close >= open[1] and
+    open <= close[1]
+
+engolfoBaixa =
+    velaBaixa and
+    close[1] > open[1] and
+    close <= open[1] and
+    open >= close[1]
+
+martelo =
+    amplitudeVela > 0 and
+    pavioInferior >= corpoSeguro * 2.0 and
+    pavioSuperior <= corpoSeguro * 0.80 and
+    close >= low + amplitudeVela * 0.60
+
+estrelaCadente =
+    amplitudeVela > 0 and
+    pavioSuperior >= corpoSeguro * 2.0 and
+    pavioInferior <= corpoSeguro * 0.80 and
+    close <= low + amplitudeVela * 0.40
+
+impulsoAlta =
+    velaAlta and
+    corpoForte and
+    amplitudeVela > 0 and
+    close >= low + amplitudeVela * 0.70
+
+impulsoBaixa =
+    velaBaixa and
+    corpoForte and
+    amplitudeVela > 0 and
+    close <= low + amplitudeVela * 0.30
+
+------------------------------------------------------------
+-- 7. SUPORTE E RESISTENCIA
+------------------------------------------------------------
+
+resistencia = highest(high, periodoSR)[1]
+suporte = lowest(low, periodoSR)[1]
+
+distanciaResistencia = resistencia - close
+distanciaSuporte = close - suporte
+
+toleranciaToque = atr * 0.25
+
+------------------------------------------------------------
+-- 8. CONTAGEM DE TOQUES NA RESISTENCIA
+------------------------------------------------------------
+
+rt1 = iff(abs(high[1] - resistencia) <= toleranciaToque, 1, 0)
+rt2 = iff(abs(high[2] - resistencia) <= toleranciaToque, 1, 0)
+rt3 = iff(abs(high[3] - resistencia) <= toleranciaToque, 1, 0)
+rt4 = iff(abs(high[4] - resistencia) <= toleranciaToque, 1, 0)
+rt5 = iff(abs(high[5] - resistencia) <= toleranciaToque, 1, 0)
+rt6 = iff(abs(high[6] - resistencia) <= toleranciaToque, 1, 0)
+rt7 = iff(abs(high[7] - resistencia) <= toleranciaToque, 1, 0)
+rt8 = iff(abs(high[8] - resistencia) <= toleranciaToque, 1, 0)
+rt9 = iff(abs(high[9] - resistencia) <= toleranciaToque, 1, 0)
+rt10 = iff(abs(high[10] - resistencia) <= toleranciaToque, 1, 0)
+
+toquesResistencia =
+    rt1 + rt2 + rt3 + rt4 + rt5 +
+    rt6 + rt7 + rt8 + rt9 + rt10
+
+------------------------------------------------------------
+-- 9. CONTAGEM DE TOQUES NO SUPORTE
+------------------------------------------------------------
+
+st1 = iff(abs(low[1] - suporte) <= toleranciaToque, 1, 0)
+st2 = iff(abs(low[2] - suporte) <= toleranciaToque, 1, 0)
+st3 = iff(abs(low[3] - suporte) <= toleranciaToque, 1, 0)
+st4 = iff(abs(low[4] - suporte) <= toleranciaToque, 1, 0)
+st5 = iff(abs(low[5] - suporte) <= toleranciaToque, 1, 0)
+st6 = iff(abs(low[6] - suporte) <= toleranciaToque, 1, 0)
+st7 = iff(abs(low[7] - suporte) <= toleranciaToque, 1, 0)
+st8 = iff(abs(low[8] - suporte) <= toleranciaToque, 1, 0)
+st9 = iff(abs(low[9] - suporte) <= toleranciaToque, 1, 0)
+st10 = iff(abs(low[10] - suporte) <= toleranciaToque, 1, 0)
+
+toquesSuporte =
+    st1 + st2 + st3 + st4 + st5 +
+    st6 + st7 + st8 + st9 + st10
+
+resistenciaForte =
+    toquesResistencia >= toquesMinimos
+
+suporteForte =
+    toquesSuporte >= toquesMinimos
+
+------------------------------------------------------------
+-- 10. PROXIMIDADE DAS BARREIRAS
+------------------------------------------------------------
+
+pertoResistencia =
+    atr > 0 and
+    resistencia > close and
+    distanciaResistencia >= 0 and
+    distanciaResistencia <= atr * distanciaBarreira
+
+pertoSuporte =
+    atr > 0 and
+    suporte < close and
+    distanciaSuporte >= 0 and
+    distanciaSuporte <= atr * distanciaBarreira
+
+alertaResistencia =
+    pertoResistencia and
+    resistenciaForte
+
+alertaSuporte =
+    pertoSuporte and
+    suporteForte
+
+zonaBarreira =
+    alertaResistencia or alertaSuporte
+
+------------------------------------------------------------
+-- 11. ROMPIMENTO INICIAL
+------------------------------------------------------------
+
+rompimentoAlta =
+    close > resistencia and
+    close[1] <= resistencia and
+    close > open and
+    atr > 0 and
+    corpoVela >= atr * 0.35 and
+    amplitudeVela < atr * 2.50
+
+rompimentoBaixa =
+    close < suporte and
+    close[1] >= suporte and
+    close < open and
+    atr > 0 and
+    corpoVela >= atr * 0.35 and
+    amplitudeVela < atr * 2.50
+
+------------------------------------------------------------
+-- 12. RETESTE DO NIVEL ROMPIDO
+-- USA O NIVEL ANTERIOR AO ROMPIMENTO
+------------------------------------------------------------
+
+nivelResistenciaRompida =
+    highest(high, periodoSR)[2]
+
+nivelSuporteRompido =
+    lowest(low, periodoSR)[2]
+
+toleranciaReteste = atr * 0.20
+
+-- Rompimento de alta na barra anterior,
+-- retorno ao nivel e fechamento acima dele.
+
+retesteAlta =
+    close[1] > nivelResistenciaRompida and
+    close[2] <= nivelResistenciaRompida and
+    low <= nivelResistenciaRompida + toleranciaReteste and
+    close > nivelResistenciaRompida and
+    close > open
+
+-- Rompimento de baixa na barra anterior,
+-- retorno ao nivel e fechamento abaixo dele.
+
+retesteBaixa =
+    close[1] < nivelSuporteRompido and
+    close[2] >= nivelSuporteRompido and
+    high >= nivelSuporteRompido - toleranciaReteste and
+    close < nivelSuporteRompido and
+    close < open
+
+------------------------------------------------------------
+-- 13. CONFIRMACAO DO RETESTE
+------------------------------------------------------------
+
+confirmacaoRetesteAlta =
+    retesteAlta and
+    tendenciaAlta and
+    microDirecaoAlta and
+    not precoEsticado and
+    not velaExcessiva
+
+confirmacaoRetesteBaixa =
+    retesteBaixa and
+    tendenciaBaixa and
+    microDirecaoBaixa and
+    not precoEsticado and
+    not velaExcessiva
+
+------------------------------------------------------------
+-- 14. REJEICAO DE BARREIRAS
+------------------------------------------------------------
+
+rejeicaoResistencia =
+    pertoResistencia and
+    (estrelaCadente or engolfoBaixa)
+
+rejeicaoSuporte =
+    pertoSuporte and
+    (martelo or engolfoAlta)
+
+------------------------------------------------------------
+-- 15. LATERALIZACAO
+------------------------------------------------------------
+
+separacaoCurta = abs(ema5 - ema13)
+inclinacaoMedia = abs(ema21 - ema21[3])
+
+lateral =
+    atr > 0 and
+    separacaoCurta <= atr * 0.10 and
+    inclinacaoMedia <= atr * 0.10
+
+------------------------------------------------------------
+-- 16. PONTUACAO DE CONFLUENCIA
+------------------------------------------------------------
+
+pontosAlta =
+    iff(tendenciaAlta, 2, 0) +
+    iff(estruturaAlta, 1, 0) +
+    iff(inclinacaoAlta, 1, 0) +
+    iff(microDirecaoAlta, 1, 0) +
+    iff(microAlta, 1, 0) +
+    iff(aceleracaoAlta, 1, 0) +
+    iff(impulsoAlta, 1, 0) +
+    iff(engolfoAlta or martelo, 1, 0) +
+    iff(rompimentoAlta, 1, 0) +
+    iff(confirmacaoRetesteAlta, 2, 0)
+
+pontosBaixa =
+    iff(tendenciaBaixa, 2, 0) +
+    iff(estruturaBaixa, 1, 0) +
+    iff(inclinacaoBaixa, 1, 0) +
+    iff(microDirecaoBaixa, 1, 0) +
+    iff(microBaixa, 1, 0) +
+    iff(aceleracaoBaixa, 1, 0) +
+    iff(impulsoBaixa, 1, 0) +
+    iff(engolfoBaixa or estrelaCadente, 1, 0) +
+    iff(rompimentoBaixa, 1, 0) +
+    iff(confirmacaoRetesteBaixa, 2, 0)
+
+------------------------------------------------------------
+-- 17. FILTROS DE PROTECAO
+------------------------------------------------------------
+
+bloqueioAlta =
+    lateral or
+    precoEsticado or
+    velaExcessiva or
+    alertaResistencia or
+    rejeicaoResistencia
+
+bloqueioBaixa =
+    lateral or
+    precoEsticado or
+    velaExcessiva or
+    alertaSuporte or
+    rejeicaoSuporte
+
+------------------------------------------------------------
+-- 18. FLUXO DIRECIONAL
+------------------------------------------------------------
+
+fluxoAlta =
+    pontosAlta >= 6 and
+    tendenciaAlta and
+    close > ema21 and
+    not bloqueioAlta and
+    pontosAlta > pontosBaixa
+
+fluxoBaixa =
+    pontosBaixa >= 6 and
+    tendenciaBaixa and
+    close < ema21 and
+    not bloqueioBaixa and
+    pontosBaixa > pontosAlta
+
+------------------------------------------------------------
+-- 19. ESTADOS DO MERCADO
+------------------------------------------------------------
+
+estadoLateral = lateral
+
+estadoAlta =
+    not estadoLateral and
+    fluxoAlta
+
+estadoBaixa =
+    not estadoLateral and
+    not estadoAlta and
+    fluxoBaixa
+
+estadoNeutro =
+    not estadoLateral and
+    not estadoAlta and
+    not estadoBaixa
+
+------------------------------------------------------------
+-- 20. LINHA PRINCIPAL COLORIDA
+------------------------------------------------------------
+
+linhaAlta =
+    iff(estadoAlta, linhaPrincipal, nan)
+
+linhaBaixa =
+    iff(estadoBaixa, linhaPrincipal, nan)
+
+linhaLateral =
+    iff(estadoLateral, linhaPrincipal, nan)
+
+linhaNeutra =
+    iff(estadoNeutro, linhaPrincipal, nan)
+
+plot(linhaPrincipal, "LINHA BASE", "#00B8D4", 1)
+
+plot(linhaAlta, "ALTA CONFLUENTE", "#00C853", 5)
+plot(linhaBaixa, "BAIXA CONFLUENTE", "#FF1744", 5)
+plot(linhaLateral, "MERCADO LATERAL", "#CC5500", 5)
+plot(linhaNeutra, "AGUARDAR", "#00B8D4", 5)
+
+------------------------------------------------------------
+-- 21. BARREIRA PRETA
+------------------------------------------------------------
+
+nivelBarreira =
+    iff(
+        alertaResistencia,
+        resistencia,
+        iff(alertaSuporte, suporte, nan)
+    )
+
+plot(nivelBarreira, "SMART BARRIER", "#000000", 4)
+
+------------------------------------------------------------
+-- 22. LINHA AUXILIAR
+------------------------------------------------------------
+
+plot(linhaForca, "FLUXO AUXILIAR", "#FFD600", 2)
+
+------------------------------------------------------------
+-- FIM
+-- QMC NEXT CANDLE PREDICTOR V7.1 ELITE RETEST
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------

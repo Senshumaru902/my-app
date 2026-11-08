@@ -1,0 +1,329 @@
+------------------------------------------------------------
+-- QUANTUM MARKET STRUCTURE V2.2 CLEAN MOBILE
+-- QCS / LUA
+-- ADAPTADO PARA GRAFICO DE LINHA
+-- VISUAL LIMPO: EMA21 + EMA50 + CALL / PUT
+-- CONFLUENCIA DE REVERSAO LATERAL
+-- CRUZAMENTOS OPCIONAIS
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------
+
+instrument {
+    name = "QMS V2.2 CLEAN MOBILE",
+    short_name = "QMS CLEAN 2.2",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- 1. CONFIGURACOES
+------------------------------------------------------------
+
+periodoSwing = input(30, "Periodo Swing", input.integer, 10, 100)
+periodoSR = input(20, "Periodo S/R interno", input.integer, 5, 100)
+periodoRSI = input(7, "Periodo RSI", input.integer, 2, 30)
+periodoVol = input(14, "Periodo Volatilidade", input.integer, 3, 50)
+periodoLateral = input(10, "Periodo Lateral", input.integer, 3, 30)
+
+ativarCruzamentos = input(true, "Ativar CALL/PUT por cruzamento", input.bool)
+ativarReversoes = input(true, "Ativar reversoes laterais", input.bool)
+
+------------------------------------------------------------
+-- 2. MEDIAS
+-- EMA5 E EMA13: CALCULO INTERNO
+-- EMA21 E EMA50: VISUAIS
+------------------------------------------------------------
+
+ema5 = ema(close, 5)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+
+------------------------------------------------------------
+-- 3. RSI E VOLATILIDADE
+------------------------------------------------------------
+
+rsiAtual = rsi(close, periodoRSI)
+
+variacao = abs(close - close[1])
+volatilidade = sma(variacao, periodoVol)
+volSegura = max(volatilidade, 0.000001)
+
+movimento = close - close[1]
+movimentoAnterior = close[1] - close[2]
+
+inclinacao5 = ema5 - ema5[3]
+inclinacao13 = ema13 - ema13[3]
+inclinacao21 = ema21 - ema21[3]
+
+------------------------------------------------------------
+-- 4. TENDENCIA E CRUZAMENTOS
+------------------------------------------------------------
+
+tendenciaAlta =
+    ema5 > ema13 and
+    ema13 > ema21 and
+    ema21 > ema50 and
+    inclinacao13 > 0
+
+tendenciaBaixa =
+    ema5 < ema13 and
+    ema13 < ema21 and
+    ema21 < ema50 and
+    inclinacao13 < 0
+
+cruzamentoAlta =
+    ema5 > ema13 and
+    ema5[1] <= ema13[1]
+
+cruzamentoBaixa =
+    ema5 < ema13 and
+    ema5[1] >= ema13[1]
+
+confirmacaoCruzamentoAlta =
+    cruzamentoAlta and
+    movimento > 0 and
+    rsiAtual > 50
+
+confirmacaoCruzamentoBaixa =
+    cruzamentoBaixa and
+    movimento < 0 and
+    rsiAtual < 50
+
+------------------------------------------------------------
+-- 5. TOPOS, FUNDOS E FIBONACCI
+-- SOMENTE CALCULO INTERNO
+------------------------------------------------------------
+
+topoSwing = highest(close, periodoSwing)
+fundoSwing = lowest(close, periodoSwing)
+
+amplitudeSwing = topoSwing - fundoSwing
+amplitudeSegura = max(amplitudeSwing, 0.000001)
+
+fibAlta382 = topoSwing - amplitudeSwing * 0.382
+fibAlta500 = topoSwing - amplitudeSwing * 0.500
+fibAlta618 = topoSwing - amplitudeSwing * 0.618
+
+fibBaixa382 = fundoSwing + amplitudeSwing * 0.382
+fibBaixa500 = fundoSwing + amplitudeSwing * 0.500
+fibBaixa618 = fundoSwing + amplitudeSwing * 0.618
+
+swingAlta = ema21 > ema50
+swingBaixa = ema21 < ema50
+
+------------------------------------------------------------
+-- 6. SUPORTE E RESISTENCIA
+-- SEM LINHAS VISIVEIS
+------------------------------------------------------------
+
+suporte = lowest(close[1], periodoSR)
+resistencia = highest(close[1], periodoSR)
+
+rompimentoAlta =
+    close > resistencia and
+    close[1] <= resistencia
+
+rompimentoBaixa =
+    close < suporte and
+    close[1] >= suporte
+
+pertoSuporte =
+    abs(close - suporte) <= volSegura * 0.60
+
+pertoResistencia =
+    abs(close - resistencia) <= volSegura * 0.60
+
+------------------------------------------------------------
+-- 7. PROXIMIDADE FIBONACCI
+------------------------------------------------------------
+
+pertoFibAlta =
+    abs(close - fibAlta382) <= volSegura * 0.60 or
+    abs(close - fibAlta500) <= volSegura * 0.60 or
+    abs(close - fibAlta618) <= volSegura * 0.60
+
+pertoFibBaixa =
+    abs(close - fibBaixa382) <= volSegura * 0.60 or
+    abs(close - fibBaixa500) <= volSegura * 0.60 or
+    abs(close - fibBaixa618) <= volSegura * 0.60
+
+------------------------------------------------------------
+-- 8. CONFLUENCIA COM AS MEDIAS
+------------------------------------------------------------
+
+pertoEMA13 =
+    abs(close - ema13) <= volSegura * 0.60
+
+pertoEMA21 =
+    abs(close - ema21) <= volSegura * 0.60
+
+confluenciaMedia =
+    pertoEMA13 or pertoEMA21
+
+------------------------------------------------------------
+-- 9. DETECCAO DE MERCADO LATERAL
+------------------------------------------------------------
+
+distanciaMedias =
+    abs(ema5 - ema13) / volSegura
+
+forcaTendencia =
+    abs(inclinacao21) / volSegura
+
+amplitudeLateral =
+    highest(close, periodoLateral) -
+    lowest(close, periodoLateral)
+
+lateral =
+    distanciaMedias < 0.25 and
+    forcaTendencia < 0.20 and
+    rsiAtual >= 45 and
+    rsiAtual <= 55 and
+    amplitudeLateral <= volSegura * periodoLateral
+
+------------------------------------------------------------
+-- 10. CONFIRMACAO DE REVERSAO
+------------------------------------------------------------
+
+confirmacaoAlta =
+    close > close[1] and
+    close[1] <= close[2] and
+    rsiAtual > rsiAtual[1] and
+    ema5 >= ema5[1]
+
+confirmacaoBaixa =
+    close < close[1] and
+    close[1] >= close[2] and
+    rsiAtual < rsiAtual[1] and
+    ema5 <= ema5[1]
+
+------------------------------------------------------------
+-- 11. REVERSAO LATERAL COM CONFLUENCIA
+------------------------------------------------------------
+
+confluenciaAlta =
+    (pertoSuporte or pertoFibAlta) and
+    (confluenciaMedia or pertoFibAlta) and
+    confirmacaoAlta
+
+confluenciaBaixa =
+    (pertoResistencia or pertoFibBaixa) and
+    (confluenciaMedia or pertoFibBaixa) and
+    confirmacaoBaixa
+
+reversaoLateralAlta =
+    lateral and
+    confluenciaAlta and
+    not rompimentoBaixa
+
+reversaoLateralBaixa =
+    lateral and
+    confluenciaBaixa and
+    not rompimentoAlta
+
+------------------------------------------------------------
+-- 12. REVERSAO FORA DA LATERALIZACAO
+------------------------------------------------------------
+
+reversaoAlta =
+    not lateral and
+    (pertoSuporte or pertoFibAlta or pertoEMA21) and
+    confirmacaoAlta and
+    not rompimentoBaixa
+
+reversaoBaixa =
+    not lateral and
+    (pertoResistencia or pertoFibBaixa or pertoEMA21) and
+    confirmacaoBaixa and
+    not rompimentoAlta
+
+------------------------------------------------------------
+-- 13. MOTOR UNICO DE SINAIS
+------------------------------------------------------------
+
+callCruzamento =
+    ativarCruzamentos and
+    confirmacaoCruzamentoAlta
+
+putCruzamento =
+    ativarCruzamentos and
+    confirmacaoCruzamentoBaixa
+
+callReversao =
+    ativarReversoes and
+    (reversaoLateralAlta or reversaoAlta)
+
+putReversao =
+    ativarReversoes and
+    (reversaoLateralBaixa or reversaoBaixa)
+
+------------------------------------------------------------
+-- 14. FILTRO DE CONFLITO
+-- NAO EMITIR CALL E PUT SIMULTANEOS
+------------------------------------------------------------
+
+callBruto = callCruzamento or callReversao
+putBruto = putCruzamento or putReversao
+
+sinalCALL =
+    callBruto and
+    not putBruto
+
+sinalPUT =
+    putBruto and
+    not callBruto
+
+------------------------------------------------------------
+-- 15. ANTI-DUPLICACAO
+-- EVITA REPETIR O MESMO EVENTO EM SEQUENCIA
+------------------------------------------------------------
+
+novoCALL =
+    sinalCALL and
+    not sinalCALL[1]
+
+novoPUT =
+    sinalPUT and
+    not sinalPUT[1]
+
+------------------------------------------------------------
+-- 16. VISUAL LIMPO
+-- SOMENTE DUAS MEDIAS
+------------------------------------------------------------
+
+plot(ema21, "EMA 21", "#29B6F6", 2)
+plot(ema50, "EMA 50", "#AB47BC", 2)
+
+------------------------------------------------------------
+-- 17. SINAIS CALL E PUT
+------------------------------------------------------------
+
+plot_shape(
+    novoCALL,
+    "CALL",
+    shape_style.labelup,
+    shape_size.large,
+    "#00C853",
+    shape_location.belowbar,
+    0,
+    "CALL",
+    "#FFFFFF"
+)
+
+plot_shape(
+    novoPUT,
+    "PUT",
+    shape_style.labeldown,
+    shape_size.large,
+    "#FF1744",
+    shape_location.abovebar,
+    0,
+    "PUT",
+    "#FFFFFF"
+)
+
+------------------------------------------------------------
+-- FIM QMS V2.2 CLEAN MOBILE
+-- GRAFICO DE LINHA
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------

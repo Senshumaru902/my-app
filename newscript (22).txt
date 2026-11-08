@@ -1,0 +1,246 @@
+------------------------------------------------------------
+-- QMC C3.6 SMART PRECISION MOBILE
+-- BASE: QCS CROSS ONLY + NEXT CANDLE PRO
+-- GRAFICO DE LINHA
+-- EMA 3 / 30 / 60 / 200 INTERNAS
+-- COMPRA | VENDA | REV. ALTA | REV. BAIXA
+-- SEM LINHAS VISIVEIS | SEM ORDENS AUTOMATICAS
+------------------------------------------------------------
+
+instrument {
+    name = "QMC C3.6 SMART PRECISION",
+    short_name = "QMC C3.6",
+    overlay = true
+}
+
+------------------------------------------------------------
+-- CONFIGURACOES COMPATIVEIS COM OS ARQUIVOS QCS
+------------------------------------------------------------
+
+emaRapidaPeriodo = input(
+    3,
+    "EMA rapida",
+    input.integer,
+    2,
+    20
+)
+
+emaCurtaPeriodo = input(
+    30,
+    "EMA curta",
+    input.integer,
+    5,
+    100
+)
+
+emaMediaPeriodo = input(
+    60,
+    "EMA intermediaria",
+    input.integer,
+    10,
+    150
+)
+
+emaLongaPeriodo = input(
+    200,
+    "EMA tendencia principal",
+    input.integer,
+    50,
+    300
+)
+
+periodoRSI = input(
+    7,
+    "Periodo RSI",
+    input.integer,
+    2,
+    30
+)
+
+periodoSR = input(
+    20,
+    "Periodo suporte resistencia",
+    input.integer,
+    5,
+    100
+)
+
+------------------------------------------------------------
+-- 1. MEDIAS INTERNAS
+------------------------------------------------------------
+
+ema3 = ema(close, emaRapidaPeriodo)
+ema30 = ema(close, emaCurtaPeriodo)
+ema60 = ema(close, emaMediaPeriodo)
+ema200 = ema(close, emaLongaPeriodo)
+
+------------------------------------------------------------
+-- 2. MOMENTUM
+------------------------------------------------------------
+
+rsiAtual = rsi(close, periodoRSI)
+
+precoSubindo = close > close[1]
+precoCaindo = close < close[1]
+
+rsiSubindo = rsiAtual > rsiAtual[1]
+rsiCaindo = rsiAtual < rsiAtual[1]
+
+------------------------------------------------------------
+-- 3. TENDENCIA PRINCIPAL
+------------------------------------------------------------
+
+tendenciaAlta = ema60 > ema200
+tendenciaBaixa = ema60 < ema200
+
+tendenciaAltaConfirmada =
+    ema30 > ema60 and
+    ema60 > ema200
+
+tendenciaBaixaConfirmada =
+    ema30 < ema60 and
+    ema60 < ema200
+
+------------------------------------------------------------
+-- 4. CRUZAMENTO REAL
+------------------------------------------------------------
+
+cruzouAlta =
+    ema3 > ema30 and
+    ema3[1] <= ema30[1]
+
+cruzouBaixa =
+    ema3 < ema30 and
+    ema3[1] >= ema30[1]
+
+------------------------------------------------------------
+-- 5. SUPORTE E RESISTENCIA
+------------------------------------------------------------
+
+suporte = lowest(low, periodoSR)
+resistencia = highest(high, periodoSR)
+
+pertoSuporte =
+    close <= suporte + abs(ema30 - ema60)
+
+pertoResistencia =
+    close >= resistencia - abs(ema30 - ema60)
+
+------------------------------------------------------------
+-- 6. REVERSAO POTENCIAL
+------------------------------------------------------------
+
+reversaoAlta =
+    cruzouAlta and
+    tendenciaBaixa and
+    precoSubindo and
+    rsiSubindo and
+    pertoSuporte
+
+reversaoBaixa =
+    cruzouBaixa and
+    tendenciaAlta and
+    precoCaindo and
+    rsiCaindo and
+    pertoResistencia
+
+------------------------------------------------------------
+-- 7. COMPRA E VENDA POR TENDENCIA
+------------------------------------------------------------
+
+compraTendencia =
+    cruzouAlta and
+    tendenciaAltaConfirmada and
+    precoSubindo and
+    rsiAtual > 50 and
+    rsiSubindo
+
+vendaTendencia =
+    cruzouBaixa and
+    tendenciaBaixaConfirmada and
+    precoCaindo and
+    rsiAtual < 50 and
+    rsiCaindo
+
+------------------------------------------------------------
+-- 8. MOTOR DE DECISAO
+------------------------------------------------------------
+
+revAltaFinal =
+    reversaoAlta and
+    not reversaoBaixa
+
+revBaixaFinal =
+    reversaoBaixa and
+    not reversaoAlta
+
+compraFinal =
+    compraTendencia and
+    not vendaTendencia and
+    not revAltaFinal and
+    not revBaixaFinal
+
+vendaFinal =
+    vendaTendencia and
+    not compraTendencia and
+    not revAltaFinal and
+    not revBaixaFinal
+
+------------------------------------------------------------
+-- 9. SINAIS VISUAIS
+-- FORMATO BASEADO NO CROSS ONLY V1.0
+------------------------------------------------------------
+
+plot_shape(
+    revAltaFinal,
+    "REVERSAO DE ALTA",
+    shape_style.labelup,
+    shape_size.large,
+    "#00BFA5",
+    shape_location.belowbar,
+    0,
+    "REV. ALTA",
+    "white"
+)
+
+plot_shape(
+    revBaixaFinal,
+    "REVERSAO DE BAIXA",
+    shape_style.labeldown,
+    shape_size.large,
+    "#FF9100",
+    shape_location.abovebar,
+    0,
+    "REV. BAIXA",
+    "white"
+)
+
+plot_shape(
+    compraFinal,
+    "COMPRA",
+    shape_style.labelup,
+    shape_size.large,
+    "#00C853",
+    shape_location.belowbar,
+    0,
+    "COMPRA",
+    "white"
+)
+
+plot_shape(
+    vendaFinal,
+    "VENDA",
+    shape_style.labeldown,
+    shape_size.large,
+    "#FF1744",
+    shape_location.abovebar,
+    0,
+    "VENDA",
+    "white"
+)
+
+------------------------------------------------------------
+-- FIM QMC C3.6
+-- MEDIAS INTERNAS
+-- SEM ORDENS AUTOMATICAS
+------------------------------------------------------------

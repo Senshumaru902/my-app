@@ -1,0 +1,114 @@
+
+-- ============================================================
+-- QMS SCANNER HISTORICO 3 SOLDADOS / 3 CORVOS
+-- IQ OPTION QCS MOBILE
+-- Somente leitura | Sem ordens automaticas
+-- ============================================================
+
+instrument {
+    name = "QMS SCANNER HISTORICO 3S3C",
+    short_name = "QMS 3S3C",
+    overlay = true
+}
+
+input_group {
+    "Padroes",
+    mostrar_soldados = input(true, "Mostrar tres soldados", input.boolean),
+    mostrar_corvos = input(true, "Mostrar tres corvos", input.boolean)
+}
+
+input_group {
+    "Filtro",
+    exigir_progressao = input(true, "Exigir progressao", input.boolean)
+}
+
+input_group {
+    "Cores",
+    cor_soldados = input {
+        default = "#2196FF",
+        type = input.color
+    },
+    cor_corvos = input {
+        default = "#A020F0",
+        type = input.color
+    }
+}
+
+-- ------------------------------------------------------------
+-- CONDICOES DE TRES SOLDADOS
+-- Avaliadas em cada candle da serie historica
+-- ------------------------------------------------------------
+
+soldados_base =
+    close > open and
+    close[1] > open[1] and
+    close[2] > open[2]
+
+soldados_progressao =
+    close > close[1] and
+    close[1] > close[2]
+
+if exigir_progressao then
+    soldados = soldados_base and soldados_progressao
+else
+    soldados = soldados_base
+end
+
+-- ------------------------------------------------------------
+-- CONDICOES DE TRES CORVOS
+-- ------------------------------------------------------------
+
+corvos_base =
+    close < open and
+    close[1] < open[1] and
+    close[2] < open[2]
+
+corvos_progressao =
+    close < close[1] and
+    close[1] < close[2]
+
+if exigir_progressao then
+    corvos = corvos_base and corvos_progressao
+else
+    corvos = corvos_base
+end
+
+-- ------------------------------------------------------------
+-- SERIES DE MARCACAO
+-- Valores nil fora dos padroes
+-- ------------------------------------------------------------
+
+ponto_soldados = iff(
+    mostrar_soldados and soldados,
+    low,
+    nil
+)
+
+ponto_corvos = iff(
+    mostrar_corvos and corvos,
+    high,
+    nil
+)
+
+-- ------------------------------------------------------------
+-- PLOTAGEM HISTORICA
+-- A plataforma calcula os valores para cada candle carregado
+-- ------------------------------------------------------------
+
+plot(
+    ponto_soldados,
+    "HISTORICO TRES SOLDADOS",
+    cor_soldados,
+    4,
+    0,
+    style.points
+)
+
+plot(
+    ponto_corvos,
+    "HISTORICO TRES CORVOS",
+    cor_corvos,
+    4,
+    0,
+    style.points
+)

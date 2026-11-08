@@ -1,0 +1,95 @@
+instrument {
+name = "QMS SOMENTE TOPOS FORTES V4",
+short_name = "QMS TOPOS V4",
+overlay = true
+}
+
+input_group {
+"CONFIGURACAO",
+
+periodo = input(2, "Confirmacao", input.integer, 1, 6),
+
+forca_forte = input(60, "Forca forte (%)", input.integer, 40, 90),
+
+rejeicao_minima = input(20, "Rejeicao minima (%)", input.integer, 5, 60),
+
+sensibilidade = input(1, "Sensibilidade da amplitude", input.integer, 1, 3)
+
+}
+
+input_group {
+"CORES",
+
+cor_topo = input {
+    default = "#FF0000",
+    type = input.color
+}
+
+}
+
+-- DADOS DA VELA ANALISADA
+
+h = high[periodo]
+l = low[periodo]
+o = open[periodo]
+c = close[periodo]
+
+amplitude = h - l
+corpo = abs(c - o)
+
+sombra_superior = h - max(o, c)
+
+forca = amplitude > 0 and
+corpo / amplitude * 100 or 0
+
+rej_topo = amplitude > 0 and
+sombra_superior / amplitude * 100 or 0
+
+-- AMPLITUDE FLEXIVEL
+
+media = sma(high - low, 14)[periodo]
+
+amplitude_valida =
+amplitude > 0 and
+amplitude >= media * (
+sensibilidade == 1 and 0.15 or
+sensibilidade == 2 and 0.08 or
+0.03
+)
+
+-- DETECCAO DE TOPO
+
+topo_bruto =
+h >= highest(high, periodo * 2 + 1)[periodo]
+
+-- REJEICAO DO TOPO
+
+topo_rejeitado =
+rej_topo >= rejeicao_minima or c < o
+
+-- FORCA DO TOPO
+
+forte =
+forca >= forca_forte
+
+-- SINAL FINAL: SOMENTE TOPO FORTE
+
+topo_forte =
+topo_bruto and
+amplitude_valida and
+topo_rejeitado and
+forte
+
+-- PLOTAGEM
+
+plot_shape(
+topo_forte,
+"TOPO FORTE",
+shape_style.triangledown,
+shape_size.large,
+cor_topo,
+shape_location.abovebar,
+-periodo,
+"TOPO FORTE",
+cor_topo
+)

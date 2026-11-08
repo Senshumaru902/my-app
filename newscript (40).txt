@@ -1,0 +1,206 @@
+--------------------------------------------------
+-- QCS V3.9 LINE ONLY
+-- CELULAR + NOTEBOOK
+-- SOMENTE LINHAS NO GRAFICO
+-- NAO ENVIA ORDENS
+--------------------------------------------------
+
+instrument {
+    name = "QCS V3.9 LINE ONLY",
+    short_name = "QCS LINE",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+periodo = input(5, "EMA Rapida", input.integer, 1, 50)
+minScore = input(55, "Score CALL/PUT", input.integer, 1, 100)
+
+--------------------------------------------------
+-- CORES
+--------------------------------------------------
+
+verde = "#00FF00"
+vermelho = "#FF2020"
+dourado = "#FFD700"
+laranja = "#CC5500"
+cinza = "#808080"
+
+--------------------------------------------------
+-- INDICADORES
+--------------------------------------------------
+
+ema5 = ema(close, periodo)
+ema13 = ema(close, 13)
+ema21 = ema(close, 21)
+
+rsi7 = rsi(close, 7)
+atr7 = sma(tr, 7)
+
+--------------------------------------------------
+-- FORCA DA VELA
+--------------------------------------------------
+
+amplitude = high - low
+corpo = abs(close - open)
+
+forcaVela = 0
+
+if amplitude > 0 then
+    forcaVela = corpo / amplitude * 100
+end
+
+--------------------------------------------------
+-- CRUZAMENTO REAL
+--------------------------------------------------
+
+cruzouAlta = ema5 > ema13 and ema5[1] <= ema13[1]
+cruzouBaixa = ema5 < ema13 and ema5[1] >= ema13[1]
+
+--------------------------------------------------
+-- TENDENCIA
+--------------------------------------------------
+
+tendAlta = ema13 > ema21 and ema21 >= ema21[1]
+tendBaixa = ema13 < ema21 and ema21 <= ema21[1]
+
+microAlta = ema5 > ema13
+microBaixa = ema5 < ema13
+
+momentumAlta = close > close[1]
+momentumBaixa = close < close[1]
+
+acelAlta = close - close[1] > close[1] - close[2]
+acelBaixa = close[1] - close > close[2] - close[1]
+
+--------------------------------------------------
+-- LATERALIZACAO
+--------------------------------------------------
+
+lateral = false
+
+if atr7 > 0 then
+    lateral =
+        abs(ema5 - ema13) < atr7 * 0.10 and
+        rsi7 >= 45 and rsi7 <= 55
+end
+
+--------------------------------------------------
+-- SUPORTE E RESISTENCIA
+--------------------------------------------------
+
+resistencia = highest(high[1], 10)
+suporte = lowest(low[1], 10)
+
+rompeAlta = close > resistencia
+rompeBaixa = close < suporte
+
+--------------------------------------------------
+-- SCORE DIRECIONAL
+--------------------------------------------------
+
+scoreCall = 0
+scorePut = 0
+
+if tendAlta then scoreCall = scoreCall + 20 end
+if tendBaixa then scorePut = scorePut + 20 end
+
+if microAlta then scoreCall = scoreCall + 15 end
+if microBaixa then scorePut = scorePut + 15 end
+
+if momentumAlta then scoreCall = scoreCall + 10 end
+if momentumBaixa then scorePut = scorePut + 10 end
+
+if acelAlta then scoreCall = scoreCall + 10 end
+if acelBaixa then scorePut = scorePut + 10 end
+
+if rsi7 > 52 then scoreCall = scoreCall + 10 end
+if rsi7 < 48 then scorePut = scorePut + 10 end
+
+if close > open then scoreCall = scoreCall + 10 end
+if close < open then scorePut = scorePut + 10 end
+
+if forcaVela >= 60 and close > open then
+    scoreCall = scoreCall + 5
+end
+
+if forcaVela >= 60 and close < open then
+    scorePut = scorePut + 5
+end
+
+if rompeAlta then scoreCall = scoreCall + 15 end
+if rompeBaixa then scorePut = scorePut + 15 end
+
+if cruzouAlta then scoreCall = scoreCall + 10 end
+if cruzouBaixa then scorePut = scorePut + 10 end
+
+--------------------------------------------------
+-- FILTRO DE CONFLITO
+--------------------------------------------------
+
+conflito =
+    (tendAlta and microBaixa) or
+    (tendBaixa and microAlta)
+
+call = scoreCall >= minScore and
+       scoreCall > scorePut and
+       not lateral and not conflito
+
+put = scorePut >= minScore and
+      scorePut > scoreCall and
+      not lateral and not conflito
+
+--------------------------------------------------
+-- MOVIMENTO FORTE
+--------------------------------------------------
+
+forteAlta = tendAlta and microAlta and acelAlta and
+            forcaVela >= 60 and scoreCall >= 70
+
+forteBaixa = tendBaixa and microBaixa and acelBaixa and
+             forcaVela >= 60 and scorePut >= 70
+
+--------------------------------------------------
+-- SOMENTE LINHAS
+--------------------------------------------------
+
+-- Linha base
+plot(ema21, "EMA21", cinza, 1)
+
+-- Tendencia de alta
+plot(
+    (tendAlta or microAlta) and ema5 or nil,
+    "TENDENCIA ALTA",
+    verde,
+    3
+)
+
+-- Tendencia de baixa
+plot(
+    (tendBaixa or microBaixa) and ema5 or nil,
+    "TENDENCIA BAIXA",
+    vermelho,
+    3
+)
+
+-- Movimento forte: linha grossa dourada
+plot(
+    (forteAlta or forteBaixa) and ema5 or nil,
+    "MOVIMENTO FORTE",
+    dourado,
+    6
+)
+
+-- Mercado lateral: laranja escuro
+plot(
+    lateral and ema13 or nil,
+    "MERCADO LATERAL",
+    laranja,
+    5
+)
+
+--------------------------------------------------
+-- SEM SETAS, SEM TEXTOS, SEM MARCADORES
+--------------------------------------------------

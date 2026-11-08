@@ -1,0 +1,162 @@
+
+instrument {
+    name = "QMS BAIXA + TOPO DUPLO M QUALIFICADOR",
+    short_name = "QMS M QUALIFICADOR",
+    overlay = true
+}
+
+input_group {
+    "MEDIA",
+
+    periodo = input(13, "Periodo", input.integer, 2, 100),
+    suavizacao = input(2, "Suavizacao", input.integer, 1, 10)
+}
+
+input_group {
+    "TOPO DUPLO",
+
+    tolerancia = input(0.15, "Tolerancia entre topos (%)", input.double, 0.01, 1, 0.01),
+    rejeicao = input(1.2, "Pavio minimo / corpo", input.double, 0.5, 5, 0.1)
+}
+
+input_group {
+    "QUALIFICADOR",
+
+    pavio_forte = input(2.0, "Pavio forte / corpo", input.double, 1, 5, 0.1),
+    fechamento = input(0.30, "Fechamento proximo da minima", input.double, 0.05, 0.8, 0.05),
+    corpo_minimo = input(0.20, "Corpo minimo da vela", input.double, 0.05, 0.8, 0.05)
+}
+
+input_group {
+    "CORES",
+
+    cor_forte = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_fraca = input {
+        default = "#FFD600",
+        type = input.color
+    },
+
+    cor_oculta = input {
+        default = "#151A2B",
+        type = input.color
+    },
+
+    cor_m = input {
+        default = "#FF1744",
+        type = input.color
+    },
+
+    cor_rejeicao_forte = input {
+        default = "#00E676",
+        type = input.color
+    },
+
+    cor_rejeicao_media = input {
+        default = "#FFD600",
+        type = input.color
+    }
+}
+
+-- MEDIA DINAMICA
+media_base = ema(close, periodo)
+media_final = ema(media_base, suavizacao)
+
+-- TENDENCIA DE BAIXA
+queda1 = media_final < media_final[1]
+queda2 = queda1 and media_final[1] < media_final[2]
+queda3 = queda2 and media_final[2] < media_final[3]
+
+queda_forte = queda3
+queda_fraca = queda2 and not queda3
+
+cor_linha = iff(
+    queda_forte,
+    cor_forte,
+    iff(queda_fraca, cor_fraca, cor_oculta)
+)
+
+plot(media_final, "TENDENCIA", cor_linha, 2)
+
+-- PRIMEIRO TOPO
+topo1 = high[6] > high[7] and high[6] >= high[5]
+
+-- SEGUNDO TOPO
+topo2 = high[2] > high[3] and high[2] >= high[1]
+
+-- PROXIMIDADE DOS TOPOS
+distancia = abs(high[6] - high[2])
+limite = high[6] * tolerancia / 100
+
+topos_parecidos = distancia <= limite
+
+-- ANALISE DA VELA DE REJEICAO
+corpo = abs(close[1] - open[1])
+amplitude = high[1] - low[1]
+
+pavio_superior = high[1] - max(open[1], close[1])
+
+fechamento_relativo = (close[1] - low[1]) / max(amplitude, 0.00000001)
+
+corpo_relativo = corpo / max(amplitude, 0.00000001)
+
+-- REJEICAO VENDEDORA
+vela_vendedora = close[1] < open[1]
+
+rejeicao_valida =
+    vela_vendedora and
+    pavio_superior >= corpo * rejeicao and
+    corpo_relativo >= corpo_minimo
+
+-- QUALIDADE DA REJEICAO
+rejeicao_forte =
+    rejeicao_valida and
+    pavio_superior >= corpo * pavio_forte and
+    fechamento_relativo <= fechamento
+
+rejeicao_media =
+    rejeicao_valida and
+    not rejeicao_forte
+
+-- ESTRUTURA M
+estrutura_m =
+    topo1 and
+    topo2 and
+    topos_parecidos
+
+-- QUALIFICACAO FINAL
+qualificador_forte =
+    estrutura_m and rejeicao_forte
+
+qualificador_medio =
+    estrutura_m and rejeicao_media
+
+-- SINAL PRINCIPAL
+sinal_m =
+    qualificador_forte or qualificador_medio
+
+-- MARCACAO DO QUALIFICADOR
+plot_shape(
+    qualificador_forte,
+    "REJEICAO FORTE",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_rejeicao_forte,
+    shape_location.abovebar,
+    0,
+    "M FORTE"
+)
+
+plot_shape(
+    qualificador_medio,
+    "REJEICAO MODERADA",
+    shape_style.triangledown,
+    shape_size.normal,
+    cor_rejeicao_media,
+    shape_location.abovebar,
+    0,
+    "M MODERADO"
+)
