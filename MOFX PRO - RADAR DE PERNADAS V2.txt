@@ -1,0 +1,287 @@
+
+--------------------------------------------------
+-- MOFX PRO - RADAR DE PERNADAS V2
+-- VERDE: ALTA FORTE / ANTECIPACAO DE ALTA
+-- VERMELHO: BAIXA FORTE / ANTECIPACAO DE BAIXA
+-- LINHA GROSSA
+-- UMA UNICA PLOTAGEM
+--------------------------------------------------
+
+instrument {
+    name = "MOFX PRO - RADAR PERNADAS V2",
+    short_name = "MOFX RADAR V2",
+    icon = "indicators:EMA",
+    overlay = true
+}
+
+--------------------------------------------------
+-- 1. CORES
+--------------------------------------------------
+
+input_group {
+    "CORES",
+
+    cor_alta = input {
+        default = "#00C853",
+        type = input.color
+    },
+
+    cor_baixa = input {
+        default = "#FF1744",
+        type = input.color
+    }
+}
+
+--------------------------------------------------
+-- 2. MEDIA VISUAL
+--------------------------------------------------
+
+input_group {
+    "MEDIA PRINCIPAL",
+
+    periodo_visual = input {
+        default = 8,
+        type = input.integer,
+        min = 2,
+        max = 100
+    },
+
+    largura_linha = input {
+        default = 4,
+        type = input.line_width
+    }
+}
+
+--------------------------------------------------
+-- 3. SENSIBILIDADE
+--------------------------------------------------
+
+input_group {
+    "RADAR ANTECIPADO",
+
+    sensibilidade = input {
+        default = 0.08,
+        type = input.double,
+        min = 0.01,
+        max = 1.0
+    },
+
+    forca_tendencia = input {
+        default = 0.20,
+        type = input.double,
+        min = 0.05,
+        max = 2.0
+    }
+}
+
+--------------------------------------------------
+-- 4. MEDIAS INTERNAS
+--------------------------------------------------
+
+ema8 = ema(close, 8)
+ema21 = ema(close, 21)
+ema50 = ema(close, 50)
+ema200 = ema(close, 200)
+
+--------------------------------------------------
+-- 5. VOLATILIDADE E MOMENTUM
+--------------------------------------------------
+
+atr_valor = atr(14)
+
+rsi_valor = rsi(close, 14)
+
+macd_linha =
+    ema(close, 12) - ema(close, 26)
+
+macd_sinal =
+    ema(macd_linha, 9)
+
+histograma =
+    macd_linha - macd_sinal
+
+--------------------------------------------------
+-- 6. INCLINACAO DAS MEDIAS
+--------------------------------------------------
+
+subida_rapida =
+    ema8[1] > ema8[2] and
+    ema8[2] > ema8[3]
+
+queda_rapida =
+    ema8[1] < ema8[2] and
+    ema8[2] < ema8[3]
+
+subida_media =
+    ema21[1] > ema21[2]
+
+queda_media =
+    ema21[1] < ema21[2]
+
+subida_longa =
+    ema50[1] > ema50[2]
+
+queda_longa =
+    ema50[1] < ema50[2]
+
+--------------------------------------------------
+-- 7. SEPARACAO E FORCA
+--------------------------------------------------
+
+distancia_rapida =
+    abs(ema8[1] - ema21[1])
+
+separacao_inicial =
+    distancia_rapida >
+    atr_valor[1] * sensibilidade
+
+separacao_forte =
+    distancia_rapida >
+    atr_valor[1] * forca_tendencia
+
+--------------------------------------------------
+-- 8. ROMPIMENTO DE PRECO
+--------------------------------------------------
+
+rompimento_alta =
+    close[1] > high[2]
+
+rompimento_baixa =
+    close[1] < low[2]
+
+--------------------------------------------------
+-- 9. ACELERACAO DO MOMENTUM
+--------------------------------------------------
+
+aceleracao_alta =
+    histograma[1] > histograma[2] and
+    histograma[2] >= histograma[3]
+
+aceleracao_baixa =
+    histograma[1] < histograma[2] and
+    histograma[2] <= histograma[3]
+
+--------------------------------------------------
+-- 10. ANTECIPACAO DE ALTA
+--------------------------------------------------
+
+antecipacao_alta =
+    ema8[1] > ema21[1] and
+    subida_rapida and
+    subida_media and
+    close[1] > ema8[1] and
+    rompimento_alta and
+    separacao_inicial and
+    rsi_valor[1] > 52 and
+    aceleracao_alta
+
+--------------------------------------------------
+-- 11. ANTECIPACAO DE BAIXA
+--------------------------------------------------
+
+antecipacao_baixa =
+    ema8[1] < ema21[1] and
+    queda_rapida and
+    queda_media and
+    close[1] < ema8[1] and
+    rompimento_baixa and
+    separacao_inicial and
+    rsi_valor[1] < 48 and
+    aceleracao_baixa
+
+--------------------------------------------------
+-- 12. TENDENCIA FORTE DE ALTA
+--------------------------------------------------
+
+tendencia_forte_alta =
+    ema8[1] > ema21[1] and
+    ema21[1] > ema50[1] and
+    ema50[1] > ema200[1] and
+    subida_rapida and
+    subida_media and
+    subida_longa and
+    close[1] > ema8[1] and
+    separacao_forte and
+    rsi_valor[1] > 55 and
+    histograma[1] > 0 and
+    aceleracao_alta
+
+--------------------------------------------------
+-- 13. TENDENCIA FORTE DE BAIXA
+--------------------------------------------------
+
+tendencia_forte_baixa =
+    ema8[1] < ema21[1] and
+    ema21[1] < ema50[1] and
+    ema50[1] < ema200[1] and
+    queda_rapida and
+    queda_media and
+    queda_longa and
+    close[1] < ema8[1] and
+    separacao_forte and
+    rsi_valor[1] < 45 and
+    histograma[1] < 0 and
+    aceleracao_baixa
+
+--------------------------------------------------
+-- 14. DIRECAO IDENTIFICADA
+--------------------------------------------------
+
+sinal_alta =
+    tendencia_forte_alta or
+    antecipacao_alta
+
+sinal_baixa =
+    tendencia_forte_baixa or
+    antecipacao_baixa
+
+--------------------------------------------------
+-- 15. PRESSAO PRELIMINAR
+--------------------------------------------------
+
+pressao_alta =
+    ema8[1] > ema21[1] and
+    subida_rapida and
+    histograma[1] > histograma[2]
+
+pressao_baixa =
+    ema8[1] < ema21[1] and
+    queda_rapida and
+    histograma[1] < histograma[2]
+
+--------------------------------------------------
+-- 16. MEDIA VISUAL
+--------------------------------------------------
+
+media_visual =
+    ema(close, periodo_visual)
+
+--------------------------------------------------
+-- 17. COLORACAO DINAMICA
+--------------------------------------------------
+
+cor_linha =
+    iff(
+        sinal_alta,
+        cor_alta,
+        iff(
+            sinal_baixa,
+            cor_baixa,
+            iff(
+                pressao_alta,
+                cor_alta,
+                cor_baixa
+            )
+        )
+    )
+
+--------------------------------------------------
+-- 18. UNICA PLOTAGEM
+--------------------------------------------------
+
+plot(
+    media_visual,
+    "RADAR DE PERNADAS",
+    cor_linha,
+    largura_linha
+)

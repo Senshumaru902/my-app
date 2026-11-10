@@ -1,0 +1,693 @@
+
+instrument {
+    name = "MoFX PRO - ATEMPORAL",
+    short_name = "MoFX ATEMPORAL",
+    icon = "indicators:CCI",
+    overlay = true
+}
+
+--------------------------------------------------
+-- 1. CORES
+--------------------------------------------------
+
+input_group {
+    "COMPRA",
+    buy_color = input {
+        default = "#2196FF",
+        type = input.color
+    }
+}
+
+input_group {
+    "VENDA",
+    sell_color = input {
+        default = "#A020F0",
+        type = input.color
+    }
+}
+
+input_group {
+    "ESTADOS",
+    correction_color = input {
+        default = "#FFD700",
+        type = input.color
+    },
+
+    neutral_color = input {
+        default = "#808080",
+        type = input.color
+    },
+
+    exhaustion_color = input {
+        default = "#F44336",
+        type = input.color
+    }
+}
+
+--------------------------------------------------
+-- 2. MEDIAS MOVEIS
+--------------------------------------------------
+
+input_group {
+    "MEDIAS MOVEIS",
+    periodo_rapido = input(21, "EMA 21", input.integer, 1),
+    periodo_medio = input(50, "EMA 50", input.integer, 1),
+    periodo_lento = input(200, "EMA 200", input.integer, 1)
+}
+
+--------------------------------------------------
+-- 3. STOCHASTIC
+--------------------------------------------------
+
+input_group {
+    "STOCHASTIC",
+    k_period = input(13, "Periodo K", input.integer, 1),
+    d_period = input(3, "Periodo D", input.integer, 1),
+    smooth = input(3, "Suavizacao", input.integer, 1)
+}
+
+--------------------------------------------------
+-- 4. RSI
+--------------------------------------------------
+
+input_group {
+    "RSI",
+    rsi_period = input(14, "Periodo RSI", input.integer, 1)
+}
+
+--------------------------------------------------
+-- 5. MACD
+--------------------------------------------------
+
+input_group {
+    "MACD",
+    macd_fast = input(12, "Rapida", input.integer, 1),
+    macd_slow = input(26, "Lenta", input.integer, 1),
+    macd_signal_period = input(9, "Sinal", input.integer, 1)
+}
+
+--------------------------------------------------
+-- 6. FORCA DOS CANDLES
+--------------------------------------------------
+
+input_group {
+    "FORCA DOS CANDLES",
+    corpo_minimo = input(30, "Corpo minimo %", input.integer, 1, 100)
+}
+
+--------------------------------------------------
+-- 7. PERNADAS
+--------------------------------------------------
+
+input_group {
+    "PERNADAS",
+    periodo_pernada = input(12, "Janela", input.integer, 3, 100),
+    forca_pernada = input(1.0, "Forca ATR", input.double, 0.1, 10, 0.1),
+    retracao_maxima = input(65, "Retracao maxima %", input.integer, 10, 95)
+}
+
+--------------------------------------------------
+-- 8. VOLATILIDADE
+--------------------------------------------------
+
+input_group {
+    "VOLATILIDADE",
+    atr_period = input(14, "Periodo ATR", input.integer, 1),
+    extensao_maxima = input(3.0, "Exaustao ATR", input.double, 0.5, 10, 0.1),
+    atr_lateral = input(0.10, "Separacao minima ATR", input.double, 0.01, 2, 0.01)
+}
+
+--------------------------------------------------
+-- 9. ESTRUTURA
+--------------------------------------------------
+
+input_group {
+    "ESTRUTURA",
+    periodo_estrutura = input(12, "Janela estrutural", input.integer, 3, 100),
+    distancia_sr = input(0.25, "Distancia SR ATR", input.double, 0.05, 3, 0.05)
+}
+
+--------------------------------------------------
+-- 10. SELETIVIDADE
+--------------------------------------------------
+
+input_group {
+    "SELETIVIDADE",
+    confirmacoes_minimas = input(3, "Minimo confirmacoes", input.integer, 2, 7)
+}
+
+--------------------------------------------------
+-- 11. MEDIAS MOVEIS
+--------------------------------------------------
+
+ema21 = ema(close, periodo_rapido)
+ema50 = ema(close, periodo_medio)
+ema200 = ema(close, periodo_lento)
+
+--------------------------------------------------
+-- 12. ATR E RSI
+--------------------------------------------------
+
+atr_valor = atr(atr_period)
+rsi_valor = rsi(close, rsi_period)
+
+--------------------------------------------------
+-- 13. STOCHASTIC
+--------------------------------------------------
+
+stoch_bruto = stochastic(close, k_period)
+k = sma(stoch_bruto, smooth) * 100
+d = sma(k, d_period)
+
+--------------------------------------------------
+-- 14. MACD
+--------------------------------------------------
+
+macd_fast_ma = ema(close, macd_fast)
+macd_slow_ma = ema(close, macd_slow)
+
+macd_line = macd_fast_ma - macd_slow_ma
+macd_signal = ema(macd_line, macd_signal_period)
+
+histograma = macd_line - macd_signal
+
+--------------------------------------------------
+-- 15. TENDENCIA
+--------------------------------------------------
+
+tendencia_compra =
+    close[1] > ema200[1] and
+    ema21[1] > ema50[1] and
+    ema21[1] > ema21[2]
+
+tendencia_venda =
+    close[1] < ema200[1] and
+    ema21[1] < ema50[1] and
+    ema21[1] < ema21[2]
+
+--------------------------------------------------
+-- 16. INCLINACAO
+--------------------------------------------------
+
+inclinacao_compra =
+    ema21[1] > ema21[2] and
+    ema50[1] > ema50[2] and
+    ema200[1] >= ema200[2]
+
+inclinacao_venda =
+    ema21[1] < ema21[2] and
+    ema50[1] < ema50[2] and
+    ema200[1] <= ema200[2]
+
+--------------------------------------------------
+-- 17. SEPARACAO
+--------------------------------------------------
+
+separacao = abs(ema21[1] - ema50[1])
+
+separacao_normalizada =
+    atr_valor[1] > 0 and
+    separacao / atr_valor[1] or 0
+
+mercado_direcional =
+    separacao_normalizada > atr_lateral
+
+--------------------------------------------------
+-- 18. ESTRUTURA DO MERCADO
+--------------------------------------------------
+
+topo_estrutura = highest(high, periodo_estrutura)
+fundo_estrutura = lowest(low, periodo_estrutura)
+
+topo_anterior = topo_estrutura[2]
+fundo_anterior = fundo_estrutura[2]
+
+estrutura_alta =
+    topo_estrutura[1] > topo_anterior and
+    fundo_estrutura[1] > fundo_anterior
+
+estrutura_baixa =
+    topo_estrutura[1] < topo_anterior and
+    fundo_estrutura[1] < fundo_anterior
+
+--------------------------------------------------
+-- 19. STOCHASTIC
+--------------------------------------------------
+
+stoch_compra =
+    k[1] > d[1] and
+    k[1] > k[2]
+
+stoch_venda =
+    k[1] < d[1] and
+    k[1] < k[2]
+
+--------------------------------------------------
+-- 20. RSI
+--------------------------------------------------
+
+rsi_sinal_compra =
+    rsi_valor[1] > 50 and
+    rsi_valor[1] > rsi_valor[2]
+
+rsi_sinal_venda =
+    rsi_valor[1] < 50 and
+    rsi_valor[1] < rsi_valor[2]
+
+--------------------------------------------------
+-- 21. MACD
+--------------------------------------------------
+
+macd_compra =
+    macd_line[1] > macd_signal[1] and
+    histograma[1] > histograma[2]
+
+macd_venda =
+    macd_line[1] < macd_signal[1] and
+    histograma[1] < histograma[2]
+
+--------------------------------------------------
+-- 22. FORCA DO CANDLE
+--------------------------------------------------
+
+amplitude = high[1] - low[1]
+corpo = abs(close[1] - open[1])
+
+corpo_percentual =
+    amplitude > 0 and
+    corpo / amplitude * 100 or 0
+
+candle_compra =
+    close[1] > open[1] and
+    corpo_percentual >= corpo_minimo
+
+candle_venda =
+    close[1] < open[1] and
+    corpo_percentual >= corpo_minimo
+
+--------------------------------------------------
+-- 23. PERNADAS
+--------------------------------------------------
+
+topo_pernada = highest(high, periodo_pernada)
+fundo_pernada = lowest(low, periodo_pernada)
+
+amplitude_pernada =
+    topo_pernada[1] - fundo_pernada[1]
+
+forca_alta =
+    close[1] - fundo_pernada[1]
+
+forca_baixa =
+    topo_pernada[1] - close[1]
+
+pernada_alta =
+    close[1] > ema21[1] and
+    ema21[1] > ema21[2] and
+    forca_alta >= atr_valor[1] * forca_pernada
+
+pernada_baixa =
+    close[1] < ema21[1] and
+    ema21[1] < ema21[2] and
+    forca_baixa >= atr_valor[1] * forca_pernada
+
+--------------------------------------------------
+-- 24. RETRACOES
+--------------------------------------------------
+
+retracao_alta =
+    amplitude_pernada > 0 and
+    (topo_pernada[1] - close[1]) /
+    amplitude_pernada * 100 or 0
+
+retracao_baixa =
+    amplitude_pernada > 0 and
+    (close[1] - fundo_pernada[1]) /
+    amplitude_pernada * 100 or 0
+
+pernada_alta_valida =
+    pernada_alta and
+    retracao_alta <= retracao_maxima
+
+pernada_baixa_valida =
+    pernada_baixa and
+    retracao_baixa <= retracao_maxima
+
+--------------------------------------------------
+-- 25. EXAUSTAO
+--------------------------------------------------
+
+extensao_alta =
+    atr_valor[1] > 0 and
+    forca_alta / atr_valor[1] or 0
+
+extensao_baixa =
+    atr_valor[1] > 0 and
+    forca_baixa / atr_valor[1] or 0
+
+exaustao_alta =
+    extensao_alta >= extensao_maxima and
+    (
+        histograma[1] < histograma[2] or
+        rsi_valor[1] < rsi_valor[2] or
+        candle_venda
+    )
+
+exaustao_baixa =
+    extensao_baixa >= extensao_maxima and
+    (
+        histograma[1] > histograma[2] or
+        rsi_valor[1] > rsi_valor[2] or
+        candle_compra
+    )
+
+sem_exaustao_compra =
+    not exaustao_alta and
+    extensao_alta <= extensao_maxima
+
+sem_exaustao_venda =
+    not exaustao_baixa and
+    extensao_baixa <= extensao_maxima
+
+--------------------------------------------------
+-- 26. CORRECOES
+--------------------------------------------------
+
+correcao_alta =
+    tendencia_compra and
+    close[1] < ema21[1] and
+    close[1] > ema50[1] and
+    not exaustao_alta
+
+correcao_baixa =
+    tendencia_venda and
+    close[1] > ema21[1] and
+    close[1] < ema50[1] and
+    not exaustao_baixa
+
+--------------------------------------------------
+-- 27. LATERALIZACAO
+--------------------------------------------------
+
+mercado_lateral =
+    not mercado_direcional
+
+--------------------------------------------------
+-- 28. SUPORTE E RESISTENCIA
+--------------------------------------------------
+
+resistencia = highest(high[1], periodo_estrutura)
+suporte = lowest(low[1], periodo_estrutura)
+
+plot(resistencia, "RESISTENCIA", "#707070", 1)
+plot(suporte, "SUPORTE", "#707070", 1)
+
+compra_livre =
+    atr_valor[1] > 0 and
+    resistencia - close[1] >
+    atr_valor[1] * distancia_sr
+
+venda_livre =
+    atr_valor[1] > 0 and
+    close[1] - suporte >
+    atr_valor[1] * distancia_sr
+
+--------------------------------------------------
+-- 29. ESTADO GERAL
+--------------------------------------------------
+
+estado_compra =
+    tendencia_compra and
+    mercado_direcional and
+    not exaustao_alta and
+    not correcao_alta
+
+estado_venda =
+    tendencia_venda and
+    mercado_direcional and
+    not exaustao_baixa and
+    not correcao_baixa
+
+--------------------------------------------------
+-- 30. COLORACAO CORRIGIDA
+-- INDEPENDENTE DOS FILTROS DE ENTRADA
+--------------------------------------------------
+
+direcao_compra_medias =
+    ema21[1] > ema50[1] and
+    ema21[1] > ema21[2] and
+    ema50[1] > ema50[2]
+
+direcao_venda_medias =
+    ema21[1] < ema50[1] and
+    ema21[1] < ema21[2] and
+    ema50[1] < ema50[2]
+
+cor_medias =
+    direcao_compra_medias and buy_color or
+    direcao_venda_medias and sell_color or
+    neutral_color
+
+plot(ema21, "EMA 21", cor_medias, 2)
+plot(ema50, "EMA 50", cor_medias, 2)
+plot(ema200, "EMA 200", cor_medias, 2)
+
+--------------------------------------------------
+-- 31. CONFLUENCIAS COMPRADORAS
+--------------------------------------------------
+
+pontos_compra =
+    (stoch_compra and 1 or 0) +
+    (rsi_sinal_compra and 1 or 0) +
+    (macd_compra and 1 or 0) +
+    (tendencia_compra and 1 or 0) +
+    (candle_compra and 1 or 0) +
+    (pernada_alta_valida and 1 or 0) +
+    (compra_livre and 1 or 0)
+
+--------------------------------------------------
+-- 32. CONFLUENCIAS VENDEDORAS
+--------------------------------------------------
+
+pontos_venda =
+    (stoch_venda and 1 or 0) +
+    (rsi_sinal_venda and 1 or 0) +
+    (macd_venda and 1 or 0) +
+    (tendencia_venda and 1 or 0) +
+    (candle_venda and 1 or 0) +
+    (pernada_baixa_valida and 1 or 0) +
+    (venda_livre and 1 or 0)
+
+--------------------------------------------------
+-- 33. PREPARACAO DE COMPRA
+--------------------------------------------------
+
+pre_compra =
+    tendencia_compra and
+    mercado_direcional and
+    pernada_alta_valida and
+    stoch_compra and
+    not exaustao_alta
+
+--------------------------------------------------
+-- 34. PREPARACAO DE VENDA
+--------------------------------------------------
+
+pre_venda =
+    tendencia_venda and
+    mercado_direcional and
+    pernada_baixa_valida and
+    stoch_venda and
+    not exaustao_baixa
+
+--------------------------------------------------
+-- 35. CONFIRMACAO DE ENTRADA
+--------------------------------------------------
+
+compra =
+    pontos_compra >= confirmacoes_minimas and
+    mercado_direcional and
+    sem_exaustao_compra and
+    candle_compra and
+    tendencia_compra and
+    pernada_alta_valida
+
+venda =
+    pontos_venda >= confirmacoes_minimas and
+    mercado_direcional and
+    sem_exaustao_venda and
+    candle_venda and
+    tendencia_venda and
+    pernada_baixa_valida
+
+--------------------------------------------------
+-- 36. RETOMADA DA PERNADA
+--------------------------------------------------
+
+retomada_compra =
+    tendencia_compra and
+    close[1] > ema21[1] and
+    close[2] <= ema21[2] and
+    candle_compra and
+    macd_compra and
+    not exaustao_alta
+
+retomada_venda =
+    tendencia_venda and
+    close[1] < ema21[1] and
+    close[2] >= ema21[2] and
+    candle_venda and
+    macd_venda and
+    not exaustao_baixa
+
+--------------------------------------------------
+-- 37. SINAIS NOVOS
+--------------------------------------------------
+
+novo_compra =
+    compra and
+    not compra[1]
+
+novo_venda =
+    venda and
+    not venda[1]
+
+nova_pre_compra =
+    pre_compra and
+    not pre_compra[1]
+
+nova_pre_venda =
+    pre_venda and
+    not pre_venda[1]
+
+nova_retomada_compra =
+    retomada_compra and
+    not retomada_compra[1]
+
+nova_retomada_venda =
+    retomada_venda and
+    not retomada_venda[1]
+
+--------------------------------------------------
+-- 38. PREPARACAO
+--------------------------------------------------
+
+plot_shape(
+    nova_pre_compra,
+    "PREPARACAO COMPRA",
+    shape_style.circle,
+    shape_size.small,
+    correction_color,
+    shape_location.belowbar,
+    -1,
+    "PRE",
+    correction_color
+)
+
+plot_shape(
+    nova_pre_venda,
+    "PREPARACAO VENDA",
+    shape_style.circle,
+    shape_size.small,
+    correction_color,
+    shape_location.abovebar,
+    -1,
+    "PRE",
+    correction_color
+)
+
+--------------------------------------------------
+-- 39. ENTRADA COMPRA
+--------------------------------------------------
+
+plot_shape(
+    novo_compra,
+    "MoFX ENTRADA COMPRA",
+    shape_style.arrowup,
+    shape_size.large,
+    buy_color,
+    shape_location.belowbar,
+    -1,
+    "COMPRA",
+    buy_color
+)
+
+--------------------------------------------------
+-- 40. ENTRADA VENDA
+--------------------------------------------------
+
+plot_shape(
+    novo_venda,
+    "MoFX ENTRADA VENDA",
+    shape_style.arrowdown,
+    shape_size.large,
+    sell_color,
+    shape_location.abovebar,
+    -1,
+    "VENDA",
+    sell_color
+)
+
+--------------------------------------------------
+-- 41. CONTINUIDADE
+--------------------------------------------------
+
+plot_shape(
+    nova_retomada_compra,
+    "RETOMADA DA ALTA",
+    shape_style.circle,
+    shape_size.small,
+    buy_color,
+    shape_location.belowbar,
+    -1,
+    "CONT",
+    buy_color
+)
+
+plot_shape(
+    nova_retomada_venda,
+    "RETOMADA DA BAIXA",
+    shape_style.circle,
+    shape_size.small,
+    sell_color,
+    shape_location.abovebar,
+    -1,
+    "CONT",
+    sell_color
+)
+
+--------------------------------------------------
+-- 42. EXAUSTAO
+--------------------------------------------------
+
+nova_exaustao_alta =
+    exaustao_alta and
+    not exaustao_alta[1]
+
+nova_exaustao_baixa =
+    exaustao_baixa and
+    not exaustao_baixa[1]
+
+plot_shape(
+    nova_exaustao_alta,
+    "POSSIVEL EXAUSTAO DE ALTA",
+    shape_style.circle,
+    shape_size.small,
+    exhaustion_color,
+    shape_location.abovebar,
+    -1,
+    "EXAUSTAO",
+    exhaustion_color
+)
+
+plot_shape(
+    nova_exaustao_baixa,
+    "POSSIVEL EXAUSTAO DE BAIXA",
+    shape_style.circle,
+    shape_size.small,
+    exhaustion_color,
+    shape_location.belowbar,
+    -1,
+    "EXAUSTAO",
+    exhaustion_color
+)

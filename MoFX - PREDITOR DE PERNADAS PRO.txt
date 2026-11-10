@@ -1,0 +1,262 @@
+
+instrument {
+    name = "MoFX - PREDITOR DE PERNADAS PRO",
+    short_name = "MoFX PREDITOR",
+    icon = "indicators:CCI",
+    overlay = true
+}
+
+--------------------------------------------------
+-- 1. CORES
+--------------------------------------------------
+
+input_group {
+    "PERNADA DE ALTA",
+
+    cor_alta = input {
+        default = "#00FF00",
+        type = input.color
+    }
+}
+
+input_group {
+    "PERNADA DE BAIXA",
+
+    cor_baixa = input {
+        default = "#FF0000",
+        type = input.color
+    }
+}
+
+--------------------------------------------------
+-- 2. PARAMETROS
+--------------------------------------------------
+
+input_group {
+    "ESTRUTURA DO MERCADO",
+
+    periodo_estrutura = input {
+        default = 20,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    periodo_volatilidade = input {
+        default = 20,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    sensibilidade = input {
+        default = 75,
+        type = input.integer,
+        min = 60,
+        max = 100
+    }
+}
+
+--------------------------------------------------
+-- 3. AMPLITUDE DOS CANDLES
+--------------------------------------------------
+
+range_candle = high - low
+
+range_medio_curto =
+    sma(range_candle, periodo_volatilidade)
+
+range_medio_longo =
+    sma(range_candle, 50)
+
+--------------------------------------------------
+-- 4. COMPRESSAO DO MERCADO
+-- 15 PONTOS
+--------------------------------------------------
+
+compressao =
+    range_medio_curto[2] > 0 and
+    range_medio_curto[2] <
+    range_medio_longo[2] * 0.80
+
+pontos_compressao =
+    iff(compressao, 15, 0)
+
+--------------------------------------------------
+-- 5. PRESSAO COMPRADORA
+-- 20 PONTOS
+--------------------------------------------------
+
+pressao_alta =
+    close[1] > open[1] and
+    close[2] > close[3] and
+    close[1] > close[2] and
+    close[1] - open[1] >
+    (high[1] - low[1]) * 0.50
+
+pontos_pressao_alta =
+    iff(pressao_alta, 20, 0)
+
+--------------------------------------------------
+-- 6. PRESSAO VENDEDORA
+-- 20 PONTOS
+--------------------------------------------------
+
+pressao_baixa =
+    close[1] < open[1] and
+    close[2] < close[3] and
+    close[1] < close[2] and
+    open[1] - close[1] >
+    (high[1] - low[1]) * 0.50
+
+pontos_pressao_baixa =
+    iff(pressao_baixa, 20, 0)
+
+--------------------------------------------------
+-- 7. ROMPIMENTO ESTRUTURAL
+-- 25 PONTOS
+--------------------------------------------------
+
+topo_anterior =
+    highest(high[2], periodo_estrutura)
+
+fundo_anterior =
+    lowest(low[2], periodo_estrutura)
+
+rompimento_alta =
+    close[1] > topo_anterior
+
+rompimento_baixa =
+    close[1] < fundo_anterior
+
+pontos_rompimento_alta =
+    iff(rompimento_alta, 25, 0)
+
+pontos_rompimento_baixa =
+    iff(rompimento_baixa, 25, 0)
+
+--------------------------------------------------
+-- 8. EXPANSAO DA VOLATILIDADE
+-- 20 PONTOS
+--------------------------------------------------
+
+expansao =
+    range_medio_curto[2] > 0 and
+    range_candle[1] >
+    range_medio_curto[2] * 1.30
+
+pontos_expansao =
+    iff(expansao, 20, 0)
+
+--------------------------------------------------
+-- 9. CONTINUIDADE COMPRADORA
+-- 20 PONTOS
+--------------------------------------------------
+
+continuidade_alta =
+    close[1] > close[2] and
+    close[2] > close[3] and
+    close[1] > open[1]
+
+pontos_continuidade_alta =
+    iff(continuidade_alta, 20, 0)
+
+--------------------------------------------------
+-- 10. CONTINUIDADE VENDEDORA
+-- 20 PONTOS
+--------------------------------------------------
+
+continuidade_baixa =
+    close[1] < close[2] and
+    close[2] < close[3] and
+    close[1] < open[1]
+
+pontos_continuidade_baixa =
+    iff(continuidade_baixa, 20, 0)
+
+--------------------------------------------------
+-- 11. PONTUACAO DE ALTA
+-- MAXIMO 100 PONTOS
+--------------------------------------------------
+
+score_alta =
+    pontos_compressao +
+    pontos_pressao_alta +
+    pontos_rompimento_alta +
+    pontos_expansao +
+    pontos_continuidade_alta
+
+--------------------------------------------------
+-- 12. PONTUACAO DE BAIXA
+-- MAXIMO 100 PONTOS
+--------------------------------------------------
+
+score_baixa =
+    pontos_compressao +
+    pontos_pressao_baixa +
+    pontos_rompimento_baixa +
+    pontos_expansao +
+    pontos_continuidade_baixa
+
+--------------------------------------------------
+-- 13. FILTRO DE ROMPIMENTO
+--------------------------------------------------
+
+candle_valido =
+    high[1] > low[1]
+
+--------------------------------------------------
+-- 14. DECISAO DE ALTA
+--------------------------------------------------
+
+pernada_alta =
+    rompimento_alta and
+    pressao_alta and
+    expansao and
+    continuidade_alta and
+    candle_valido and
+    score_alta >= sensibilidade
+
+--------------------------------------------------
+-- 15. DECISAO DE BAIXA
+--------------------------------------------------
+
+pernada_baixa =
+    rompimento_baixa and
+    pressao_baixa and
+    expansao and
+    continuidade_baixa and
+    candle_valido and
+    score_baixa >= sensibilidade
+
+--------------------------------------------------
+-- 16. QUADRADO VERDE
+--------------------------------------------------
+
+plot_shape(
+    pernada_alta,
+    "PERNADA FORTE DE ALTA",
+    shape_style.square,
+    shape_size.large,
+    cor_alta,
+    shape_location.belowbar,
+    0,
+    "",
+    cor_alta
+)
+
+--------------------------------------------------
+-- 17. QUADRADO VERMELHO
+--------------------------------------------------
+
+plot_shape(
+    pernada_baixa,
+    "PERNADA FORTE DE BAIXA",
+    shape_style.square,
+    shape_size.large,
+    cor_baixa,
+    shape_location.abovebar,
+    0,
+    "",
+    cor_baixa
+)
