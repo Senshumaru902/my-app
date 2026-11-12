@@ -1,135 +1,323 @@
 
 instrument {
-    name = "QMS BANDEIRAS DINAMICAS V4",
-    short_name = "QMS BANDEIRAS V4",
+    name = "QMS 3S3C CLASSIFICADOR M5 V1",
+    short_name = "QMS 3S3C NIVEIS",
     overlay = true
 }
 
+-- =========================================
+-- CONFIGURACOES
+-- =========================================
+
 input_group {
-    "IMPULSO",
-    periodo = input(10, "Candles do impulso", input.integer, 3, 40),
-    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 40),
-    fator_impulso = input(1.5, "Forca minima do impulso", input.double, 0.5, 6.0)
+    "TENDENCIA",
+    periodo_ema_curta = input(9, "EMA curta", input.integer, 3, 30),
+    periodo_ema_longa = input(21, "EMA longa", input.integer, 10, 60)
 }
 
 input_group {
-    "BANDEIRA",
-    retracao_maxima = input(0.55, "Retracao maxima", input.double, 0.15, 0.90),
-    limite_extensao = input(1.5, "Limite de amplitude ATR", input.double, 0.5, 5.0)
+    "QUALIDADE",
+    corpo_nivel4 = input(50, "Corpo minimo nivel 4 (%)", input.integer, 40, 80),
+    corpo_nivel5 = input(65, "Corpo minimo nivel 5 (%)", input.integer, 50, 90)
 }
 
 input_group {
-    "DIRECAO",
-    mostrar_alta = input(true, "Bandeira de alta", input.boolean),
-    mostrar_baixa = input(true, "Bandeira de baixa", input.boolean)
+    "ESTRUTURA",
+    periodo_estrutura = input(5, "Periodo estrutural", input.integer, 3, 15)
 }
 
--- ==================================
--- 1. ATR
--- ==================================
+input_group {
+    "VISUAL",
+    mostrar_nivel4 = input(1, "Mostrar nivel 4", input.integer, 0, 1),
+    mostrar_nivel5 = input(1, "Mostrar nivel 5", input.integer, 0, 1)
+}
 
-atr = sma(high - low, atr_periodo)
+input_group {
+    "CORES",
+    azul_compra = input {
+        default = "#2196FF",
+        type = input.color
+    },
+    roxo_venda = input {
+        default = "#A020F0",
+        type = input.color
+    }
+}
 
--- ==================================
--- 2. IMPULSO ANTERIOR
--- ==================================
+-- =========================================
+-- MEDIAS
+-- =========================================
 
-topo = highest(high, periodo)[1]
-fundo = lowest(low, periodo)[1]
+ema_curta = ema(close, periodo_ema_curta)
+ema_longa = ema(close, periodo_ema_longa)
 
-amplitude = topo - fundo
+tendencia_alta =
+    ema_curta > ema_longa and
+    ema_longa > ema_longa[2]
 
-movimento = close[1] - close[periodo + 1]
+tendencia_baixa =
+    ema_curta < ema_longa and
+    ema_longa < ema_longa[2]
 
-impulso_alta =
-    atr[1] > 0 and
-    amplitude >= atr[1] * fator_impulso and
-    movimento > 0
+-- =========================================
+-- TRES SOLDADOS
+-- =========================================
 
-impulso_baixa =
-    atr[1] > 0 and
-    amplitude >= atr[1] * fator_impulso and
-    movimento < 0
+soldado1 = close[2] > open[2]
+soldado2 = close[1] > open[1]
+soldado3 = close > open
 
--- ==================================
--- 3. CORRECAO APOS SUBIDA
--- ==================================
+progressao_alta =
+    close > close[1] and
+    close[1] > close[2]
 
-recuo_alta = topo - low
+abertura_soldados =
+    open[1] >= open[2] and
+    open[1] <= close[2] and
+    open >= open[1] and
+    open <= close[1]
+
+tres_soldados =
+    soldado1 and
+    soldado2 and
+    soldado3 and
+    progressao_alta
+
+-- =========================================
+-- TRES CORVOS
+-- =========================================
+
+corvo1 = close[2] < open[2]
+corvo2 = close[1] < open[1]
+corvo3 = close < open
+
+progressao_baixa =
+    close < close[1] and
+    close[1] < close[2]
+
+abertura_corvos =
+    open[1] <= open[2] and
+    open[1] >= close[2] and
+    open <= open[1] and
+    open >= close[1]
+
+tres_corvos =
+    corvo1 and
+    corvo2 and
+    corvo3 and
+    progressao_baixa
+
+-- =========================================
+-- CORPOS E SOMBRAS
+-- =========================================
+
+amplitude0 = high - low
+amplitude1 = high[1] - low[1]
+amplitude2 = high[2] - low[2]
+
+corpo0 = abs(close - open)
+corpo1 = abs(close[1] - open[1])
+corpo2 = abs(close[2] - open[2])
+
+corpo_forte0 =
+    amplitude0 > 0 and
+    corpo0 >= amplitude0 * corpo_nivel4 / 100
+
+corpo_forte1 =
+    amplitude1 > 0 and
+    corpo1 >= amplitude1 * corpo_nivel4 / 100
+
+corpo_forte2 =
+    amplitude2 > 0 and
+    corpo2 >= amplitude2 * corpo_nivel4 / 100
+
+corpos_nivel4 =
+    corpo_forte0 and
+    corpo_forte1 and
+    corpo_forte2
+
+corpo_excelente0 =
+    amplitude0 > 0 and
+    corpo0 >= amplitude0 * corpo_nivel5 / 100
+
+corpo_excelente1 =
+    amplitude1 > 0 and
+    corpo1 >= amplitude1 * corpo_nivel5 / 100
+
+corpo_excelente2 =
+    amplitude2 > 0 and
+    corpo2 >= amplitude2 * corpo_nivel5 / 100
+
+corpos_nivel5 =
+    corpo_excelente0 and
+    corpo_excelente1 and
+    corpo_excelente2
+
+-- SOMBRAS CONTRARIAS
+
+sombra_superior0 = high - max(open, close)
+sombra_inferior0 = min(open, close) - low
+
+sombra_superior1 = high[1] - max(open[1], close[1])
+sombra_inferior1 = min(open[1], close[1]) - low[1]
+
+sombra_superior2 = high[2] - max(open[2], close[2])
+sombra_inferior2 = min(open[2], close[2]) - low[2]
+
+sombras_soldados =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    sombra_superior0 <= amplitude0 * 0.25 and
+    sombra_superior1 <= amplitude1 * 0.25 and
+    sombra_superior2 <= amplitude2 * 0.25
+
+sombras_corvos =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    sombra_inferior0 <= amplitude0 * 0.25 and
+    sombra_inferior1 <= amplitude1 * 0.25 and
+    sombra_inferior2 <= amplitude2 * 0.25
+
+-- =========================================
+-- CORRECAO ANTERIOR
+-- =========================================
 
 correcao_alta =
-    close < close[1] or
-    low < low[1]
-
-profundidade_alta =
-    amplitude > 0 and
-    recuo_alta > 0 and
-    recuo_alta <= amplitude * retracao_maxima
-
-faixa_alta =
-    atr > 0 and
-    (high - low) <= atr * limite_extensao
-
--- ==================================
--- 4. CORRECAO APOS QUEDA
--- ==================================
-
-recuo_baixa = high - fundo
+    close[3] < open[3] or
+    close[4] < open[4] or
+    close[5] < open[5]
 
 correcao_baixa =
-    close > close[1] or
-    high > high[1]
+    close[3] > open[3] or
+    close[4] > open[4] or
+    close[5] > open[5]
 
-profundidade_baixa =
-    amplitude > 0 and
-    recuo_baixa > 0 and
-    recuo_baixa <= amplitude * retracao_maxima
+-- =========================================
+-- IMPULSO ANTERIOR
+-- =========================================
 
-faixa_baixa =
-    atr > 0 and
-    (high - low) <= atr * limite_extensao
+impulso_alta =
+    close[3] > close[6] and
+    high[3] > high[6]
 
--- ==================================
--- 5. BANDEIRAS
--- ==================================
+impulso_baixa =
+    close[3] < close[6] and
+    low[3] < low[6]
 
-bandeira_alta =
-    impulso_alta and
+-- =========================================
+-- ROMPIMENTO ESTRUTURAL
+-- =========================================
+
+resistencia = highest(high[3], periodo_estrutura)
+suporte = lowest(low[3], periodo_estrutura)
+
+rompimento_alta =
+    close > resistencia
+
+rompimento_baixa =
+    close < suporte
+
+-- =========================================
+-- NIVEIS DE QUALIDADE
+-- =========================================
+
+-- NIVEL 1 E 2:
+-- Padroes sem contexto ou forca suficiente.
+-- Nao sao plotados.
+
+-- NIVEL 3:
+-- Padrao progressivo, corpos consistentes
+-- e tendencia alinhada.
+
+nivel3_alta =
+    tres_soldados and
+    progressao_alta and
+    corpos_nivel4 and
+    tendencia_alta
+
+nivel3_baixa =
+    tres_corvos and
+    progressao_baixa and
+    corpos_nivel4 and
+    tendencia_baixa
+
+-- NIVEL 4:
+-- Nivel 3 + correcao + impulso + rompimento.
+
+nivel4_alta =
+    nivel3_alta and
     correcao_alta and
-    profundidade_alta and
-    faixa_alta
+    impulso_alta and
+    rompimento_alta
 
-bandeira_baixa =
-    impulso_baixa and
+nivel4_baixa =
+    nivel3_baixa and
     correcao_baixa and
-    profundidade_baixa and
-    faixa_baixa
+    impulso_baixa and
+    rompimento_baixa
 
--- ==================================
--- 6. PINTURA
--- ==================================
+-- NIVEL 5:
+-- Nivel 4 + corpos maiores + sombras pequenas
+-- + abertura dentro do corpo anterior.
 
-cor_candle = iff(
-    mostrar_alta and bandeira_alta,
-    "#2196FF",
-    iff(
-        mostrar_baixa and bandeira_baixa,
-        "#A020F0",
-        na
-    )
+nivel5_alta =
+    nivel4_alta and
+    corpos_nivel5 and
+    sombras_soldados and
+    abertura_soldados
+
+nivel5_baixa =
+    nivel4_baixa and
+    corpos_nivel5 and
+    sombras_corvos and
+    abertura_corvos
+
+-- =========================================
+-- PLOTAGEM HISTORICA
+-- =========================================
+
+plot_shape(
+    nivel4_alta and not nivel5_alta and mostrar_nivel4 == 1,
+    "SOLDADOS NIVEL 4",
+    shape_style.circle,
+    shape_size.small,
+    azul_compra,
+    shape_location.belowbar,
+    0,
+    "N4"
 )
 
--- ==================================
--- 7. CANDLE COLORIDO
--- ==================================
-
-plot_candle(
-    open,
-    high,
-    low,
-    close,
-    "QMS BANDEIRAS",
-    cor_candle
+plot_shape(
+    nivel5_alta and mostrar_nivel5 == 1,
+    "SOLDADOS NIVEL 5",
+    shape_style.circle,
+    shape_size.small,
+    azul_compra,
+    shape_location.belowbar,
+    0,
+    "N5"
 )
 
--- FIM QMS BANDEIRAS V4
+plot_shape(
+    nivel4_baixa and not nivel5_baixa and mostrar_nivel4 == 1,
+    "CORVOS NIVEL 4",
+    shape_style.circle,
+    shape_size.small,
+    roxo_venda,
+    shape_location.abovebar,
+    0,
+    "N4"
+)
+
+plot_shape(
+    nivel5_baixa and mostrar_nivel5 == 1,
+    "CORVOS NIVEL 5",
+    shape_style.circle,
+    shape_size.small,
+    roxo_venda,
+    shape_location.abovebar,
+    0,
+    "N5"
+)

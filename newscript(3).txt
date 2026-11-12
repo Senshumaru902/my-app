@@ -1,133 +1,211 @@
 
 instrument {
-    name = "QMS RADAR LATERAL DINAMICO V4",
-    short_name = "QMS LATERAL V4",
+    name = "QMS ROMPIMENTO FORTE M5",
+    short_name = "QMS ROMP M5",
+    icon = "indicators:ATR",
     overlay = true
 }
 
-input_group {
-    "CONFIGURACAO",
-
-    periodo = input(20, "Periodo dinamico", input.integer, 5, 100, 1),
-
-    margem = input(20, "Margem dos extremos (%)", input.integer, 5, 45, 1),
-
-    largura_max = input(1.50, "Largura maxima lateral (%)", input.double, 0.10, 5.00, 0.10)
-}
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
 
 input_group {
-    "EXIBICAO",
+    "ESTRUTURA DO ROMPIMENTO",
 
-    mostrar_faixa = input(true, "Mostrar faixa dinamica", input.boolean),
+    periodo = input {
+        default = 20,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
 
-    mostrar_meio = input(true, "Mostrar meio da faixa", input.boolean),
+    corpo_minimo = input {
+        default = 45,
+        type = input.integer,
+        min = 10,
+        max = 90
+    },
 
-    mostrar_rejeicao = input(true, "Mostrar rejeicoes", input.boolean)
+    fechamento_minimo = input {
+        default = 70,
+        type = input.integer,
+        min = 50,
+        max = 95
+    }
 }
 
 input_group {
     "CORES",
 
-    cor_resistencia = input { default = "#FF5252", type = input.color },
+    cor_resistencia = input {
+        default = "#2196FF",
+        type = input.color
+    },
 
-    cor_suporte = input { default = "#2196FF", type = input.color },
+    cor_suporte = input {
+        default = "#A020F0",
+        type = input.color
+    },
 
-    cor_meio = input { default = "#B0BEC5", type = input.color },
+    cor_call = input {
+        default = "#00BFFF",
+        type = input.color
+    },
 
-    cor_venda = input { default = "#A020F0", type = input.color },
+    cor_put = input {
+        default = "#A020F0",
+        type = input.color
+    },
 
-    cor_compra = input { default = "#00BCD4", type = input.color }
+    cor_reteste = input {
+        default = "#FFD700",
+        type = input.color
+    }
 }
 
--- FAIXA DINAMICA
+-- =========================================
+-- 2. ESTRUTURA DINAMICA
+-- =========================================
 
-local resistencia = highest(high, periodo)
-local suporte = lowest(low, periodo)
+resistencia = highest(high[1], periodo)
+suporte = lowest(low[1], periodo)
 
-local largura = resistencia - suporte
-local meio = (resistencia + suporte) / 2
+-- Niveis usados para detectar retestes.
+-- Consideram a estrutura anterior ao candle anterior.
 
-local largura_pct = largura / close * 100
+nivel_reteste_alta = highest(high[2], periodo)
+nivel_reteste_baixa = lowest(low[2], periodo)
 
--- PROXIMIDADE DOS EXTREMOS
+-- =========================================
+-- 3. LEITURA DO CANDLE
+-- =========================================
 
-local margem_preco = largura * margem / 100
+amplitude = high - low
+corpo = abs(close - open)
 
-local perto_resistencia =
-    high >= resistencia - margem_preco
+corpo_percentual =
+    corpo / (amplitude + 0.0000001) * 100
 
-local perto_suporte =
-    low <= suporte + margem_preco
+posicao_fechamento =
+    (close - low) / (amplitude + 0.0000001) * 100
 
--- FILTRO DE LATERALIZACAO
+-- =========================================
+-- 4. FORCA COMPRADORA E VENDEDORA
+-- =========================================
 
-local lateral =
-    largura > 0 and
-    largura_pct <= largura_max
-
--- PAVIOS E CORPOS
-
-local corpo_topo = math.max(open, close)
-local corpo_fundo = math.min(open, close)
-
-local pavio_cima = high - corpo_topo
-local pavio_baixo = corpo_fundo - low
-
--- REJEICAO VENDEDORA
-
-local rejeicao_venda =
-    lateral and
-    perto_resistencia and
-    close < open and
-    pavio_cima > pavio_baixo
-
--- REJEICAO COMPRADORA
-
-local rejeicao_compra =
-    lateral and
-    perto_suporte and
+candle_comprador =
     close > open and
-    pavio_baixo > pavio_cima
+    corpo_percentual >= corpo_minimo and
+    posicao_fechamento >= fechamento_minimo
 
--- FAIXA ACOMPANHANDO O PRECO
+candle_vendedor =
+    close < open and
+    corpo_percentual >= corpo_minimo and
+    posicao_fechamento <= (100 - fechamento_minimo)
 
-if mostrar_faixa then
-    plot(resistencia, "RESISTENCIA DINAMICA", cor_resistencia, 2)
-    plot(suporte, "SUPORTE DINAMICO", cor_suporte, 2)
-end
+-- =========================================
+-- 5. ROMPIMENTO DA RESISTENCIA
+-- =========================================
 
--- LINHA CENTRAL
+rompimento_alta =
+    close > resistencia and
+    close[1] <= resistencia[1]
 
-if mostrar_meio then
-    plot(meio, "MEIO DA FAIXA", cor_meio, 1)
-end
+call_forte =
+    rompimento_alta and
+    candle_comprador
 
--- REJEICOES
+-- =========================================
+-- 6. ROMPIMENTO DO SUPORTE
+-- =========================================
 
-if mostrar_rejeicao then
+rompimento_baixa =
+    close < suporte and
+    close[1] >= suporte[1]
 
-    plot_shape(
-        rejeicao_venda,
-        "REJEICAO VENDA",
-        shape_style.triangledown,
-        shape_size.small,
-        cor_venda,
-        shape_location.abovebar,
-        0,
-        "REJ VENDA",
-        cor_venda
-    )
+put_forte =
+    rompimento_baixa and
+    candle_vendedor
 
-    plot_shape(
-        rejeicao_compra,
-        "REJEICAO COMPRA",
-        shape_style.triangleup,
-        shape_size.small,
-        cor_compra,
-        shape_location.belowbar,
-        0,
-        "REJ COMPRA",
-        cor_compra
-    )
+-- =========================================
+-- 7. RETESTE DA RESISTENCIA ROMPIDA
+-- =========================================
 
-end
+reteste_call =
+    close[1] > nivel_reteste_alta and
+    low <= nivel_reteste_alta and
+    close > nivel_reteste_alta and
+    close > open
+
+-- =========================================
+-- 8. RETESTE DO SUPORTE ROMPIDO
+-- =========================================
+
+reteste_put =
+    close[1] < nivel_reteste_baixa and
+    high >= nivel_reteste_baixa and
+    close < nivel_reteste_baixa and
+    close < open
+
+-- =========================================
+-- 9. PLOTAGEM DAS FAIXAS
+-- =========================================
+
+plot(
+    resistencia,
+    "RESISTENCIA",
+    cor_resistencia,
+    2
+)
+
+plot(
+    suporte,
+    "SUPORTE",
+    cor_suporte,
+    2
+)
+
+-- =========================================
+-- 10. SETAS DE ROMPIMENTO
+-- =========================================
+
+plot_shape(
+    call_forte,
+    "ROMPIMENTO CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_call,
+    shape_location.belowbar
+)
+
+plot_shape(
+    put_forte,
+    "ROMPIMENTO PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_put,
+    shape_location.abovebar
+)
+
+-- =========================================
+-- 11. MARCACAO DOS RETESTES
+-- =========================================
+
+plot_shape(
+    reteste_call,
+    "RETESTE CALL",
+    shape_style.triangleup,
+    shape_size.small,
+    cor_reteste,
+    shape_location.belowbar
+)
+
+plot_shape(
+    reteste_put,
+    "RETESTE PUT",
+    shape_style.triangledown,
+    shape_size.small,
+    cor_reteste,
+    shape_location.abovebar
+)

@@ -1,7 +1,7 @@
 
 instrument {
-    name = "QMS BANDEIRAS ALTA E BAIXA V2",
-    short_name = "QMS FLAG V2",
+    name = "QMS 3S3C ARCO DE ALTA M5 V2",
+    short_name = "QMS ARCO ALTA",
     overlay = true
 }
 
@@ -9,246 +9,211 @@ instrument {
 -- CONFIGURACOES
 -- =========================================
 
-periodo_bandeira = input(
-    10, "Velas da bandeira", input.integer, 5, 30
-)
-
-periodo_impulso = input(
-    12, "Velas da pernada", input.integer, 5, 40
-)
-
-periodo_atr = input(
-    14, "Periodo ATR", input.integer, 5, 30
-)
-
-forca_impulso = input(
-    2.0, "Forca minima da pernada (ATR)",
-    input.double, 0.5, 5.0
-)
-
-max_correcao = input(
-    0.65, "Correcao maxima",
-    input.double, 0.2, 0.9
-)
-
--- =========================================
--- CORES
--- =========================================
+input_group {
+    "INCLINACAO DO ARCO",
+    periodo_ema_curta = input(9, "EMA curta", input.integer, 3, 30),
+    periodo_ema_longa = input(21, "EMA longa", input.integer, 10, 60),
+    periodo_arco = input(3, "Periodo de curvatura", input.integer, 2, 8),
+    inclinacao_minima = input(0, "Inclinacao minima", input.integer, 0, 10)
+}
 
 input_group {
-    "BANDEIRA DE ALTA",
+    "QUALIDADE",
+    corpo_nivel4 = input(50, "Corpo minimo N4 (%)", input.integer, 40, 80),
+    corpo_nivel5 = input(65, "Corpo minimo N5 (%)", input.integer, 50, 90)
+}
 
-    cor_alta = input {
+input_group {
+    "ESTRUTURA",
+    periodo_estrutura = input(5, "Periodo estrutural", input.integer, 3, 15)
+}
+
+input_group {
+    "VISUAL",
+    mostrar_nivel4 = input(1, "Mostrar nivel 4", input.integer, 0, 1),
+    mostrar_nivel5 = input(1, "Mostrar nivel 5", input.integer, 0, 1)
+}
+
+input_group {
+    "COR",
+    azul_compra = input {
         default = "#2196FF",
         type = input.color
-    },
-
-    largura_alta = input {
-        default = 2,
-        type = input.line_width
-    }
-}
-
-input_group {
-    "BANDEIRA DE BAIXA",
-
-    cor_baixa = input {
-        default = "#9C27B0",
-        type = input.color
-    },
-
-    largura_baixa = input {
-        default = 2,
-        type = input.line_width
-    }
-}
-
-input_group {
-    "ROMPIMENTOS",
-
-    cor_compra = input {
-        default = "#00E676",
-        type = input.color
-    },
-
-    cor_venda = input {
-        default = "#FF3030",
-        type = input.color
     }
 }
 
 -- =========================================
--- ATR
+-- MEDIAS
 -- =========================================
 
-atr_valor = sma(tr, periodo_atr)
+ema_curta = ema(close, periodo_ema_curta)
+ema_longa = ema(close, periodo_ema_longa)
 
 -- =========================================
--- CANAL DA BANDEIRA
+-- INCLINACAO E CURVATURA
 -- =========================================
 
-topo_bandeira = highest(high[1], periodo_bandeira)
+inclinacao0 = ema_longa - ema_longa[1]
+inclinacao1 = ema_longa[1] - ema_longa[2]
+inclinacao2 = ema_longa[2] - ema_longa[3]
 
-fundo_bandeira = lowest(low[1], periodo_bandeira)
+curvatura0 = inclinacao0 - inclinacao1
+curvatura1 = inclinacao1 - inclinacao2
 
-amplitude_bandeira = topo_bandeira - fundo_bandeira
+-- Arco ascendente:
+-- A media sobe e sua inclinacao aumenta.
 
--- =========================================
--- PERNADA ANTERIOR
--- =========================================
+arco_alta =
+    ema_curta > ema_longa and
+    inclinacao0 > inclinacao_minima * 0.0001 and
+    inclinacao1 > 0 and
+    curvatura0 > 0 and
+    curvatura1 > 0
 
-inicio_impulso = periodo_bandeira + periodo_impulso + 1
+-- Confirmacao da aceleracao
 
-fim_impulso = periodo_bandeira + 1
-
-movimento_alta =
-    close[fim_impulso] - close[inicio_impulso]
-
-movimento_baixa =
-    close[inicio_impulso] - close[fim_impulso]
-
-topo_impulso = highest(
-    high[periodo_bandeira + 1],
-    periodo_impulso
-)
-
-fundo_impulso = lowest(
-    low[periodo_bandeira + 1],
-    periodo_impulso
-)
+aceleracao_alta =
+    inclinacao0 > inclinacao1 and
+    inclinacao1 > inclinacao2
 
 -- =========================================
--- BANDEIRA DE ALTA
+-- TRES SOLDADOS
+-- =========================================
+
+soldado1 = close[2] > open[2]
+soldado2 = close[1] > open[1]
+soldado3 = close > open
+
+progressao_alta =
+    close > close[1] and
+    close[1] > close[2]
+
+abertura_soldados =
+    open[1] >= open[2] and
+    open[1] <= close[2] and
+    open >= open[1] and
+    open <= close[1]
+
+tres_soldados =
+    soldado1 and
+    soldado2 and
+    soldado3 and
+    progressao_alta
+
+-- =========================================
+-- CORPOS
+-- =========================================
+
+amplitude0 = high - low
+amplitude1 = high[1] - low[1]
+amplitude2 = high[2] - low[2]
+
+corpo0 = abs(close - open)
+corpo1 = abs(close[1] - open[1])
+corpo2 = abs(close[2] - open[2])
+
+corpos_nivel4 =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    corpo0 >= amplitude0 * corpo_nivel4 / 100 and
+    corpo1 >= amplitude1 * corpo_nivel4 / 100 and
+    corpo2 >= amplitude2 * corpo_nivel4 / 100
+
+corpos_nivel5 =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    corpo0 >= amplitude0 * corpo_nivel5 / 100 and
+    corpo1 >= amplitude1 * corpo_nivel5 / 100 and
+    corpo2 >= amplitude2 * corpo_nivel5 / 100
+
+-- =========================================
+-- SOMBRAS
+-- =========================================
+
+sombra_superior0 = high - max(open, close)
+sombra_superior1 = high[1] - max(open[1], close[1])
+sombra_superior2 = high[2] - max(open[2], close[2])
+
+sombras_soldados =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    sombra_superior0 <= amplitude0 * 0.25 and
+    sombra_superior1 <= amplitude1 * 0.25 and
+    sombra_superior2 <= amplitude2 * 0.25
+
+-- =========================================
+-- CORRECAO ANTERIOR
+-- =========================================
+
+correcao_alta =
+    close[3] < open[3] or
+    close[4] < open[4] or
+    close[5] < open[5]
+
+-- =========================================
+-- IMPULSO ANTERIOR
 -- =========================================
 
 impulso_alta =
-    movimento_alta > atr_valor[1] * forca_impulso
-
-correcao_alta =
-    fundo_bandeira >
-    topo_impulso - movimento_alta * max_correcao
-
-canal_alta =
-    close[1] < close[periodo_bandeira] and
-    amplitude_bandeira < movimento_alta * 0.80
-
-bandeira_alta =
-    impulso_alta and
-    correcao_alta and
-    canal_alta
+    close[3] > close[6] and
+    high[3] > high[6]
 
 -- =========================================
--- BANDEIRA DE BAIXA
+-- ROMPIMENTO
 -- =========================================
 
-impulso_baixa =
-    movimento_baixa > atr_valor[1] * forca_impulso
-
-correcao_baixa =
-    topo_bandeira <
-    fundo_impulso + movimento_baixa * max_correcao
-
-canal_baixa =
-    close[1] > close[periodo_bandeira] and
-    amplitude_bandeira < movimento_baixa * 0.80
-
-bandeira_baixa =
-    impulso_baixa and
-    correcao_baixa and
-    canal_baixa
-
--- =========================================
--- SUPORTE E RESISTENCIA
--- =========================================
-
-resistencia_alta =
-    iff(bandeira_alta, topo_bandeira, nil)
-
-suporte_alta =
-    iff(bandeira_alta, fundo_bandeira, nil)
-
-resistencia_baixa =
-    iff(bandeira_baixa, topo_bandeira, nil)
-
-suporte_baixa =
-    iff(bandeira_baixa, fundo_bandeira, nil)
-
--- =========================================
--- PLOT BANDEIRA DE ALTA
--- =========================================
-
-plot(
-    resistencia_alta,
-    "RESISTENCIA ALTA AZUL",
-    cor_alta,
-    largura_alta
-)
-
-plot(
-    suporte_alta,
-    "SUPORTE ALTA AZUL",
-    cor_alta,
-    largura_alta
-)
-
--- =========================================
--- PLOT BANDEIRA DE BAIXA
--- =========================================
-
-plot(
-    resistencia_baixa,
-    "RESISTENCIA BAIXA ROXA",
-    cor_baixa,
-    largura_baixa
-)
-
-plot(
-    suporte_baixa,
-    "SUPORTE BAIXA ROXA",
-    cor_baixa,
-    largura_baixa
-)
-
--- =========================================
--- ROMPIMENTOS
--- =========================================
+resistencia = highest(high[3], periodo_estrutura)
 
 rompimento_alta =
-    bandeira_alta and
-    close > topo_bandeira
-
-rompimento_baixa =
-    bandeira_baixa and
-    close < fundo_bandeira
+    close > resistencia
 
 -- =========================================
--- MARCACAO COMPRA
+-- CLASSIFICACAO
+-- =========================================
+
+nivel3_alta =
+    tres_soldados and
+    corpos_nivel4 and
+    arco_alta
+
+nivel4_alta =
+    nivel3_alta and
+    correcao_alta and
+    impulso_alta and
+    rompimento_alta
+
+nivel5_alta =
+    nivel4_alta and
+    corpos_nivel5 and
+    sombras_soldados and
+    abertura_soldados and
+    aceleracao_alta
+
+-- =========================================
+-- PLOTAGEM HISTORICA
 -- =========================================
 
 plot_shape(
-    rompimento_alta,
-    "ROMPIMENTO ALTA",
-    shape_style.triangleup,
-    shape_size.large,
-    cor_compra,
+    nivel4_alta and not nivel5_alta and mostrar_nivel4 == 1,
+    "ARCO ALTA N4",
+    shape_style.circle,
+    shape_size.small,
+    azul_compra,
     shape_location.belowbar,
     0,
-    "ROMPIMENTO ALTA",
-    cor_compra
+    "N4"
 )
 
--- =========================================
--- MARCACAO VENDA
--- =========================================
-
 plot_shape(
-    rompimento_baixa,
-    "ROMPIMENTO BAIXA",
-    shape_style.triangledown,
-    shape_size.large,
-    cor_venda,
-    shape_location.abovebar,
+    nivel5_alta and mostrar_nivel5 == 1,
+    "ARCO ALTA N5",
+    shape_style.circle,
+    shape_size.small,
+    azul_compra,
+    shape_location.belowbar,
     0,
-    "ROMPIMENTO BAIXA",
-    cor_venda
+    "N5"
 )

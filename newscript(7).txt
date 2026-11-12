@@ -1,0 +1,75 @@
+
+instrument {
+    name = "QMS TRES SOLDADOS E TRES CORVOS",
+    short_name = "QMS 3S3C",
+    overlay = true
+}
+
+input_group {
+    "CORES",
+    cor_soldados = input { default = "#FFFF00", type = input.color },
+    cor_corvos = input { default = "#000000", type = input.color }
+}
+
+input_group {
+    "CONFIGURACAO",
+    exigir_progressao = input(true, "Exigir progressao dos candles", input.boolean),
+    corpo_minimo = input(30, "Corpo minimo (%)", input.integer, 1, 100)
+}
+
+-- Identificacao dos candles
+alta1 = close[2] > open[2]
+alta2 = close[1] > open[1]
+alta3 = close > open
+
+baixa1 = close[2] < open[2]
+baixa2 = close[1] < open[1]
+baixa3 = close < open
+
+-- Tamanho dos corpos
+range1 = high[2] - low[2]
+range2 = high[1] - low[1]
+range3 = high - low
+
+corpo1 = abs(close[2] - open[2])
+corpo2 = abs(close[1] - open[1])
+corpo3 = abs(close - open)
+
+forte1 = range1 > 0 and corpo1 / range1 * 100 >= corpo_minimo
+forte2 = range2 > 0 and corpo2 / range2 * 100 >= corpo_minimo
+forte3 = range3 > 0 and corpo3 / range3 * 100 >= corpo_minimo
+
+-- Progressao dos tres soldados
+progressao_alta =
+    close[1] > close[2] and
+    close > close[1] and
+    open[1] >= open[2] and
+    open <= close[1]
+
+-- Progressao dos tres corvos
+progressao_baixa =
+    close[1] < close[2] and
+    close < close[1] and
+    open[1] <= open[2] and
+    open >= close[1]
+
+-- Padrao tres soldados
+soldados =
+    alta1 and alta2 and alta3 and
+    forte1 and forte2 and forte3 and
+    (not exigir_progressao or progressao_alta)
+
+-- Padrao tres corvos
+corvos =
+    baixa1 and baixa2 and baixa3 and
+    forte1 and forte2 and forte3 and
+    (not exigir_progressao or progressao_baixa)
+
+-- Coloracao historica e dinamica
+cor_candle = iff(
+    soldados,
+    cor_soldados,
+    iff(corvos, cor_corvos, na)
+)
+
+plot_candle(open, high, low, close, "QMS 3S3C", cor_candle)
