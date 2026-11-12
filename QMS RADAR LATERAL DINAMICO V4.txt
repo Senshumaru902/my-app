@@ -5,6 +5,10 @@ instrument {
     overlay = true
 }
 
+--------------------------------------------------
+-- 1. CONFIGURACAO
+--------------------------------------------------
+
 input_group {
     "CONFIGURACAO",
 
@@ -14,6 +18,10 @@ input_group {
 
     largura_max = input(1.50, "Largura maxima lateral (%)", input.double, 0.10, 5.00, 0.10)
 }
+
+--------------------------------------------------
+-- 2. EXIBICAO
+--------------------------------------------------
 
 input_group {
     "EXIBICAO",
@@ -25,31 +33,56 @@ input_group {
     mostrar_rejeicao = input(true, "Mostrar rejeicoes", input.boolean)
 }
 
+--------------------------------------------------
+-- 3. CORES INTENSAS
+--------------------------------------------------
+
 input_group {
-    "CORES",
+    "CORES INTENSAS",
 
-    cor_resistencia = input { default = "#FF5252", type = input.color },
+    cor_resistencia = input {
+        default = "#FF0000",
+        type = input.color
+    },
 
-    cor_suporte = input { default = "#2196FF", type = input.color },
+    cor_suporte = input {
+        default = "#0066FF",
+        type = input.color
+    },
 
-    cor_meio = input { default = "#B0BEC5", type = input.color },
+    cor_meio = input {
+        default = "#FFFFFF",
+        type = input.color
+    },
 
-    cor_venda = input { default = "#A020F0", type = input.color },
+    cor_venda = input {
+        default = "#CC00FF",
+        type = input.color
+    },
 
-    cor_compra = input { default = "#00BCD4", type = input.color }
+    cor_compra = input {
+        default = "#00FFFF",
+        type = input.color
+    }
 }
 
--- FAIXA DINAMICA
+--------------------------------------------------
+-- 4. FAIXA DINAMICA
+--------------------------------------------------
 
 local resistencia = highest(high, periodo)
+
 local suporte = lowest(low, periodo)
 
 local largura = resistencia - suporte
+
 local meio = (resistencia + suporte) / 2
 
 local largura_pct = largura / close * 100
 
--- PROXIMIDADE DOS EXTREMOS
+--------------------------------------------------
+-- 5. PROXIMIDADE DOS EXTREMOS
+--------------------------------------------------
 
 local margem_preco = largura * margem / 100
 
@@ -59,21 +92,29 @@ local perto_resistencia =
 local perto_suporte =
     low <= suporte + margem_preco
 
--- FILTRO DE LATERALIZACAO
+--------------------------------------------------
+-- 6. FILTRO DE LATERALIZACAO
+--------------------------------------------------
 
 local lateral =
     largura > 0 and
     largura_pct <= largura_max
 
--- PAVIOS E CORPOS
+--------------------------------------------------
+-- 7. PAVIOS E CORPOS
+--------------------------------------------------
 
 local corpo_topo = math.max(open, close)
+
 local corpo_fundo = math.min(open, close)
 
 local pavio_cima = high - corpo_topo
+
 local pavio_baixo = corpo_fundo - low
 
--- REJEICAO VENDEDORA
+--------------------------------------------------
+-- 8. REJEICAO VENDEDORA
+--------------------------------------------------
 
 local rejeicao_venda =
     lateral and
@@ -81,7 +122,9 @@ local rejeicao_venda =
     close < open and
     pavio_cima > pavio_baixo
 
--- REJEICAO COMPRADORA
+--------------------------------------------------
+-- 9. REJEICAO COMPRADORA
+--------------------------------------------------
 
 local rejeicao_compra =
     lateral and
@@ -89,28 +132,60 @@ local rejeicao_compra =
     close > open and
     pavio_baixo > pavio_cima
 
--- FAIXA ACOMPANHANDO O PRECO
+--------------------------------------------------
+-- 10. FAIXA DINAMICA
+-- RESISTENCIA E SUPORTE
+-- ESPESSURA 5
+--------------------------------------------------
 
 if mostrar_faixa then
-    plot(resistencia, "RESISTENCIA DINAMICA", cor_resistencia, 2)
-    plot(suporte, "SUPORTE DINAMICO", cor_suporte, 2)
+
+    plot(
+        resistencia,
+        "RESISTENCIA DINAMICA",
+        cor_resistencia,
+        5
+    )
+
+    plot(
+        suporte,
+        "SUPORTE DINAMICO",
+        cor_suporte,
+        5
+    )
+
 end
 
--- LINHA CENTRAL
+--------------------------------------------------
+-- 11. LINHA CENTRAL
+-- ESPESSURA 3
+--------------------------------------------------
 
 if mostrar_meio then
-    plot(meio, "MEIO DA FAIXA", cor_meio, 1)
+
+    plot(
+        meio,
+        "MEIO DA FAIXA",
+        cor_meio,
+        3
+    )
+
 end
 
--- REJEICOES
+--------------------------------------------------
+-- 12. REJEICOES
+-- MARCACOES GRANDES
+--------------------------------------------------
 
 if mostrar_rejeicao then
+
+    -- REJEICAO DE VENDA NO TOPO
 
     plot_shape(
         rejeicao_venda,
         "REJEICAO VENDA",
         shape_style.triangledown,
-        shape_size.small,
+        shape_size.large,
         cor_venda,
         shape_location.abovebar,
         0,
@@ -118,11 +193,13 @@ if mostrar_rejeicao then
         cor_venda
     )
 
+    -- REJEICAO DE COMPRA NO FUNDO
+
     plot_shape(
         rejeicao_compra,
         "REJEICAO COMPRA",
         shape_style.triangleup,
-        shape_size.small,
+        shape_size.large,
         cor_compra,
         shape_location.belowbar,
         0,

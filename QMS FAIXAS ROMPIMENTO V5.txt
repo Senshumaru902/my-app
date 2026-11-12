@@ -1,0 +1,58 @@
+
+instrument {
+    name = "QMS FAIXAS ROMPIMENTO V5",
+    short_name = "QMS FAIXAS",
+    overlay = true
+}
+
+input_group {
+    "ESTRUTURA",
+    periodo = input(12, "Periodo estrutural", input.integer, 3, 100),
+    atr_periodo = input(14, "Periodo ATR", input.integer, 5, 50),
+    largura = input(15, "Largura da faixa ATR (%)", input.integer, 5, 100)
+}
+
+input_group {
+    "CORES",
+    cor_alta = input { default = "#2196FF", type = input.color },
+    cor_baixa = input { default = "#A020F0", type = input.color }
+}
+
+-- NIVEIS ANTERIORES
+resistencia = highest(high, periodo)[1]
+suporte = lowest(low, periodo)[1]
+
+-- VOLATILIDADE
+atr_valor = atr(atr_periodo)
+meia_faixa = atr_valor * largura / 200
+
+-- ROMPIMENTOS
+rompe_alta =
+    close > resistencia and
+    close[1] <= resistencia[1] and
+    close > open
+
+rompe_baixa =
+    close < suporte and
+    close[1] >= suporte[1] and
+    close < open
+
+-- FAIXAS DE RESISTENCIA ROMPIDA
+if rompe_alta then
+    hline(
+        resistencia,
+        "RESISTENCIA ROMPIDA",
+        cor_alta,
+        2
+    )
+end
+
+-- FAIXAS DE SUPORTE ROMPIDO
+if rompe_baixa then
+    hline(
+        suporte,
+        "SUPORTE ROMPIDO",
+        cor_baixa,
+        2
+    )
+end

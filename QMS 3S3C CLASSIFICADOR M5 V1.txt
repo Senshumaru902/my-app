@@ -1,0 +1,323 @@
+
+instrument {
+    name = "QMS 3S3C CLASSIFICADOR M5 V1",
+    short_name = "QMS 3S3C NIVEIS",
+    overlay = true
+}
+
+-- =========================================
+-- CONFIGURACOES
+-- =========================================
+
+input_group {
+    "TENDENCIA",
+    periodo_ema_curta = input(9, "EMA curta", input.integer, 3, 30),
+    periodo_ema_longa = input(21, "EMA longa", input.integer, 10, 60)
+}
+
+input_group {
+    "QUALIDADE",
+    corpo_nivel4 = input(50, "Corpo minimo nivel 4 (%)", input.integer, 40, 80),
+    corpo_nivel5 = input(65, "Corpo minimo nivel 5 (%)", input.integer, 50, 90)
+}
+
+input_group {
+    "ESTRUTURA",
+    periodo_estrutura = input(5, "Periodo estrutural", input.integer, 3, 15)
+}
+
+input_group {
+    "VISUAL",
+    mostrar_nivel4 = input(1, "Mostrar nivel 4", input.integer, 0, 1),
+    mostrar_nivel5 = input(1, "Mostrar nivel 5", input.integer, 0, 1)
+}
+
+input_group {
+    "CORES",
+    azul_compra = input {
+        default = "#2196FF",
+        type = input.color
+    },
+    roxo_venda = input {
+        default = "#A020F0",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- MEDIAS
+-- =========================================
+
+ema_curta = ema(close, periodo_ema_curta)
+ema_longa = ema(close, periodo_ema_longa)
+
+tendencia_alta =
+    ema_curta > ema_longa and
+    ema_longa > ema_longa[2]
+
+tendencia_baixa =
+    ema_curta < ema_longa and
+    ema_longa < ema_longa[2]
+
+-- =========================================
+-- TRES SOLDADOS
+-- =========================================
+
+soldado1 = close[2] > open[2]
+soldado2 = close[1] > open[1]
+soldado3 = close > open
+
+progressao_alta =
+    close > close[1] and
+    close[1] > close[2]
+
+abertura_soldados =
+    open[1] >= open[2] and
+    open[1] <= close[2] and
+    open >= open[1] and
+    open <= close[1]
+
+tres_soldados =
+    soldado1 and
+    soldado2 and
+    soldado3 and
+    progressao_alta
+
+-- =========================================
+-- TRES CORVOS
+-- =========================================
+
+corvo1 = close[2] < open[2]
+corvo2 = close[1] < open[1]
+corvo3 = close < open
+
+progressao_baixa =
+    close < close[1] and
+    close[1] < close[2]
+
+abertura_corvos =
+    open[1] <= open[2] and
+    open[1] >= close[2] and
+    open <= open[1] and
+    open >= close[1]
+
+tres_corvos =
+    corvo1 and
+    corvo2 and
+    corvo3 and
+    progressao_baixa
+
+-- =========================================
+-- CORPOS E SOMBRAS
+-- =========================================
+
+amplitude0 = high - low
+amplitude1 = high[1] - low[1]
+amplitude2 = high[2] - low[2]
+
+corpo0 = abs(close - open)
+corpo1 = abs(close[1] - open[1])
+corpo2 = abs(close[2] - open[2])
+
+corpo_forte0 =
+    amplitude0 > 0 and
+    corpo0 >= amplitude0 * corpo_nivel4 / 100
+
+corpo_forte1 =
+    amplitude1 > 0 and
+    corpo1 >= amplitude1 * corpo_nivel4 / 100
+
+corpo_forte2 =
+    amplitude2 > 0 and
+    corpo2 >= amplitude2 * corpo_nivel4 / 100
+
+corpos_nivel4 =
+    corpo_forte0 and
+    corpo_forte1 and
+    corpo_forte2
+
+corpo_excelente0 =
+    amplitude0 > 0 and
+    corpo0 >= amplitude0 * corpo_nivel5 / 100
+
+corpo_excelente1 =
+    amplitude1 > 0 and
+    corpo1 >= amplitude1 * corpo_nivel5 / 100
+
+corpo_excelente2 =
+    amplitude2 > 0 and
+    corpo2 >= amplitude2 * corpo_nivel5 / 100
+
+corpos_nivel5 =
+    corpo_excelente0 and
+    corpo_excelente1 and
+    corpo_excelente2
+
+-- SOMBRAS CONTRARIAS
+
+sombra_superior0 = high - max(open, close)
+sombra_inferior0 = min(open, close) - low
+
+sombra_superior1 = high[1] - max(open[1], close[1])
+sombra_inferior1 = min(open[1], close[1]) - low[1]
+
+sombra_superior2 = high[2] - max(open[2], close[2])
+sombra_inferior2 = min(open[2], close[2]) - low[2]
+
+sombras_soldados =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    sombra_superior0 <= amplitude0 * 0.25 and
+    sombra_superior1 <= amplitude1 * 0.25 and
+    sombra_superior2 <= amplitude2 * 0.25
+
+sombras_corvos =
+    amplitude0 > 0 and
+    amplitude1 > 0 and
+    amplitude2 > 0 and
+    sombra_inferior0 <= amplitude0 * 0.25 and
+    sombra_inferior1 <= amplitude1 * 0.25 and
+    sombra_inferior2 <= amplitude2 * 0.25
+
+-- =========================================
+-- CORRECAO ANTERIOR
+-- =========================================
+
+correcao_alta =
+    close[3] < open[3] or
+    close[4] < open[4] or
+    close[5] < open[5]
+
+correcao_baixa =
+    close[3] > open[3] or
+    close[4] > open[4] or
+    close[5] > open[5]
+
+-- =========================================
+-- IMPULSO ANTERIOR
+-- =========================================
+
+impulso_alta =
+    close[3] > close[6] and
+    high[3] > high[6]
+
+impulso_baixa =
+    close[3] < close[6] and
+    low[3] < low[6]
+
+-- =========================================
+-- ROMPIMENTO ESTRUTURAL
+-- =========================================
+
+resistencia = highest(high[3], periodo_estrutura)
+suporte = lowest(low[3], periodo_estrutura)
+
+rompimento_alta =
+    close > resistencia
+
+rompimento_baixa =
+    close < suporte
+
+-- =========================================
+-- NIVEIS DE QUALIDADE
+-- =========================================
+
+-- NIVEL 1 E 2:
+-- Padroes sem contexto ou forca suficiente.
+-- Nao sao plotados.
+
+-- NIVEL 3:
+-- Padrao progressivo, corpos consistentes
+-- e tendencia alinhada.
+
+nivel3_alta =
+    tres_soldados and
+    progressao_alta and
+    corpos_nivel4 and
+    tendencia_alta
+
+nivel3_baixa =
+    tres_corvos and
+    progressao_baixa and
+    corpos_nivel4 and
+    tendencia_baixa
+
+-- NIVEL 4:
+-- Nivel 3 + correcao + impulso + rompimento.
+
+nivel4_alta =
+    nivel3_alta and
+    correcao_alta and
+    impulso_alta and
+    rompimento_alta
+
+nivel4_baixa =
+    nivel3_baixa and
+    correcao_baixa and
+    impulso_baixa and
+    rompimento_baixa
+
+-- NIVEL 5:
+-- Nivel 4 + corpos maiores + sombras pequenas
+-- + abertura dentro do corpo anterior.
+
+nivel5_alta =
+    nivel4_alta and
+    corpos_nivel5 and
+    sombras_soldados and
+    abertura_soldados
+
+nivel5_baixa =
+    nivel4_baixa and
+    corpos_nivel5 and
+    sombras_corvos and
+    abertura_corvos
+
+-- =========================================
+-- PLOTAGEM HISTORICA
+-- =========================================
+
+plot_shape(
+    nivel4_alta and not nivel5_alta and mostrar_nivel4 == 1,
+    "SOLDADOS NIVEL 4",
+    shape_style.circle,
+    shape_size.small,
+    azul_compra,
+    shape_location.belowbar,
+    0,
+    "N4"
+)
+
+plot_shape(
+    nivel5_alta and mostrar_nivel5 == 1,
+    "SOLDADOS NIVEL 5",
+    shape_style.circle,
+    shape_size.small,
+    azul_compra,
+    shape_location.belowbar,
+    0,
+    "N5"
+)
+
+plot_shape(
+    nivel4_baixa and not nivel5_baixa and mostrar_nivel4 == 1,
+    "CORVOS NIVEL 4",
+    shape_style.circle,
+    shape_size.small,
+    roxo_venda,
+    shape_location.abovebar,
+    0,
+    "N4"
+)
+
+plot_shape(
+    nivel5_baixa and mostrar_nivel5 == 1,
+    "CORVOS NIVEL 5",
+    shape_style.circle,
+    shape_size.small,
+    roxo_venda,
+    shape_location.abovebar,
+    0,
+    "N5"
+)

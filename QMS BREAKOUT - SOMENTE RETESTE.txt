@@ -1,0 +1,147 @@
+
+instrument {
+    name = "QMS BREAKOUT - SOMENTE RETESTE",
+    short_name = "QMS RETESTE",
+    icon = "indicators:CCI",
+    overlay = true
+}
+
+--------------------------------------------------
+-- CONFIGURACAO
+--------------------------------------------------
+
+input_group {
+    "MARCAÇÃO DO RETESTE",
+
+    cor_reteste = input {
+        default = "#FFD700",
+        type = input.color
+    }
+}
+
+--------------------------------------------------
+-- IDENTIFICACAO DOS PIVOS
+--------------------------------------------------
+
+pivo_topo =
+    high[2] > high[1] and
+    high[2] >= high[3]
+
+pivo_fundo =
+    low[2] < low[1] and
+    low[2] <= low[3]
+
+--------------------------------------------------
+-- ARMAZENAMENTO DOS PIVOS
+--------------------------------------------------
+
+ultimo_topo = make_series()
+
+ultimo_topo:set(
+    iff(
+        pivo_topo,
+        high[2],
+        ultimo_topo[1]
+    )
+)
+
+ultimo_fundo = make_series()
+
+ultimo_fundo:set(
+    iff(
+        pivo_fundo,
+        low[2],
+        ultimo_fundo[1]
+    )
+)
+
+--------------------------------------------------
+-- IDENTIFICACAO DOS ROMPIMENTOS
+--------------------------------------------------
+
+nivel_topo_anterior = ultimo_topo[1]
+nivel_fundo_anterior = ultimo_fundo[1]
+
+rompe_topo =
+    nivel_topo_anterior ~= nil and
+    close > nivel_topo_anterior and
+    close[1] <= nivel_topo_anterior
+
+rompe_fundo =
+    nivel_fundo_anterior ~= nil and
+    close < nivel_fundo_anterior and
+    close[1] >= nivel_fundo_anterior
+
+--------------------------------------------------
+-- MEMORIA DOS NIVEIS ROMPIDOS
+--------------------------------------------------
+
+nivel_call = make_series()
+
+nivel_call:set(
+    iff(
+        rompe_topo,
+        nivel_topo_anterior,
+        nivel_call[1]
+    )
+)
+
+nivel_put = make_series()
+
+nivel_put:set(
+    iff(
+        rompe_fundo,
+        nivel_fundo_anterior,
+        nivel_put[1]
+    )
+)
+
+--------------------------------------------------
+-- RETESTE CALL
+--------------------------------------------------
+
+reteste_call =
+    nivel_call[1] ~= nil and
+    low <= nivel_call[1] and
+    close > nivel_call[1] and
+    close > open and
+    low[1] > nivel_call[1]
+
+--------------------------------------------------
+-- RETESTE PUT
+--------------------------------------------------
+
+reteste_put =
+    nivel_put[1] ~= nil and
+    high >= nivel_put[1] and
+    close < nivel_put[1] and
+    close < open and
+    high[1] < nivel_put[1]
+
+--------------------------------------------------
+-- MARCACAO HISTORICA DOS RETESTES
+--------------------------------------------------
+
+plot_shape(
+    reteste_call,
+    "RETESTE CALL",
+    shape_style.square,
+    shape_size.small,
+    cor_reteste,
+    shape_location.belowbar,
+    0,
+    "RETESTE CALL",
+    cor_reteste
+)
+
+plot_shape(
+    reteste_put,
+    "RETESTE PUT",
+    shape_style.square,
+    shape_size.small,
+    cor_reteste,
+    shape_location.abovebar,
+    0,
+    "RETESTE PUT",
+    cor_reteste
+)
