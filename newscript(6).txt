@@ -1,210 +1,147 @@
 
 instrument {
-    name = "QMS RADAR LATERAL DINAMICO V4",
-    short_name = "QMS LATERAL V4",
+    name = "QMS BREAKOUT - SOMENTE RETESTE",
+    short_name = "QMS RETESTE",
+    icon = "indicators:CCI",
     overlay = true
 }
 
 --------------------------------------------------
--- 1. CONFIGURACAO
+-- CONFIGURACAO
 --------------------------------------------------
 
 input_group {
-    "CONFIGURACAO",
+    "MARCAÇÃO DO RETESTE",
 
-    periodo = input(20, "Periodo dinamico", input.integer, 5, 100, 1),
-
-    margem = input(20, "Margem dos extremos (%)", input.integer, 5, 45, 1),
-
-    largura_max = input(1.50, "Largura maxima lateral (%)", input.double, 0.10, 5.00, 0.10)
-}
-
---------------------------------------------------
--- 2. EXIBICAO
---------------------------------------------------
-
-input_group {
-    "EXIBICAO",
-
-    mostrar_faixa = input(true, "Mostrar faixa dinamica", input.boolean),
-
-    mostrar_meio = input(true, "Mostrar meio da faixa", input.boolean),
-
-    mostrar_rejeicao = input(true, "Mostrar rejeicoes", input.boolean)
-}
-
---------------------------------------------------
--- 3. CORES INTENSAS
---------------------------------------------------
-
-input_group {
-    "CORES INTENSAS",
-
-    cor_resistencia = input {
-        default = "#FF0000",
-        type = input.color
-    },
-
-    cor_suporte = input {
-        default = "#0066FF",
-        type = input.color
-    },
-
-    cor_meio = input {
-        default = "#FFFFFF",
-        type = input.color
-    },
-
-    cor_venda = input {
-        default = "#CC00FF",
-        type = input.color
-    },
-
-    cor_compra = input {
-        default = "#00FFFF",
+    cor_reteste = input {
+        default = "#FFD700",
         type = input.color
     }
 }
 
 --------------------------------------------------
--- 4. FAIXA DINAMICA
+-- IDENTIFICACAO DOS PIVOS
 --------------------------------------------------
 
-local resistencia = highest(high, periodo)
+pivo_topo =
+    high[2] > high[1] and
+    high[2] >= high[3]
 
-local suporte = lowest(low, periodo)
-
-local largura = resistencia - suporte
-
-local meio = (resistencia + suporte) / 2
-
-local largura_pct = largura / close * 100
+pivo_fundo =
+    low[2] < low[1] and
+    low[2] <= low[3]
 
 --------------------------------------------------
--- 5. PROXIMIDADE DOS EXTREMOS
+-- ARMAZENAMENTO DOS PIVOS
 --------------------------------------------------
 
-local margem_preco = largura * margem / 100
+ultimo_topo = make_series()
 
-local perto_resistencia =
-    high >= resistencia - margem_preco
+ultimo_topo:set(
+    iff(
+        pivo_topo,
+        high[2],
+        ultimo_topo[1]
+    )
+)
 
-local perto_suporte =
-    low <= suporte + margem_preco
+ultimo_fundo = make_series()
 
---------------------------------------------------
--- 6. FILTRO DE LATERALIZACAO
---------------------------------------------------
-
-local lateral =
-    largura > 0 and
-    largura_pct <= largura_max
-
---------------------------------------------------
--- 7. PAVIOS E CORPOS
---------------------------------------------------
-
-local corpo_topo = math.max(open, close)
-
-local corpo_fundo = math.min(open, close)
-
-local pavio_cima = high - corpo_topo
-
-local pavio_baixo = corpo_fundo - low
+ultimo_fundo:set(
+    iff(
+        pivo_fundo,
+        low[2],
+        ultimo_fundo[1]
+    )
+)
 
 --------------------------------------------------
--- 8. REJEICAO VENDEDORA
+-- IDENTIFICACAO DOS ROMPIMENTOS
 --------------------------------------------------
 
-local rejeicao_venda =
-    lateral and
-    perto_resistencia and
-    close < open and
-    pavio_cima > pavio_baixo
+nivel_topo_anterior = ultimo_topo[1]
+nivel_fundo_anterior = ultimo_fundo[1]
+
+rompe_topo =
+    nivel_topo_anterior ~= nil and
+    close > nivel_topo_anterior and
+    close[1] <= nivel_topo_anterior
+
+rompe_fundo =
+    nivel_fundo_anterior ~= nil and
+    close < nivel_fundo_anterior and
+    close[1] >= nivel_fundo_anterior
 
 --------------------------------------------------
--- 9. REJEICAO COMPRADORA
+-- MEMORIA DOS NIVEIS ROMPIDOS
 --------------------------------------------------
 
-local rejeicao_compra =
-    lateral and
-    perto_suporte and
+nivel_call = make_series()
+
+nivel_call:set(
+    iff(
+        rompe_topo,
+        nivel_topo_anterior,
+        nivel_call[1]
+    )
+)
+
+nivel_put = make_series()
+
+nivel_put:set(
+    iff(
+        rompe_fundo,
+        nivel_fundo_anterior,
+        nivel_put[1]
+    )
+)
+
+--------------------------------------------------
+-- RETESTE CALL
+--------------------------------------------------
+
+reteste_call =
+    nivel_call[1] ~= nil and
+    low <= nivel_call[1] and
+    close > nivel_call[1] and
     close > open and
-    pavio_baixo > pavio_cima
+    low[1] > nivel_call[1]
 
 --------------------------------------------------
--- 10. FAIXA DINAMICA
--- RESISTENCIA E SUPORTE
--- ESPESSURA 5
+-- RETESTE PUT
 --------------------------------------------------
 
-if mostrar_faixa then
-
-    plot(
-        resistencia,
-        "RESISTENCIA DINAMICA",
-        cor_resistencia,
-        5
-    )
-
-    plot(
-        suporte,
-        "SUPORTE DINAMICO",
-        cor_suporte,
-        5
-    )
-
-end
+reteste_put =
+    nivel_put[1] ~= nil and
+    high >= nivel_put[1] and
+    close < nivel_put[1] and
+    close < open and
+    high[1] < nivel_put[1]
 
 --------------------------------------------------
--- 11. LINHA CENTRAL
--- ESPESSURA 3
+-- MARCACAO HISTORICA DOS RETESTES
 --------------------------------------------------
 
-if mostrar_meio then
+plot_shape(
+    reteste_call,
+    "RETESTE CALL",
+    shape_style.square,
+    shape_size.small,
+    cor_reteste,
+    shape_location.belowbar,
+    0,
+    "RETESTE CALL",
+    cor_reteste
+)
 
-    plot(
-        meio,
-        "MEIO DA FAIXA",
-        cor_meio,
-        3
-    )
-
-end
-
---------------------------------------------------
--- 12. REJEICOES
--- MARCACOES GRANDES
---------------------------------------------------
-
-if mostrar_rejeicao then
-
-    -- REJEICAO DE VENDA NO TOPO
-
-    plot_shape(
-        rejeicao_venda,
-        "REJEICAO VENDA",
-        shape_style.triangledown,
-        shape_size.large,
-        cor_venda,
-        shape_location.abovebar,
-        0,
-        "REJ VENDA",
-        cor_venda
-    )
-
-    -- REJEICAO DE COMPRA NO FUNDO
-
-    plot_shape(
-        rejeicao_compra,
-        "REJEICAO COMPRA",
-        shape_style.triangleup,
-        shape_size.large,
-        cor_compra,
-        shape_location.belowbar,
-        0,
-        "REJ COMPRA",
-        cor_compra
-    )
-
-end
+plot_shape(
+    reteste_put,
+    "RETESTE PUT",
+    shape_style.square,
+    shape_size.small,
+    cor_reteste,
+    shape_location.abovebar,
+    0,
+    "RETESTE PUT",
+    cor_reteste
+)

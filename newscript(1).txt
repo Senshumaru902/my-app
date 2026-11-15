@@ -1,323 +1,351 @@
 
 instrument {
-    name = "QMS 3S3C CLASSIFICADOR M5 V1",
-    short_name = "QMS 3S3C NIVEIS",
+    name = "QMS SUPREMO PRO PADROES V1",
+    short_name = "QMS SUPREMO V1",
     overlay = true
 }
 
--- =========================================
+-- ==========================================
 -- CONFIGURACOES
--- =========================================
+-- ==========================================
 
-input_group {
-    "TENDENCIA",
-    periodo_ema_curta = input(9, "EMA curta", input.integer, 3, 30),
-    periodo_ema_longa = input(21, "EMA longa", input.integer, 10, 60)
-}
+periodo_estrutura = input(2, "Sensibilidade dos pivos",
+input.integer, 1, 5)
 
-input_group {
-    "QUALIDADE",
-    corpo_nivel4 = input(50, "Corpo minimo nivel 4 (%)", input.integer, 40, 80),
-    corpo_nivel5 = input(65, "Corpo minimo nivel 5 (%)", input.integer, 50, 90)
-}
+tolerancia = input(25, "Tolerancia dos ombros (%)",
+input.integer, 5, 100)
 
-input_group {
-    "ESTRUTURA",
-    periodo_estrutura = input(5, "Periodo estrutural", input.integer, 3, 15)
-}
+-- ==========================================
+-- 1. OMBRO CABECA OMBRO
+-- REVERSAO DE ALTA PARA BAIXA
+-- ==========================================
 
-input_group {
-    "VISUAL",
-    mostrar_nivel4 = input(1, "Mostrar nivel 4", input.integer, 0, 1),
-    mostrar_nivel5 = input(1, "Mostrar nivel 5", input.integer, 0, 1)
-}
+o1 = high[12]
+cabeca = high[7]
+o2 = high[2]
 
-input_group {
-    "CORES",
-    azul_compra = input {
-        default = "#2196FF",
-        type = input.color
-    },
-    roxo_venda = input {
-        default = "#A020F0",
-        type = input.color
-    }
-}
+pivo_o1 =
+    high[12] > high[13] and
+    high[12] > high[11]
 
--- =========================================
--- MEDIAS
--- =========================================
+pivo_c =
+    high[7] > high[8] and
+    high[7] > high[6]
 
-ema_curta = ema(close, periodo_ema_curta)
-ema_longa = ema(close, periodo_ema_longa)
+pivo_o2 =
+    high[2] > high[3] and
+    high[2] > high[1]
 
-tendencia_alta =
-    ema_curta > ema_longa and
-    ema_longa > ema_longa[2]
+simetria_oco =
+    abs(o1-o2) /
+    math.max(abs(o1), 0.000001) <
+    tolerancia / 1000
 
-tendencia_baixa =
-    ema_curta < ema_longa and
-    ema_longa < ema_longa[2]
+cabeca_maior =
+    cabeca > o1 and cabeca > o2
 
--- =========================================
--- TRES SOLDADOS
--- =========================================
+pescoco_oco =
+    (low[9] + low[4]) / 2
 
-soldado1 = close[2] > open[2]
-soldado2 = close[1] > open[1]
-soldado3 = close > open
+oco =
+    pivo_o1 and pivo_c and pivo_o2 and
+    simetria_oco and cabeca_maior
 
-progressao_alta =
-    close > close[1] and
-    close[1] > close[2]
+oco_antecipado =
+    oco and
+    close < pescoco_oco and
+    close >= pescoco_oco * 0.995
 
-abertura_soldados =
-    open[1] >= open[2] and
-    open[1] <= close[2] and
-    open >= open[1] and
-    open <= close[1]
+oco_confirmado =
+    oco and
+    close < pescoco_oco and
+    close[1] >= pescoco_oco
 
-tres_soldados =
-    soldado1 and
-    soldado2 and
-    soldado3 and
-    progressao_alta
+-- ==========================================
+-- 2. OCO INVERSO
+-- REVERSAO DE BAIXA PARA ALTA
+-- ==========================================
 
--- =========================================
--- TRES CORVOS
--- =========================================
+oi1 = low[12]
+cabeca_i = low[7]
+oi2 = low[2]
 
-corvo1 = close[2] < open[2]
-corvo2 = close[1] < open[1]
-corvo3 = close < open
+pivo_i1 =
+    low[12] < low[13] and
+    low[12] < low[11]
 
-progressao_baixa =
-    close < close[1] and
-    close[1] < close[2]
+pivo_ci =
+    low[7] < low[8] and
+    low[7] < low[6]
 
-abertura_corvos =
-    open[1] <= open[2] and
-    open[1] >= close[2] and
-    open <= open[1] and
-    open >= close[1]
+pivo_i2 =
+    low[2] < low[3] and
+    low[2] < low[1]
 
-tres_corvos =
-    corvo1 and
-    corvo2 and
-    corvo3 and
-    progressao_baixa
+simetria_inv =
+    abs(oi1-oi2) /
+    math.max(abs(oi1), 0.000001) <
+    tolerancia / 1000
 
--- =========================================
--- CORPOS E SOMBRAS
--- =========================================
+cabeca_menor =
+    cabeca_i < oi1 and cabeca_i < oi2
 
-amplitude0 = high - low
-amplitude1 = high[1] - low[1]
-amplitude2 = high[2] - low[2]
+pescoco_inv =
+    (high[9] + high[4]) / 2
 
-corpo0 = abs(close - open)
-corpo1 = abs(close[1] - open[1])
-corpo2 = abs(close[2] - open[2])
+oco_inv =
+    pivo_i1 and pivo_ci and pivo_i2 and
+    simetria_inv and cabeca_menor
 
-corpo_forte0 =
-    amplitude0 > 0 and
-    corpo0 >= amplitude0 * corpo_nivel4 / 100
+oco_inv_antecipado =
+    oco_inv and
+    close > pescoco_inv * 0.995 and
+    close <= pescoco_inv
 
-corpo_forte1 =
-    amplitude1 > 0 and
-    corpo1 >= amplitude1 * corpo_nivel4 / 100
+oco_inv_confirmado =
+    oco_inv and
+    close > pescoco_inv and
+    close[1] <= pescoco_inv
 
-corpo_forte2 =
-    amplitude2 > 0 and
-    corpo2 >= amplitude2 * corpo_nivel4 / 100
+-- ==========================================
+-- 3. TOPO DUPLO M
+-- ==========================================
 
-corpos_nivel4 =
-    corpo_forte0 and
-    corpo_forte1 and
-    corpo_forte2
+topo1 = high[10]
+topo2 = high[4]
 
-corpo_excelente0 =
-    amplitude0 > 0 and
-    corpo0 >= amplitude0 * corpo_nivel5 / 100
+m_semelhante =
+    abs(topo1-topo2) /
+    math.max(abs(topo1), 0.000001) < 0.025
 
-corpo_excelente1 =
-    amplitude1 > 0 and
-    corpo1 >= amplitude1 * corpo_nivel5 / 100
+pivo_m1 =
+    high[10] > high[11] and
+    high[10] > high[9]
 
-corpo_excelente2 =
-    amplitude2 > 0 and
-    corpo2 >= amplitude2 * corpo_nivel5 / 100
+pivo_m2 =
+    high[4] > high[5] and
+    high[4] > high[3]
 
-corpos_nivel5 =
-    corpo_excelente0 and
-    corpo_excelente1 and
-    corpo_excelente2
+fundo_m =
+    low[7]
 
--- SOMBRAS CONTRARIAS
+padrao_m =
+    m_semelhante and pivo_m1 and pivo_m2
 
-sombra_superior0 = high - max(open, close)
-sombra_inferior0 = min(open, close) - low
+venda_m =
+    padrao_m and
+    close < fundo_m and
+    close[1] >= fundo_m
 
-sombra_superior1 = high[1] - max(open[1], close[1])
-sombra_inferior1 = min(open[1], close[1]) - low[1]
+-- ==========================================
+-- 4. FUNDO DUPLO W
+-- ==========================================
 
-sombra_superior2 = high[2] - max(open[2], close[2])
-sombra_inferior2 = min(open[2], close[2]) - low[2]
+fundo1 = low[10]
+fundo2 = low[4]
 
-sombras_soldados =
-    amplitude0 > 0 and
-    amplitude1 > 0 and
-    amplitude2 > 0 and
-    sombra_superior0 <= amplitude0 * 0.25 and
-    sombra_superior1 <= amplitude1 * 0.25 and
-    sombra_superior2 <= amplitude2 * 0.25
+w_semelhante =
+    abs(fundo1-fundo2) /
+    math.max(abs(fundo1), 0.000001) < 0.025
 
-sombras_corvos =
-    amplitude0 > 0 and
-    amplitude1 > 0 and
-    amplitude2 > 0 and
-    sombra_inferior0 <= amplitude0 * 0.25 and
-    sombra_inferior1 <= amplitude1 * 0.25 and
-    sombra_inferior2 <= amplitude2 * 0.25
+pivo_w1 =
+    low[10] < low[11] and
+    low[10] < low[9]
 
--- =========================================
--- CORRECAO ANTERIOR
--- =========================================
+pivo_w2 =
+    low[4] < low[5] and
+    low[4] < low[3]
 
-correcao_alta =
-    close[3] < open[3] or
-    close[4] < open[4] or
-    close[5] < open[5]
+topo_w =
+    high[7]
 
-correcao_baixa =
-    close[3] > open[3] or
-    close[4] > open[4] or
-    close[5] > open[5]
+padrao_w =
+    w_semelhante and pivo_w1 and pivo_w2
 
--- =========================================
--- IMPULSO ANTERIOR
--- =========================================
+compra_w =
+    padrao_w and
+    close > topo_w and
+    close[1] <= topo_w
+
+-- ==========================================
+-- 5. BANDEIRA DE ALTA
+-- ==========================================
+
+max_bandeira =
+    math.max(high[1],
+    math.max(high[2],
+    math.max(high[3], high[4])))
+
+min_bandeira =
+    math.min(low[1],
+    math.min(low[2],
+    math.min(low[3], low[4])))
 
 impulso_alta =
-    close[3] > close[6] and
-    high[3] > high[6]
+    close[6] > close[11] and
+    close[6] > open[6]
+
+consolidacao_alta =
+    max_bandeira - min_bandeira <
+    abs(close[6]-close[11]) * 0.75
+
+bandeira_alta =
+    impulso_alta and
+    consolidacao_alta
+
+compra_bandeira =
+    bandeira_alta and
+    close > max_bandeira and
+    close[1] <= max_bandeira
+
+-- ==========================================
+-- 6. BANDEIRA DE BAIXA
+-- ==========================================
 
 impulso_baixa =
-    close[3] < close[6] and
-    low[3] < low[6]
+    close[6] < close[11] and
+    close[6] < open[6]
 
--- =========================================
--- ROMPIMENTO ESTRUTURAL
--- =========================================
+consolidacao_baixa =
+    max_bandeira - min_bandeira <
+    abs(close[6]-close[11]) * 0.75
 
-resistencia = highest(high[3], periodo_estrutura)
-suporte = lowest(low[3], periodo_estrutura)
+bandeira_baixa =
+    impulso_baixa and
+    consolidacao_baixa
+
+venda_bandeira =
+    bandeira_baixa and
+    close < min_bandeira and
+    close[1] >= min_bandeira
+
+-- ==========================================
+-- 7. ROMPIMENTO E RETESTE
+-- ==========================================
+
+resistencia =
+    math.max(high[2],
+    math.max(high[3],
+    math.max(high[4], high[5])))
+
+suporte =
+    math.min(low[2],
+    math.min(low[3],
+    math.min(low[4], low[5])))
 
 rompimento_alta =
-    close > resistencia
+    close[1] > resistencia[1] and
+    low <= resistencia and
+    close > resistencia and
+    close > open
 
 rompimento_baixa =
-    close < suporte
+    close[1] < suporte[1] and
+    high >= suporte and
+    close < suporte and
+    close < open
 
--- =========================================
--- NIVEIS DE QUALIDADE
--- =========================================
+-- ==========================================
+-- 8. PULLBACK DE CONTINUACAO
+-- ==========================================
 
--- NIVEL 1 E 2:
--- Padroes sem contexto ou forca suficiente.
--- Nao sao plotados.
+pernada_alta =
+    close[5] > close[9] and
+    close[5] > open[5]
 
--- NIVEL 3:
--- Padrao progressivo, corpos consistentes
--- e tendencia alinhada.
+pullback_alta =
+    pernada_alta and
+    low[2] < close[5] and
+    close > open and
+    close > close[1]
 
-nivel3_alta =
-    tres_soldados and
-    progressao_alta and
-    corpos_nivel4 and
-    tendencia_alta
+pernada_baixa =
+    close[5] < close[9] and
+    close[5] < open[5]
 
-nivel3_baixa =
-    tres_corvos and
-    progressao_baixa and
-    corpos_nivel4 and
-    tendencia_baixa
+pullback_baixa =
+    pernada_baixa and
+    high[2] > close[5] and
+    close < open and
+    close < close[1]
 
--- NIVEL 4:
--- Nivel 3 + correcao + impulso + rompimento.
-
-nivel4_alta =
-    nivel3_alta and
-    correcao_alta and
-    impulso_alta and
-    rompimento_alta
-
-nivel4_baixa =
-    nivel3_baixa and
-    correcao_baixa and
-    impulso_baixa and
-    rompimento_baixa
-
--- NIVEL 5:
--- Nivel 4 + corpos maiores + sombras pequenas
--- + abertura dentro do corpo anterior.
-
-nivel5_alta =
-    nivel4_alta and
-    corpos_nivel5 and
-    sombras_soldados and
-    abertura_soldados
-
-nivel5_baixa =
-    nivel4_baixa and
-    corpos_nivel5 and
-    sombras_corvos and
-    abertura_corvos
-
--- =========================================
--- PLOTAGEM HISTORICA
--- =========================================
+-- ==========================================
+-- 9. SINAIS ANTECIPADOS
+-- ==========================================
 
 plot_shape(
-    nivel4_alta and not nivel5_alta and mostrar_nivel4 == 1,
-    "SOLDADOS NIVEL 4",
+    oco_antecipado,
+    "OCO POSSIVEL",
     shape_style.circle,
     shape_size.small,
-    azul_compra,
-    shape_location.belowbar,
-    0,
-    "N4"
-)
-
-plot_shape(
-    nivel5_alta and mostrar_nivel5 == 1,
-    "SOLDADOS NIVEL 5",
-    shape_style.circle,
-    shape_size.small,
-    azul_compra,
-    shape_location.belowbar,
-    0,
-    "N5"
-)
-
-plot_shape(
-    nivel4_baixa and not nivel5_baixa and mostrar_nivel4 == 1,
-    "CORVOS NIVEL 4",
-    shape_style.circle,
-    shape_size.small,
-    roxo_venda,
+    "#FFAA00",
     shape_location.abovebar,
     0,
-    "N4"
+    "PRE OCO"
 )
 
 plot_shape(
-    nivel5_baixa and mostrar_nivel5 == 1,
-    "CORVOS NIVEL 5",
+    oco_inv_antecipado,
+    "OCO INV POSSIVEL",
     shape_style.circle,
     shape_size.small,
-    roxo_venda,
+    "#00FFFF",
+    shape_location.belowbar,
+    0,
+    "PRE OCO INV"
+)
+
+-- ==========================================
+-- 10. REVERSOES CONFIRMADAS
+-- ==========================================
+
+plot_shape(
+    oco_confirmado,
+    "OCO VENDA",
+    shape_style.arrowdown,
+    shape_size.large,
+    "#FF3030",
     shape_location.abovebar,
     0,
-    "N5"
+    "OCO"
 )
+
+plot_shape(
+    oco_inv_confirmado,
+    "OCO INV COMPRA",
+    shape_style.arrowup,
+    shape_size.large,
+    "#00FF66",
+    shape_location.belowbar,
+    0,
+    "OCO INV"
+)
+
+-- ==========================================
+-- 11. CONTINUACAO CONFIRMADA
+-- ==========================================
+
+plot_shape(
+    compra_bandeira,
+    "BANDEIRA ALTA",
+    shape_style.arrowup,
+    shape_size.large,
+    "#2196FF",
+    shape_location.belowbar,
+    0,
+    "BANDEIRA ALTA"
+)
+
+plot_shape(
+    venda_bandeira,
+    "BANDEIRA BAIXA",
+    shape_style.arrowdown,
+    shape_size.large,
+    "#A020F0",
+    shape_location.abovebar,
+    0,
+    "BANDEIRA BAIXA"
+)
+
+
+

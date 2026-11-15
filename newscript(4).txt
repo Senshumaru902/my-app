@@ -1,17 +1,62 @@
 
 instrument {
-    name = "QMS BREAKOUT - SOMENTE RETESTE",
-    short_name = "QMS RETESTE",
-    icon = "indicators:CCI",
+    name = "QMS ROMPIMENTO FORTE M5",
+    short_name = "QMS ROMP M5",
+    icon = "indicators:ATR",
     overlay = true
 }
 
---------------------------------------------------
--- CONFIGURACAO
---------------------------------------------------
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
 
 input_group {
-    "MARCAÇÃO DO RETESTE",
+    "ESTRUTURA DO ROMPIMENTO",
+
+    periodo = input {
+        default = 20,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    corpo_minimo = input {
+        default = 45,
+        type = input.integer,
+        min = 10,
+        max = 90
+    },
+
+    fechamento_minimo = input {
+        default = 70,
+        type = input.integer,
+        min = 50,
+        max = 95
+    }
+}
+
+input_group {
+    "CORES",
+
+    cor_resistencia = input {
+        default = "#2196FF",
+        type = input.color
+    },
+
+    cor_suporte = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_call = input {
+        default = "#00BFFF",
+        type = input.color
+    },
+
+    cor_put = input {
+        default = "#A020F0",
+        type = input.color
+    },
 
     cor_reteste = input {
         default = "#FFD700",
@@ -19,129 +64,148 @@ input_group {
     }
 }
 
---------------------------------------------------
--- IDENTIFICACAO DOS PIVOS
---------------------------------------------------
+-- =========================================
+-- 2. ESTRUTURA DINAMICA
+-- =========================================
 
-pivo_topo =
-    high[2] > high[1] and
-    high[2] >= high[3]
+resistencia = highest(high[1], periodo)
+suporte = lowest(low[1], periodo)
 
-pivo_fundo =
-    low[2] < low[1] and
-    low[2] <= low[3]
+-- Niveis usados para detectar retestes.
+-- Consideram a estrutura anterior ao candle anterior.
 
---------------------------------------------------
--- ARMAZENAMENTO DOS PIVOS
---------------------------------------------------
+nivel_reteste_alta = highest(high[2], periodo)
+nivel_reteste_baixa = lowest(low[2], periodo)
 
-ultimo_topo = make_series()
+-- =========================================
+-- 3. LEITURA DO CANDLE
+-- =========================================
 
-ultimo_topo:set(
-    iff(
-        pivo_topo,
-        high[2],
-        ultimo_topo[1]
-    )
-)
+amplitude = high - low
+corpo = abs(close - open)
 
-ultimo_fundo = make_series()
+corpo_percentual =
+    corpo / (amplitude + 0.0000001) * 100
 
-ultimo_fundo:set(
-    iff(
-        pivo_fundo,
-        low[2],
-        ultimo_fundo[1]
-    )
-)
+posicao_fechamento =
+    (close - low) / (amplitude + 0.0000001) * 100
 
---------------------------------------------------
--- IDENTIFICACAO DOS ROMPIMENTOS
---------------------------------------------------
+-- =========================================
+-- 4. FORCA COMPRADORA E VENDEDORA
+-- =========================================
 
-nivel_topo_anterior = ultimo_topo[1]
-nivel_fundo_anterior = ultimo_fundo[1]
+candle_comprador =
+    close > open and
+    corpo_percentual >= corpo_minimo and
+    posicao_fechamento >= fechamento_minimo
 
-rompe_topo =
-    nivel_topo_anterior ~= nil and
-    close > nivel_topo_anterior and
-    close[1] <= nivel_topo_anterior
+candle_vendedor =
+    close < open and
+    corpo_percentual >= corpo_minimo and
+    posicao_fechamento <= (100 - fechamento_minimo)
 
-rompe_fundo =
-    nivel_fundo_anterior ~= nil and
-    close < nivel_fundo_anterior and
-    close[1] >= nivel_fundo_anterior
+-- =========================================
+-- 5. ROMPIMENTO DA RESISTENCIA
+-- =========================================
 
---------------------------------------------------
--- MEMORIA DOS NIVEIS ROMPIDOS
---------------------------------------------------
+rompimento_alta =
+    close > resistencia and
+    close[1] <= resistencia[1]
 
-nivel_call = make_series()
+call_forte =
+    rompimento_alta and
+    candle_comprador
 
-nivel_call:set(
-    iff(
-        rompe_topo,
-        nivel_topo_anterior,
-        nivel_call[1]
-    )
-)
+-- =========================================
+-- 6. ROMPIMENTO DO SUPORTE
+-- =========================================
 
-nivel_put = make_series()
+rompimento_baixa =
+    close < suporte and
+    close[1] >= suporte[1]
 
-nivel_put:set(
-    iff(
-        rompe_fundo,
-        nivel_fundo_anterior,
-        nivel_put[1]
-    )
-)
+put_forte =
+    rompimento_baixa and
+    candle_vendedor
 
---------------------------------------------------
--- RETESTE CALL
---------------------------------------------------
+-- =========================================
+-- 7. RETESTE DA RESISTENCIA ROMPIDA
+-- =========================================
 
 reteste_call =
-    nivel_call[1] ~= nil and
-    low <= nivel_call[1] and
-    close > nivel_call[1] and
-    close > open and
-    low[1] > nivel_call[1]
+    close[1] > nivel_reteste_alta and
+    low <= nivel_reteste_alta and
+    close > nivel_reteste_alta and
+    close > open
 
---------------------------------------------------
--- RETESTE PUT
---------------------------------------------------
+-- =========================================
+-- 8. RETESTE DO SUPORTE ROMPIDO
+-- =========================================
 
 reteste_put =
-    nivel_put[1] ~= nil and
-    high >= nivel_put[1] and
-    close < nivel_put[1] and
-    close < open and
-    high[1] < nivel_put[1]
+    close[1] < nivel_reteste_baixa and
+    high >= nivel_reteste_baixa and
+    close < nivel_reteste_baixa and
+    close < open
 
---------------------------------------------------
--- MARCACAO HISTORICA DOS RETESTES
---------------------------------------------------
+-- =========================================
+-- 9. PLOTAGEM DAS FAIXAS
+-- =========================================
+
+plot(
+    resistencia,
+    "RESISTENCIA",
+    cor_resistencia,
+    2
+)
+
+plot(
+    suporte,
+    "SUPORTE",
+    cor_suporte,
+    2
+)
+
+-- =========================================
+-- 10. SETAS DE ROMPIMENTO
+-- =========================================
+
+plot_shape(
+    call_forte,
+    "ROMPIMENTO CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_call,
+    shape_location.belowbar
+)
+
+plot_shape(
+    put_forte,
+    "ROMPIMENTO PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_put,
+    shape_location.abovebar
+)
+
+-- =========================================
+-- 11. MARCACAO DOS RETESTES
+-- =========================================
 
 plot_shape(
     reteste_call,
     "RETESTE CALL",
-    shape_style.square,
+    shape_style.triangleup,
     shape_size.small,
     cor_reteste,
-    shape_location.belowbar,
-    0,
-    "RETESTE CALL",
-    cor_reteste
+    shape_location.belowbar
 )
 
 plot_shape(
     reteste_put,
     "RETESTE PUT",
-    shape_style.square,
+    shape_style.triangledown,
     shape_size.small,
     cor_reteste,
-    shape_location.abovebar,
-    0,
-    "RETESTE PUT",
-    cor_reteste
+    shape_location.abovebar
 )

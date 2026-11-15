@@ -1,274 +1,75 @@
 
 instrument {
-    name = "QMS DOJI NIVEL 3 PRO V3",
-    short_name = "QMS DOJI N3 V3",
-    icon = "indicators:CCI",
+    name = "QMS TRES SOLDADOS E TRES CORVOS",
+    short_name = "QMS 3S3C",
     overlay = true
-}
-
---------------------------------------------------
--- 1. CONFIGURACOES
---------------------------------------------------
-
-input_group {
-    "SENSIBILIDADE",
-
-    periodo = input {
-        default = 10,
-        type = input.integer,
-        min = 5,
-        max = 30
-    },
-
-    tolerancia = input {
-        default = 20,
-        type = input.integer,
-        min = 5,
-        max = 40
-    },
-
-    corpo_maximo = input {
-        default = 15,
-        type = input.integer,
-        min = 5,
-        max = 30
-    },
-
-    rejeicao_minima = input {
-        default = 55,
-        type = input.integer,
-        min = 30,
-        max = 90
-    }
-}
-
-input_group {
-    "CONFIRMACAO",
-
-    exigir_confirmacao = input {
-        default = true,
-        type = input.boolean
-    },
-
-    forca_confirmacao = input {
-        default = 35,
-        type = input.integer,
-        min = 10,
-        max = 80
-    }
 }
 
 input_group {
     "CORES",
-
-    cor_call = input {
-        default = "#2196FF",
-        type = input.color
-    },
-
-    cor_put = input {
-        default = "#A020F0",
-        type = input.color
-    }
+    cor_soldados = input { default = "#FFFF00", type = input.color },
+    cor_corvos = input { default = "#000000", type = input.color }
 }
 
---------------------------------------------------
--- 2. REGIAO ESTRUTURAL
---------------------------------------------------
+input_group {
+    "CONFIGURACAO",
+    exigir_progressao = input(true, "Exigir progressao dos candles", input.boolean),
+    corpo_minimo = input(30, "Corpo minimo (%)", input.integer, 1, 100)
+}
 
-topo_regiao = highest(high[2], periodo)
-fundo_regiao = lowest(low[2], periodo)
+-- Identificacao dos candles
+alta1 = close[2] > open[2]
+alta2 = close[1] > open[1]
+alta3 = close > open
 
-amplitude_regiao =
-    topo_regiao - fundo_regiao
+baixa1 = close[2] < open[2]
+baixa2 = close[1] < open[1]
+baixa3 = close < open
 
---------------------------------------------------
--- 3. ANALISE DO CANDLE ANTERIOR
---------------------------------------------------
+-- Tamanho dos corpos
+range1 = high[2] - low[2]
+range2 = high[1] - low[1]
+range3 = high - low
 
-amplitude = high[1] - low[1]
+corpo1 = abs(close[2] - open[2])
+corpo2 = abs(close[1] - open[1])
+corpo3 = abs(close - open)
 
-corpo = abs(close[1] - open[1])
+forte1 = range1 > 0 and corpo1 / range1 * 100 >= corpo_minimo
+forte2 = range2 > 0 and corpo2 / range2 * 100 >= corpo_minimo
+forte3 = range3 > 0 and corpo3 / range3 * 100 >= corpo_minimo
 
-sombra_superior =
-    high[1] - max(open[1], close[1])
+-- Progressao dos tres soldados
+progressao_alta =
+    close[1] > close[2] and
+    close > close[1] and
+    open[1] >= open[2] and
+    open <= close[1]
 
-sombra_inferior =
-    min(open[1], close[1]) - low[1]
+-- Progressao dos tres corvos
+progressao_baixa =
+    close[1] < close[2] and
+    close < close[1] and
+    open[1] <= open[2] and
+    open >= close[1]
 
-corpo_pct = 100
-sombra_sup_pct = 0
-sombra_inf_pct = 0
+-- Padrao tres soldados
+soldados =
+    alta1 and alta2 and alta3 and
+    forte1 and forte2 and forte3 and
+    (not exigir_progressao or progressao_alta)
 
-if amplitude > 0 then
+-- Padrao tres corvos
+corvos =
+    baixa1 and baixa2 and baixa3 and
+    forte1 and forte2 and forte3 and
+    (not exigir_progressao or progressao_baixa)
 
-    corpo_pct =
-        corpo / amplitude * 100
-
-    sombra_sup_pct =
-        sombra_superior / amplitude * 100
-
-    sombra_inf_pct =
-        sombra_inferior / amplitude * 100
-
-end
-
---------------------------------------------------
--- 4. IDENTIFICACAO DOS DOJIS
--- ANALISE INTERNA, SEM PLOTAGEM
---------------------------------------------------
-
-doji_valido =
-    amplitude > 0 and
-    corpo_pct <= corpo_maximo
-
-libelula =
-    doji_valido and
-    sombra_inf_pct >= rejeicao_minima and
-    sombra_sup_pct <= 20
-
-lapide =
-    doji_valido and
-    sombra_sup_pct >= rejeicao_minima and
-    sombra_inf_pct <= 20
-
-rejeicao_compra =
-    doji_valido and
-    sombra_inf_pct >= rejeicao_minima and
-    sombra_inf_pct > sombra_sup_pct
-
-rejeicao_venda =
-    doji_valido and
-    sombra_sup_pct >= rejeicao_minima and
-    sombra_sup_pct > sombra_inf_pct
-
---------------------------------------------------
--- 5. MOVIMENTO ANTERIOR
---------------------------------------------------
-
-movimento_baixa =
-    close[periodo + 2] > close[2]
-
-movimento_alta =
-    close[periodo + 2] < close[2]
-
---------------------------------------------------
--- 6. PROXIMIDADE DOS EXTREMOS
---------------------------------------------------
-
-distancia_fundo = 100
-distancia_topo = 100
-
-if amplitude_regiao > 0 then
-
-    distancia_fundo =
-        (low[1] - fundo_regiao) /
-        amplitude_regiao * 100
-
-    distancia_topo =
-        (topo_regiao - high[1]) /
-        amplitude_regiao * 100
-
-end
-
-perto_do_fundo =
-    distancia_fundo <= tolerancia
-
-perto_do_topo =
-    distancia_topo <= tolerancia
-
---------------------------------------------------
--- 7. CANDLE DE CONFIRMACAO
---------------------------------------------------
-
-amplitude_atual = high - low
-
-corpo_atual = abs(close - open)
-
-forca_atual = 0
-
-if amplitude_atual > 0 then
-
-    forca_atual =
-        corpo_atual / amplitude_atual * 100
-
-end
-
-confirmacao_compra =
-    close > open and
-    close > high[1] and
-    forca_atual >= forca_confirmacao
-
-confirmacao_venda =
-    close < open and
-    close < low[1] and
-    forca_atual >= forca_confirmacao
-
---------------------------------------------------
--- 8. DOJI NIVEL 3
---------------------------------------------------
-
-doji_compra =
-    doji_valido and
-    movimento_baixa and
-    perto_do_fundo and
-    rejeicao_compra
-
-doji_venda =
-    doji_valido and
-    movimento_alta and
-    perto_do_topo and
-    rejeicao_venda
-
---------------------------------------------------
--- 9. SINAIS FINAIS
---------------------------------------------------
-
-sinal_call = false
-sinal_put = false
-
-if exigir_confirmacao then
-
-    sinal_call =
-        doji_compra and
-        confirmacao_compra
-
-    sinal_put =
-        doji_venda and
-        confirmacao_venda
-
-else
-
-    sinal_call = doji_compra
-    sinal_put = doji_venda
-
-end
-
---------------------------------------------------
--- 10. PLOTAGEM FINAL
--- SOMENTE CALL N3 E PUT N3
---------------------------------------------------
-
-plot_shape(
-    sinal_call,
-    "QMS CALL N3",
-    shape_style.triangleup,
-    shape_size.large,
-    cor_call,
-    shape_location.belowbar,
-    0,
-    "CALL N3",
-    cor_call
+-- Coloracao historica e dinamica
+cor_candle = iff(
+    soldados,
+    cor_soldados,
+    iff(corvos, cor_corvos, na)
 )
 
-plot_shape(
-    sinal_put,
-    "QMS PUT N3",
-    shape_style.triangledown,
-    shape_size.large,
-    cor_put,
-    shape_location.abovebar,
-    0,
-    "PUT N3",
-    cor_put
-)
+plot_candle(open, high, low, close, "QMS 3S3C", cor_candle)

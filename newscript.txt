@@ -1,7 +1,7 @@
 
 instrument {
-    name = "QMS 3S3C ARCO DE ALTA M5 V2",
-    short_name = "QMS ARCO ALTA",
+    name = "QMS ESTRELAS SELETIVO PRO",
+    short_name = "QMS ESTRELAS PRO",
     overlay = true
 }
 
@@ -10,210 +10,165 @@ instrument {
 -- =========================================
 
 input_group {
-    "INCLINACAO DO ARCO",
-    periodo_ema_curta = input(9, "EMA curta", input.integer, 3, 30),
-    periodo_ema_longa = input(21, "EMA longa", input.integer, 10, 60),
-    periodo_arco = input(3, "Periodo de curvatura", input.integer, 2, 8),
-    inclinacao_minima = input(0, "Inclinacao minima", input.integer, 0, 10)
+    "Seletividade",
+
+    forca_candle = input(
+        0.60,
+        "Forca do primeiro candle",
+        input.double, 0.30, 0.95, 0.05
+    ),
+
+    corpo_estrela = input(
+        0.30,
+        "Corpo maximo do candle central",
+        input.double, 0.10, 0.60, 0.05
+    ),
+
+    forca_confirmacao = input(
+        0.65,
+        "Forca do candle de confirmacao",
+        input.double, 0.30, 0.95, 0.05
+    ),
+
+    recuperacao = input(
+        0.60,
+        "Nivel de recuperacao",
+        input.double, 0.50, 0.90, 0.05
+    ),
+
+    rejeicao_minima = input(
+        0.25,
+        "Rejeicao minima do candle central",
+        input.double, 0.10, 0.80, 0.05
+    )
 }
 
 input_group {
-    "QUALIDADE",
-    corpo_nivel4 = input(50, "Corpo minimo N4 (%)", input.integer, 40, 80),
-    corpo_nivel5 = input(65, "Corpo minimo N5 (%)", input.integer, 50, 90)
-}
+    "Cores",
 
-input_group {
-    "ESTRUTURA",
-    periodo_estrutura = input(5, "Periodo estrutural", input.integer, 3, 15)
-}
-
-input_group {
-    "VISUAL",
-    mostrar_nivel4 = input(1, "Mostrar nivel 4", input.integer, 0, 1),
-    mostrar_nivel5 = input(1, "Mostrar nivel 5", input.integer, 0, 1)
-}
-
-input_group {
-    "COR",
-    azul_compra = input {
+    cor_compra = input {
         default = "#2196FF",
+        type = input.color
+    },
+
+    cor_venda = input {
+        default = "#A020F0",
         type = input.color
     }
 }
 
 -- =========================================
--- MEDIAS
+-- CANDLES
 -- =========================================
 
-ema_curta = ema(close, periodo_ema_curta)
-ema_longa = ema(close, periodo_ema_longa)
+local a2 = open[2]
+local f2 = close[2]
+local h2 = high[2]
+local l2 = low[2]
+
+local a1 = open[1]
+local f1 = close[1]
+local h1 = high[1]
+local l1 = low[1]
+
+local a0 = open
+local f0 = close
+local h0 = high
+local l0 = low
 
 -- =========================================
--- INCLINACAO E CURVATURA
+-- CALCULOS
 -- =========================================
 
-inclinacao0 = ema_longa - ema_longa[1]
-inclinacao1 = ema_longa[1] - ema_longa[2]
-inclinacao2 = ema_longa[2] - ema_longa[3]
+local r2 = h2 - l2
+local r1 = h1 - l1
+local r0 = h0 - l0
 
-curvatura0 = inclinacao0 - inclinacao1
-curvatura1 = inclinacao1 - inclinacao2
+local b2 = abs(f2 - a2)
+local b1 = abs(f1 - a1)
+local b0 = abs(f0 - a0)
 
--- Arco ascendente:
--- A media sobe e sua inclinacao aumenta.
+local p2 = r2 > 0 and b2 / r2 or 0
+local p1 = r1 > 0 and b1 / r1 or 0
+local p0 = r0 > 0 and b0 / r0 or 0
 
-arco_alta =
-    ema_curta > ema_longa and
-    inclinacao0 > inclinacao_minima * 0.0001 and
-    inclinacao1 > 0 and
-    curvatura0 > 0 and
-    curvatura1 > 0
+local pavio_superior = h1 - max(a1, f1)
+local pavio_inferior = min(a1, f1) - l1
 
--- Confirmacao da aceleracao
+local rejeicao_superior =
+    r1 > 0 and pavio_superior / r1 or 0
 
-aceleracao_alta =
-    inclinacao0 > inclinacao1 and
-    inclinacao1 > inclinacao2
+local rejeicao_inferior =
+    r1 > 0 and pavio_inferior / r1 or 0
 
 -- =========================================
--- TRES SOLDADOS
+-- ESTRELA DA MANHA
 -- =========================================
 
-soldado1 = close[2] > open[2]
-soldado2 = close[1] > open[1]
-soldado3 = close > open
+local tendencia_baixa =
+    f2 < a2 and p2 >= forca_candle
 
-progressao_alta =
-    close > close[1] and
-    close[1] > close[2]
+local estrela_central_compra =
+    b1 <= b2 * corpo_estrela and
+    rejeicao_inferior >= rejeicao_minima and
+    l1 <= l2
 
-abertura_soldados =
-    open[1] >= open[2] and
-    open[1] <= close[2] and
-    open >= open[1] and
-    open <= close[1]
+local confirmacao_alta =
+    f0 > a0 and
+    p0 >= forca_confirmacao and
+    f0 >= (l2 + (h2 - l2) * recuperacao)
 
-tres_soldados =
-    soldado1 and
-    soldado2 and
-    soldado3 and
-    progressao_alta
+local estrela_manha =
+    tendencia_baixa and
+    estrela_central_compra and
+    confirmacao_alta
 
 -- =========================================
--- CORPOS
+-- ESTRELA DA NOITE
 -- =========================================
 
-amplitude0 = high - low
-amplitude1 = high[1] - low[1]
-amplitude2 = high[2] - low[2]
+local tendencia_alta =
+    f2 > a2 and p2 >= forca_candle
 
-corpo0 = abs(close - open)
-corpo1 = abs(close[1] - open[1])
-corpo2 = abs(close[2] - open[2])
+local estrela_central_venda =
+    b1 <= b2 * corpo_estrela and
+    rejeicao_superior >= rejeicao_minima and
+    h1 >= h2
 
-corpos_nivel4 =
-    amplitude0 > 0 and
-    amplitude1 > 0 and
-    amplitude2 > 0 and
-    corpo0 >= amplitude0 * corpo_nivel4 / 100 and
-    corpo1 >= amplitude1 * corpo_nivel4 / 100 and
-    corpo2 >= amplitude2 * corpo_nivel4 / 100
+local confirmacao_baixa =
+    f0 < a0 and
+    p0 >= forca_confirmacao and
+    f0 <= (h2 - (h2 - l2) * recuperacao)
 
-corpos_nivel5 =
-    amplitude0 > 0 and
-    amplitude1 > 0 and
-    amplitude2 > 0 and
-    corpo0 >= amplitude0 * corpo_nivel5 / 100 and
-    corpo1 >= amplitude1 * corpo_nivel5 / 100 and
-    corpo2 >= amplitude2 * corpo_nivel5 / 100
+local estrela_noite =
+    tendencia_alta and
+    estrela_central_venda and
+    confirmacao_baixa
 
 -- =========================================
--- SOMBRAS
--- =========================================
-
-sombra_superior0 = high - max(open, close)
-sombra_superior1 = high[1] - max(open[1], close[1])
-sombra_superior2 = high[2] - max(open[2], close[2])
-
-sombras_soldados =
-    amplitude0 > 0 and
-    amplitude1 > 0 and
-    amplitude2 > 0 and
-    sombra_superior0 <= amplitude0 * 0.25 and
-    sombra_superior1 <= amplitude1 * 0.25 and
-    sombra_superior2 <= amplitude2 * 0.25
-
--- =========================================
--- CORRECAO ANTERIOR
--- =========================================
-
-correcao_alta =
-    close[3] < open[3] or
-    close[4] < open[4] or
-    close[5] < open[5]
-
--- =========================================
--- IMPULSO ANTERIOR
--- =========================================
-
-impulso_alta =
-    close[3] > close[6] and
-    high[3] > high[6]
-
--- =========================================
--- ROMPIMENTO
--- =========================================
-
-resistencia = highest(high[3], periodo_estrutura)
-
-rompimento_alta =
-    close > resistencia
-
--- =========================================
--- CLASSIFICACAO
--- =========================================
-
-nivel3_alta =
-    tres_soldados and
-    corpos_nivel4 and
-    arco_alta
-
-nivel4_alta =
-    nivel3_alta and
-    correcao_alta and
-    impulso_alta and
-    rompimento_alta
-
-nivel5_alta =
-    nivel4_alta and
-    corpos_nivel5 and
-    sombras_soldados and
-    abertura_soldados and
-    aceleracao_alta
-
--- =========================================
--- PLOTAGEM HISTORICA
+-- SINAIS HISTORICOS
 -- =========================================
 
 plot_shape(
-    nivel4_alta and not nivel5_alta and mostrar_nivel4 == 1,
-    "ARCO ALTA N4",
-    shape_style.circle,
-    shape_size.small,
-    azul_compra,
+    estrela_manha,
+    "ESTRELA DA MANHA",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_compra,
     shape_location.belowbar,
     0,
-    "N4"
+    "MANHA",
+    cor_compra
 )
 
 plot_shape(
-    nivel5_alta and mostrar_nivel5 == 1,
-    "ARCO ALTA N5",
-    shape_style.circle,
-    shape_size.small,
-    azul_compra,
-    shape_location.belowbar,
+    estrela_noite,
+    "ESTRELA DA NOITE",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_venda,
+    shape_location.abovebar,
     0,
-    "N5"
+    "NOITE",
+    cor_venda
 )
