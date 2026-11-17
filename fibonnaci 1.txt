@@ -1,0 +1,98 @@
+
+instrument {
+    name = "QMS FIBONACCI QUADRANTES V3",
+    short_name = "QMS FIB QUAD V3",
+    icon = "indicators:MA",
+    overlay = true
+}
+
+-- ==========================================
+-- CONFIGURACAO
+-- ==========================================
+
+passo = input(0.5, "Intervalo dos quadrantes",
+    input.double, 0.1, 10, 0.1)
+
+-- ==========================================
+-- CORES
+-- ==========================================
+
+azul = "#2196FF"
+roxo = "#A020F0"
+amarelo = "#FFD740"
+branco = "#FFFFFF"
+cinza = "#808080"
+
+-- ==========================================
+-- CALCULO HISTORICO
+-- ==========================================
+
+-- Identifica o quadrante de cada candle
+
+indice = floor(close / passo)
+
+-- Limites do quadrante
+
+base = indice * passo
+topo = base + passo
+
+-- Amplitude
+
+amplitude = topo - base
+
+-- ==========================================
+-- FIBONACCI
+-- ==========================================
+
+nivel_0 = base
+
+nivel_236 = base + amplitude * 0.236
+
+nivel_382 = base + amplitude * 0.382
+
+nivel_500 = base + amplitude * 0.500
+
+nivel_618 = base + amplitude * 0.618
+
+nivel_786 = base + amplitude * 0.786
+
+nivel_100 = topo
+
+-- ==========================================
+-- PLOTAGEM DAS LINHAS
+-- ==========================================
+
+plot(nivel_0,
+    "FIB 0%",
+    azul,
+    2)
+
+plot(nivel_236,
+    "FIB 23.6%",
+    roxo,
+    1)
+
+plot(nivel_382,
+    "FIB 38.2%",
+    amarelo,
+    2)
+
+plot(nivel_500,
+    "FIB 50%",
+    branco,
+    1)
+
+plot(nivel_618,
+    "FIB 61.8%",
+    amarelo,
+    2)
+
+plot(nivel_786,
+    "FIB 78.6%",
+    roxo,
+    1)
+
+plot(nivel_100,
+    "FIB 100%",
+    azul,
+    2)

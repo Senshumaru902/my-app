@@ -1,0 +1,165 @@
+
+instrument {
+    name = "QMS MEDIA MOVEL EXAUSTAO PRO",
+    short_name = "QMS EXAUSTAO",
+    icon = "indicators:MA",
+    overlay = true
+}
+
+-- ==========================================
+-- CONFIGURACOES
+-- ==========================================
+
+periodo = input(
+    21,
+    "Periodo da media",
+    input.integer,
+    2,
+    200
+)
+
+periodo_atr = input(
+    14,
+    "Periodo ATR",
+    input.integer,
+    2,
+    100
+)
+
+distancia_exaustao = input(
+    2.0,
+    "Distancia de exaustao ATR",
+    input.double,
+    0.5,
+    5.0,
+    0.1
+)
+
+-- ==========================================
+-- CORES
+-- ==========================================
+
+cor_alta = "#2196FF"
+cor_baixa = "#A020F0"
+cor_exaustao = "#FFF176"
+
+-- ==========================================
+-- MEDIA MOVEL EXPONENCIAL
+-- ==========================================
+
+media = ema(close, periodo)
+
+-- ==========================================
+-- CALCULO DO ATR
+-- ==========================================
+
+candle_anterior = nz(close[1], close)
+
+tr1 = high - low
+tr2 = abs(high - candle_anterior)
+tr3 = abs(low - candle_anterior)
+
+true_range = max(
+    tr1,
+    max(tr2, tr3)
+)
+
+atr = sma(true_range, periodo_atr)
+
+-- ==========================================
+-- DISTANCIA DO PRECO A MEDIA
+-- ==========================================
+
+distancia = abs(close - media)
+
+atr_seguro = max(atr, 0.0000001)
+
+distancia_atr = distancia / atr_seguro
+
+-- ==========================================
+-- DIRECAO DO MOVIMENTO
+-- ==========================================
+
+media_anterior = nz(media[1], media)
+
+alta = media > media_anterior
+
+baixa = media < media_anterior
+
+-- ==========================================
+-- REJEICAO DOS CANDLES
+-- ==========================================
+
+corpo = abs(close - open)
+
+pavio_superior = high - max(open, close)
+
+pavio_inferior = min(open, close) - low
+
+rejeicao_alta =
+    close < open or
+    pavio_superior > corpo * 0.8
+
+rejeicao_baixa =
+    close > open or
+    pavio_inferior > corpo * 0.8
+
+-- ==========================================
+-- DETECCAO DE MOVIMENTO ESTICADO
+-- ==========================================
+
+esticado =
+    distancia_atr >= distancia_exaustao
+
+-- ==========================================
+-- EXAUSTAO DE ALTA
+-- ==========================================
+
+exaustao_alta =
+    esticado and
+    close > media and
+    alta and
+    rejeicao_alta
+
+-- ==========================================
+-- EXAUSTAO DE BAIXA
+-- ==========================================
+
+exaustao_baixa =
+    esticado and
+    close < media and
+    baixa and
+    rejeicao_baixa
+
+-- ==========================================
+-- CONDICAO FINAL
+-- ==========================================
+
+exaustao =
+    exaustao_alta or exaustao_baixa
+
+-- ==========================================
+-- COLORACAO DINAMICA
+-- ==========================================
+
+cor_media = iff(
+    exaustao,
+    cor_exaustao,
+    iff(
+        alta,
+        cor_alta,
+        cor_baixa
+    )
+)
+
+-- ==========================================
+-- PLOTAGEM DA MEDIA
+-- ESPESSURA 5
+-- ==========================================
+
+plot(
+    media,
+    "QMS MEDIA EXAUSTAO",
+    cor_media,
+    5
+)
