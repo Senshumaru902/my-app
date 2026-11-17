@@ -1,0 +1,44 @@
+instrument {
+    name = "QMS FIBONACCI QUADRANTES V3",
+    short_name = "QMS FIB QUAD V3",
+    icon = "indicators:MA",
+    overlay = true
+}
+
+-- CONFIGURACAO
+
+periodo = input(100, "Periodo do quadrante",
+    input.integer, 10, 500)
+
+-- CORES
+
+amarelo = "#FFD740"
+azul = "#2196FF"
+roxo = "#A020F0"
+branco = "#FFFFFF"
+
+-- MAXIMA E MINIMA
+
+maxima = highest(high, periodo)
+minima = lowest(low, periodo)
+
+-- AMPLITUDE
+
+amplitude = maxima - minima
+
+-- FIBONACCI
+
+fib_500 = minima + amplitude * 0.500
+fib_618 = minima + amplitude * 0.618
+fib_786 = minima + amplitude * 0.786
+fib_100 = maxima
+
+-- PLOTAGEM
+
+plot(fib_500, "FIB 50%", branco, 2)
+
+plot(fib_618, "FIB 61.8%", amarelo, 2)
+
+plot(fib_786, "FIB 78.6%", roxo, 2)
+
+plot(fib_100, "FIB 100%", azul, 2)

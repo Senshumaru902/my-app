@@ -1,0 +1,257 @@
+
+instrument {
+    name = "QMS BANDEIRAS ALTA E BAIXA V2",
+    short_name = "QMS FLAG V2",
+    overlay = true
+}
+
+-- =========================================
+-- CONFIGURACOES
+-- =========================================
+
+periodo_bandeira = input(
+    10, "Velas da bandeira", input.integer, 5, 30
+)
+
+periodo_impulso = input(
+    12, "Velas da pernada", input.integer, 5, 40
+)
+
+periodo_atr = input(
+    14, "Periodo ATR", input.integer, 5, 30
+)
+
+forca_impulso = input(
+    2.0, "Forca minima da pernada (ATR)",
+    input.double, 0.5, 5.0
+)
+
+max_correcao = input(
+    0.65, "Correcao maxima",
+    input.double, 0.2, 0.9
+)
+
+-- =========================================
+-- CORES E ESPESSURA
+-- =========================================
+
+input_group {
+    "BANDEIRA DE ALTA",
+
+    cor_alta = input {
+        default = "#2196FF",
+        type = input.color
+    },
+
+    largura_alta = input {
+        default = 5,
+        type = input.line_width
+    }
+}
+
+input_group {
+    "BANDEIRA DE BAIXA",
+
+    cor_baixa = input {
+        default = "#9C27B0",
+        type = input.color
+    },
+
+    largura_baixa = input {
+        default = 5,
+        type = input.line_width
+    }
+}
+
+input_group {
+    "ROMPIMENTOS",
+
+    cor_compra = input {
+        default = "#00E676",
+        type = input.color
+    },
+
+    cor_venda = input {
+        default = "#FF3030",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- ATR
+-- =========================================
+
+atr_valor = sma(tr, periodo_atr)
+
+-- =========================================
+-- CANAL DA BANDEIRA
+-- =========================================
+
+topo_bandeira = highest(high[1], periodo_bandeira)
+
+fundo_bandeira = lowest(low[1], periodo_bandeira)
+
+amplitude_bandeira =
+    topo_bandeira - fundo_bandeira
+
+-- =========================================
+-- PERNADA ANTERIOR
+-- =========================================
+
+inicio_impulso =
+    periodo_bandeira + periodo_impulso + 1
+
+fim_impulso =
+    periodo_bandeira + 1
+
+movimento_alta =
+    close[fim_impulso] - close[inicio_impulso]
+
+movimento_baixa =
+    close[inicio_impulso] - close[fim_impulso]
+
+topo_impulso = highest(
+    high[periodo_bandeira + 1],
+    periodo_impulso
+)
+
+fundo_impulso = lowest(
+    low[periodo_bandeira + 1],
+    periodo_impulso
+)
+
+-- =========================================
+-- BANDEIRA DE ALTA
+-- =========================================
+
+impulso_alta =
+    movimento_alta > atr_valor[1] * forca_impulso
+
+correcao_alta =
+    fundo_bandeira >
+    topo_impulso - movimento_alta * max_correcao
+
+canal_alta =
+    close[1] < close[periodo_bandeira] and
+    amplitude_bandeira < movimento_alta * 0.80
+
+bandeira_alta =
+    impulso_alta and
+    correcao_alta and
+    canal_alta
+
+-- =========================================
+-- BANDEIRA DE BAIXA
+-- =========================================
+
+impulso_baixa =
+    movimento_baixa > atr_valor[1] * forca_impulso
+
+correcao_baixa =
+    topo_bandeira <
+    fundo_impulso + movimento_baixa * max_correcao
+
+canal_baixa =
+    close[1] > close[periodo_bandeira] and
+    amplitude_bandeira < movimento_baixa * 0.80
+
+bandeira_baixa =
+    impulso_baixa and
+    correcao_baixa and
+    canal_baixa
+
+-- =========================================
+-- SUPORTE E RESISTENCIA
+-- =========================================
+
+resistencia_alta =
+    iff(bandeira_alta, topo_bandeira, nil)
+
+suporte_alta =
+    iff(bandeira_alta, fundo_bandeira, nil)
+
+resistencia_baixa =
+    iff(bandeira_baixa, topo_bandeira, nil)
+
+suporte_baixa =
+    iff(bandeira_baixa, fundo_bandeira, nil)
+
+-- =========================================
+-- PLOT BANDEIRA DE ALTA
+-- =========================================
+
+plot(
+    resistencia_alta,
+    "RESISTENCIA ALTA AZUL",
+    cor_alta,
+    largura_alta
+)
+
+plot(
+    suporte_alta,
+    "SUPORTE ALTA AZUL",
+    cor_alta,
+    largura_alta
+)
+
+-- =========================================
+-- PLOT BANDEIRA DE BAIXA
+-- =========================================
+
+plot(
+    resistencia_baixa,
+    "RESISTENCIA BAIXA ROXA",
+    cor_baixa,
+    largura_baixa
+)
+
+plot(
+    suporte_baixa,
+    "SUPORTE BAIXA ROXA",
+    cor_baixa,
+    largura_baixa
+)
+
+-- =========================================
+-- ROMPIMENTOS
+-- =========================================
+
+rompimento_alta =
+    bandeira_alta and
+    close > topo_bandeira
+
+rompimento_baixa =
+    bandeira_baixa and
+    close < fundo_bandeira
+
+-- =========================================
+-- MARCACAO COMPRA
+-- =========================================
+
+plot_shape(
+    rompimento_alta,
+    "ROMPIMENTO ALTA",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_compra,
+    shape_location.belowbar,
+    0,
+    "ROMPIMENTO ALTA",
+    cor_compra
+)
+
+-- =========================================
+-- MARCACAO VENDA
+-- =========================================
+
+plot_shape(
+    rompimento_baixa,
+    "ROMPIMENTO BAIXA",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_venda,
+    shape_location.abovebar,
+    0,
+    "ROMPIMENTO BAIXA",
+    cor_venda
+)

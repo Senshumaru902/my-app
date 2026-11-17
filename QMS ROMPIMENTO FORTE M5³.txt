@@ -1,0 +1,211 @@
+
+instrument {
+    name = "QMS ROMPIMENTO FORTE M5",
+    short_name = "QMS ROMP M5",
+    icon = "indicators:ATR",
+    overlay = true
+}
+
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
+
+input_group {
+    "ESTRUTURA DO ROMPIMENTO",
+
+    periodo = input {
+        default = 20,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    corpo_minimo = input {
+        default = 45,
+        type = input.integer,
+        min = 10,
+        max = 90
+    },
+
+    fechamento_minimo = input {
+        default = 70,
+        type = input.integer,
+        min = 50,
+        max = 95
+    }
+}
+
+input_group {
+    "CORES",
+
+    cor_resistencia = input {
+        default = "#2196FF",
+        type = input.color
+    },
+
+    cor_suporte = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_call = input {
+        default = "#00BFFF",
+        type = input.color
+    },
+
+    cor_put = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_reteste = input {
+        default = "#FFD700",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- 2. ESTRUTURA DINAMICA
+-- =========================================
+
+resistencia = highest(high[1], periodo)
+suporte = lowest(low[1], periodo)
+
+-- Niveis usados para detectar retestes.
+-- Consideram a estrutura anterior ao candle anterior.
+
+nivel_reteste_alta = highest(high[2], periodo)
+nivel_reteste_baixa = lowest(low[2], periodo)
+
+-- =========================================
+-- 3. LEITURA DO CANDLE
+-- =========================================
+
+amplitude = high - low
+corpo = abs(close - open)
+
+corpo_percentual =
+    corpo / (amplitude + 0.0000001) * 100
+
+posicao_fechamento =
+    (close - low) / (amplitude + 0.0000001) * 100
+
+-- =========================================
+-- 4. FORCA COMPRADORA E VENDEDORA
+-- =========================================
+
+candle_comprador =
+    close > open and
+    corpo_percentual >= corpo_minimo and
+    posicao_fechamento >= fechamento_minimo
+
+candle_vendedor =
+    close < open and
+    corpo_percentual >= corpo_minimo and
+    posicao_fechamento <= (100 - fechamento_minimo)
+
+-- =========================================
+-- 5. ROMPIMENTO DA RESISTENCIA
+-- =========================================
+
+rompimento_alta =
+    close > resistencia and
+    close[1] <= resistencia[1]
+
+call_forte =
+    rompimento_alta and
+    candle_comprador
+
+-- =========================================
+-- 6. ROMPIMENTO DO SUPORTE
+-- =========================================
+
+rompimento_baixa =
+    close < suporte and
+    close[1] >= suporte[1]
+
+put_forte =
+    rompimento_baixa and
+    candle_vendedor
+
+-- =========================================
+-- 7. RETESTE DA RESISTENCIA ROMPIDA
+-- =========================================
+
+reteste_call =
+    close[1] > nivel_reteste_alta and
+    low <= nivel_reteste_alta and
+    close > nivel_reteste_alta and
+    close > open
+
+-- =========================================
+-- 8. RETESTE DO SUPORTE ROMPIDO
+-- =========================================
+
+reteste_put =
+    close[1] < nivel_reteste_baixa and
+    high >= nivel_reteste_baixa and
+    close < nivel_reteste_baixa and
+    close < open
+
+-- =========================================
+-- 9. PLOTAGEM DAS FAIXAS
+-- =========================================
+
+plot(
+    resistencia,
+    "RESISTENCIA",
+    cor_resistencia,
+    2
+)
+
+plot(
+    suporte,
+    "SUPORTE",
+    cor_suporte,
+    2
+)
+
+-- =========================================
+-- 10. SETAS DE ROMPIMENTO
+-- =========================================
+
+plot_shape(
+    call_forte,
+    "ROMPIMENTO CALL",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_call,
+    shape_location.belowbar
+)
+
+plot_shape(
+    put_forte,
+    "ROMPIMENTO PUT",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_put,
+    shape_location.abovebar
+)
+
+-- =========================================
+-- 11. MARCACAO DOS RETESTES
+-- =========================================
+
+plot_shape(
+    reteste_call,
+    "RETESTE CALL",
+    shape_style.triangleup,
+    shape_size.small,
+    cor_reteste,
+    shape_location.belowbar
+)
+
+plot_shape(
+    reteste_put,
+    "RETESTE PUT",
+    shape_style.triangledown,
+    shape_size.small,
+    cor_reteste,
+    shape_location.abovebar
+)
